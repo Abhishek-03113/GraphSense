@@ -2,7 +2,6 @@
 # worktrees for specific agents 
 backend-worktree/
 frontend-worktree/
-docs/
 data/
 
 # OS specific

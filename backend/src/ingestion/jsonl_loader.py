@@ -8,7 +8,9 @@ from sqlalchemy import text
 from pydantic import BaseModel
 import structlog
 
-from ..db.session import engine, async_session, Base
+from ..db.engine import engine
+from ..db.session import AsyncSessionLocal
+from ..db.base import Base
 from ..db import models
 from . import schemas
 
@@ -109,7 +111,7 @@ async def ingest_data(data_dir: str):
                 
                 records = await load_jsonl_file(file_path, schema)
                 
-                async with async_session() as session:
+                async with AsyncSessionLocal() as session:
                     async with session.begin():
                         await upsert_records(session, model, records)
                         
