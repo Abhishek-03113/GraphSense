@@ -1,4 +1,4 @@
-import type { GraphData, GraphSummary, GraphEntity } from '../types/graph';
+import type { GraphData, GraphSummary, GraphEntity, FlowListResponse } from '../types/graph';
 
 const API_BASE_URL = 'http://localhost:8000/api/graph';
 
@@ -45,5 +45,42 @@ export const api = {
     if (!response.ok) return {};
     const data = await response.json();
     return data.nodes?.[0]?.properties || {};
-  }
+  },
+
+  getFlows: async (): Promise<FlowListResponse> => {
+    const response = await fetch(`${API_BASE_URL}/flows`);
+    if (!response.ok) throw new Error(`Failed to fetch flows: ${response.statusText}`);
+    return response.json();
+  },
+
+  getFlow: async (flowId: string, limit = 50): Promise<GraphData> => {
+    const params = new URLSearchParams({ flow_id: flowId, limit: limit.toString() });
+    const response = await fetch(`${API_BASE_URL}/flow?${params.toString()}`);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch flow: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  getTrace: async (docType: string, docId: string, depth = 4): Promise<GraphData> => {
+    const params = new URLSearchParams({ doc_type: docType, doc_id: docId, depth: depth.toString() });
+    const response = await fetch(`${API_BASE_URL}/trace?${params.toString()}`);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to trace document: ${response.statusText}`);
+    }
+    return response.json();
+  },
+
+  getFullGraph: async (nodeLimit = 20, typeFilter?: string[]): Promise<GraphData> => {
+    const params = new URLSearchParams({ node_limit: nodeLimit.toString() });
+    if (typeFilter && typeFilter.length > 0) params.set('type_filter', typeFilter.join(','));
+    const response = await fetch(`${API_BASE_URL}/full?${params.toString()}`);
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      throw new Error(err.detail || `Failed to fetch full graph: ${response.statusText}`);
+    }
+    return response.json();
+  },
 };

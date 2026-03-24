@@ -4,14 +4,17 @@ import type { GraphSummary } from '../../types/graph';
 interface DashboardProps {
   summary: GraphSummary;
   onSelectType: (type: string) => void;
+  onExploreFlows: () => void;
+  onTraceDocument: () => void;
+  onKnowledgeGraph: () => void;
 }
 
-export const Dashboard: React.FC<DashboardProps> = ({ summary, onSelectType }) => {
+export const Dashboard: React.FC<DashboardProps> = ({ summary, onSelectType, onExploreFlows, onTraceDocument, onKnowledgeGraph }) => {
   return (
     <div className="dashboard-container">
       <header className="dashboard-header">
         <h1>DodgeAI Data Explorer</h1>
-        <p>Explore your supply chain graph entities and relationships</p>
+        <p>Explore your SAP O2C process graph — flows, documents, and entity relationships</p>
       </header>
 
       <div className="stats-grid">
@@ -29,12 +32,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ summary, onSelectType }) =
         </div>
       </div>
 
+      <section className="entity-section" style={{ marginBottom: '3rem' }}>
+        <h3>Explore the Graph</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '1.25rem' }}>
+          <button className="explore-card" onClick={onExploreFlows}>
+            <div className="explore-card-icon">🔄</div>
+            <div className="explore-card-title">O2C Process Flows</div>
+            <div className="explore-card-desc">
+              Visualize predefined flows: Sales, Fulfillment, Billing, Financial, and the full end-to-end O2C process.
+            </div>
+            <div className="explore-card-action">Select a flow →</div>
+          </button>
+          <button className="explore-card" onClick={onTraceDocument}>
+            <div className="explore-card-icon">🔍</div>
+            <div className="explore-card-title">Trace a Document</div>
+            <div className="explore-card-desc">
+              Enter any document ID to trace its complete lifecycle across Sales Order, Delivery, Billing, and Payment.
+            </div>
+            <div className="explore-card-action">Start tracing →</div>
+          </button>
+          <button className="explore-card" onClick={onKnowledgeGraph}>
+            <div className="explore-card-icon">🌐</div>
+            <div className="explore-card-title">Knowledge Graph</div>
+            <div className="explore-card-desc">
+              An Obsidian-style view of all entities and relationships. Filter by type, search by ID, adjust density.
+            </div>
+            <div className="explore-card-action">Open graph →</div>
+          </button>
+        </div>
+      </section>
+
       <section className="entity-section">
         <h3>Browse by Entity Type</h3>
         <div className="entity-grid">
           {Object.entries(summary.nodes).map(([type, count]) => (
-            <button 
-              key={type} 
+            <button
+              key={type}
               className="entity-card"
               onClick={() => onSelectType(type)}
             >
@@ -144,6 +177,47 @@ export const Dashboard: React.FC<DashboardProps> = ({ summary, onSelectType }) =
           font-size: 0.85rem;
           color: var(--accent-color);
           opacity: 0.8;
+        }
+        .explore-card {
+          background: var(--bg-secondary);
+          padding: 1.75rem;
+          border-radius: 14px;
+          border: 1px solid var(--border-color);
+          text-align: left;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          display: flex;
+          flex-direction: column;
+          gap: 0.6rem;
+          width: 100%;
+        }
+        .explore-card:hover {
+          background: rgba(88, 166, 255, 0.08);
+          border-color: var(--accent-color);
+          transform: translateY(-3px);
+          box-shadow: 0 8px 24px rgba(0,0,0,0.25);
+        }
+        .explore-card-icon {
+          font-size: 2rem;
+          line-height: 1;
+          margin-bottom: 0.25rem;
+        }
+        .explore-card-title {
+          font-weight: 700;
+          font-size: 1.1rem;
+          color: var(--text-primary);
+        }
+        .explore-card-desc {
+          color: var(--text-secondary);
+          font-size: 0.875rem;
+          line-height: 1.55;
+          flex: 1;
+        }
+        .explore-card-action {
+          margin-top: 0.5rem;
+          font-size: 0.85rem;
+          color: var(--accent-color);
+          font-weight: 600;
         }
       `}} />
     </div>

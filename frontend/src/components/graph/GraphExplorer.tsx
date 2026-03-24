@@ -33,19 +33,22 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
   const { setSelectedNode, layoutMode, setLayoutMode } = useGraphStore();
   const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
 
-  // Map node types to colors (matching CSS variables)
+  // Node type → color. Groups share a hue to signal they belong to the same
+  // document family (e.g. Invoice and InvoiceItem are both amber).
   const NODE_TYPE_COLORS: Record<string, string> = {
-    'SalesOrder': '#79c0ff',
-    'SalesOrderItem': '#79c0ff',
-    'Delivery': '#d2a8ff',
-    'DeliveryItem': '#d2a8ff',
-    'BillingDocument': '#ffa657',
-    'BillingItem': '#ffa657',
-    'Payment': '#7ee787',
-    'JournalEntry': '#7ee787',
-    'Customer': '#56d364',
-    'Product': '#f0883e',
-    'Plant': '#79c0ff'
+    // Core flow — O2C progression
+    'Customer':      '#56d364',  // green
+    'SalesOrder':    '#79c0ff',  // blue
+    'SalesOrderItem':'#4d9de0',  // blue (darker shade for item)
+    'Delivery':      '#d2a8ff',  // purple
+    'DeliveryItem':  '#a371f7',  // purple (darker shade for item)
+    'Invoice':       '#ffa657',  // amber
+    'InvoiceItem':   '#e07b2a',  // amber (darker shade for item)
+    'JournalEntry':  '#f0883e',  // orange
+    'Payment':       '#7ee787',  // bright green
+    // Supporting entities
+    'Product':       '#ff9580',  // salmon
+    'Address':       '#8b949e',  // grey
   };
 
   // Compute degree (number of connections) for each node for sizing
