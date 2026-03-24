@@ -3,6 +3,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from src.domain.graph_models import Node, Edge, GraphSummaryResponse, GraphSubgraphResponse, GraphEntityResponse
 from src.domain.flow_definitions import FLOW_DEFINITIONS
+from src.utils.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -56,12 +59,36 @@ class GraphRepository:
     # Edge derivation
     # ------------------------------------------------------------------
 
+    # SQL helper: normalize an item-number column by stripping leading zeros.
+    # Cross-document FK references use short numbers (e.g. '10') while source
+    # tables use zero-padded numbers (e.g. '000010').  Wrapping every item
+    # column with _norm() produces a canonical composite ID that matches
+    # regardless of which table the value originates from.
+    @staticmethod
+    def _norm(col: str) -> str:
+        """Returns a SQL expression that strips leading zeros from *col*."""
+        return f"REGEXP_REPLACE({col}::text, '^0+', '')"
+
+    def _composite(self, doc_col: str, item_col: str) -> str:
+        """Returns a SQL expression for a normalized composite ID: 'doc-item'."""
+        return f"({doc_col}::text || '-' || {self._norm(item_col)})"
+
     def _get_edges_union_query(self) -> str:
         """
         Derives all graph edges from foreign-key relationships in the schema.
         Each UNION ALL block represents one edge type in the O2C graph model.
+
+        All composite IDs (doc-item) are normalized via _composite() so that
+        cross-document references match regardless of zero-padding differences.
         """
-        return """
+        so_item = self._composite("soi.sales_order", "soi.sales_order_item")
+        del_item = self._composite("odi.delivery_document", "odi.delivery_document_item")
+        del_ref = self._composite("odi.reference_sd_document", "odi.reference_sd_document_item")
+        inv_item = self._composite("bdi.billing_document", "bdi.billing_document_item")
+        inv_ref = self._composite("bdi.reference_sd_document", "bdi.reference_sd_document_item")
+        addr_id = self._composite("bpa.business_partner", "bpa.address_id")
+
+        return f"""
         -- ── Customer --[PLACED]--> SalesOrder ──────────────────────────────
         SELECT
             soh.sold_to_party::text   AS source_id,
@@ -76,22 +103,22 @@ class GraphRepository:
 
         -- ── SalesOrder --[HAS_ITEM]--> SalesOrderItem ────────────────────
         SELECT
-            soi.sales_order::text                                     AS source_id,
-            'SalesOrder'::text                                        AS source_type,
-            (soi.sales_order || '-' || soi.sales_order_item)::text    AS target_id,
-            'SalesOrderItem'::text                                    AS target_type,
-            'HAS_ITEM'::text                                          AS type
+            soi.sales_order::text       AS source_id,
+            'SalesOrder'::text          AS source_type,
+            {so_item}::text             AS target_id,
+            'SalesOrderItem'::text      AS target_type,
+            'HAS_ITEM'::text            AS type
         FROM sales_order_items soi
 
         UNION ALL
 
         -- ── SalesOrderItem --[INCLUDES]--> Product ───────────────────────
         SELECT
-            (soi.sales_order || '-' || soi.sales_order_item)::text    AS source_id,
-            'SalesOrderItem'::text                                    AS source_type,
-            soi.material::text                                        AS target_id,
-            'Product'::text                                           AS target_type,
-            'INCLUDES'::text                                          AS type
+            {so_item}::text             AS source_id,
+            'SalesOrderItem'::text      AS source_type,
+            soi.material::text          AS target_id,
+            'Product'::text             AS target_type,
+            'INCLUDES'::text            AS type
         FROM sales_order_items soi
         WHERE soi.material IS NOT NULL
 
@@ -99,11 +126,11 @@ class GraphRepository:
 
         -- ── Delivery --[HAS_ITEM]--> DeliveryItem ────────────────────────
         SELECT
-            odi.delivery_document::text                                             AS source_id,
-            'Delivery'::text                                                        AS source_type,
-            (odi.delivery_document || '-' || odi.delivery_document_item)::text      AS target_id,
-            'DeliveryItem'::text                                                    AS target_type,
-            'HAS_ITEM'::text                                                        AS type
+            odi.delivery_document::text     AS source_id,
+            'Delivery'::text                AS source_type,
+            {del_item}::text                AS target_id,
+            'DeliveryItem'::text            AS target_type,
+            'HAS_ITEM'::text                AS type
         FROM outbound_delivery_items odi
 
         UNION ALL
@@ -111,11 +138,11 @@ class GraphRepository:
         -- ── DeliveryItem --[FULFILLS]--> SalesOrderItem ──────────────────
         -- Cross-document link: ties delivery fulfilment back to the sales order item
         SELECT
-            (odi.delivery_document || '-' || odi.delivery_document_item)::text      AS source_id,
-            'DeliveryItem'::text                                                    AS source_type,
-            (odi.reference_sd_document || '-' || odi.reference_sd_document_item)::text  AS target_id,
-            'SalesOrderItem'::text                                                  AS target_type,
-            'FULFILLS'::text                                                        AS type
+            {del_item}::text                AS source_id,
+            'DeliveryItem'::text            AS source_type,
+            {del_ref}::text                 AS target_id,
+            'SalesOrderItem'::text          AS target_type,
+            'FULFILLS'::text                AS type
         FROM outbound_delivery_items odi
         WHERE odi.reference_sd_document IS NOT NULL
 
@@ -123,11 +150,11 @@ class GraphRepository:
 
         -- ── Invoice --[HAS_ITEM]--> InvoiceItem ──────────────────────────
         SELECT
-            bdi.billing_document::text                                              AS source_id,
-            'Invoice'::text                                                         AS source_type,
-            (bdi.billing_document || '-' || bdi.billing_document_item)::text        AS target_id,
-            'InvoiceItem'::text                                                     AS target_type,
-            'HAS_ITEM'::text                                                        AS type
+            bdi.billing_document::text      AS source_id,
+            'Invoice'::text                 AS source_type,
+            {inv_item}::text                AS target_id,
+            'InvoiceItem'::text             AS target_type,
+            'HAS_ITEM'::text                AS type
         FROM billing_document_items bdi
 
         UNION ALL
@@ -135,11 +162,11 @@ class GraphRepository:
         -- ── InvoiceItem --[BILLS_FOR]--> DeliveryItem ────────────────────
         -- Cross-document link: ties billing line back to the delivery item it covers
         SELECT
-            (bdi.billing_document || '-' || bdi.billing_document_item)::text        AS source_id,
-            'InvoiceItem'::text                                                     AS source_type,
-            (bdi.reference_sd_document || '-' || bdi.reference_sd_document_item)::text  AS target_id,
-            'DeliveryItem'::text                                                    AS target_type,
-            'BILLS_FOR'::text                                                       AS type
+            {inv_item}::text                AS source_id,
+            'InvoiceItem'::text             AS source_type,
+            {inv_ref}::text                 AS target_id,
+            'DeliveryItem'::text            AS target_type,
+            'BILLS_FOR'::text               AS type
         FROM billing_document_items bdi
         WHERE bdi.reference_sd_document IS NOT NULL
 
@@ -185,11 +212,11 @@ class GraphRepository:
 
         -- ── Customer --[HAS_ADDRESS]--> Address ──────────────────────────
         SELECT
-            bpa.business_partner::text                              AS source_id,
-            'Customer'::text                                        AS source_type,
-            (bpa.business_partner || '-' || bpa.address_id)::text   AS target_id,
-            'Address'::text                                         AS target_type,
-            'HAS_ADDRESS'::text                                     AS type
+            bpa.business_partner::text      AS source_id,
+            'Customer'::text                AS source_type,
+            {addr_id}::text                 AS target_id,
+            'Address'::text                 AS target_type,
+            'HAS_ADDRESS'::text             AS type
         FROM business_partner_addresses bpa
         """
 
@@ -220,14 +247,23 @@ class GraphRepository:
         node_counts: Dict[str, int] = {}
         for table, node_type in node_tables:
             result = await self.db.execute(text(f"SELECT COUNT(*) FROM {table} AS _t"))
-            node_counts[node_type] = result.scalar()
+            count = result.scalar()
+            node_counts[node_type] = count
+            logger.debug("get_summary | node_type=%-20s count=%d", node_type, count)
 
         edges_union = self._get_edges_union_query()
         result = await self.db.execute(
             text(f"SELECT type, COUNT(*) FROM ({edges_union}) AS all_edges GROUP BY type ORDER BY type")
         )
         edge_counts: Dict[str, int] = {row[0]: row[1] for row in result}
+        for edge_type, count in edge_counts.items():
+            logger.debug("get_summary | edge_type=%-20s count=%d", edge_type, count)
 
+        logger.info(
+            "get_summary | total_nodes=%d total_edges=%d",
+            sum(node_counts.values()),
+            sum(edge_counts.values()),
+        )
         return GraphSummaryResponse(nodes=node_counts, edges=edge_counts)
 
     async def get_subgraph(self, root_type: str, root_id: str, depth: int) -> GraphSubgraphResponse:
@@ -280,6 +316,7 @@ class GraphRepository:
         """
 
         params = {"root_id": root_id, "root_type": root_type, "depth": depth}
+        logger.debug("get_subgraph | root=%s:%s depth=%d — executing query", root_type, root_id, depth)
         result = await self.db.execute(text(subgraph_query), params)
 
         nodes_map: Dict = {}
@@ -287,70 +324,84 @@ class GraphRepository:
 
         # Ensure root is always present even when it has no edges
         nodes_map[(root_type, root_id)] = Node(
-            id=root_id, type=root_type, label=f"{root_type} {root_id}"
+            id=f"{root_type}:{root_id}", type=root_type, label=f"{root_type} {root_id}"
         )
 
         for s_id, s_type, t_id, t_type, e_type in result:
+            s_node_id = f"{s_type}:{s_id}"
+            t_node_id = f"{t_type}:{t_id}"
             if (s_type, s_id) not in nodes_map:
                 nodes_map[(s_type, s_id)] = Node(
-                    id=s_id, type=s_type, label=f"{s_type} {s_id}"
+                    id=s_node_id, type=s_type, label=f"{s_type} {s_id}"
                 )
             if (t_type, t_id) not in nodes_map:
                 nodes_map[(t_type, t_id)] = Node(
-                    id=t_id, type=t_type, label=f"{t_type} {t_id}"
+                    id=t_node_id, type=t_type, label=f"{t_type} {t_id}"
                 )
             edges.append(Edge(
-                id=f"{s_id}-{t_id}-{e_type}",
-                source=s_id,
-                target=t_id,
+                id=f"{s_node_id}-{t_node_id}-{e_type}",
+                source=s_node_id,
+                target=t_node_id,
                 type=e_type,
             ))
 
+        logger.info(
+            "get_subgraph | root=%s:%s depth=%d → nodes=%d edges=%d",
+            root_type, root_id, depth, len(nodes_map), len(edges),
+        )
         return GraphSubgraphResponse(nodes=list(nodes_map.values()), edges=edges)
 
     def _get_individual_edge_queries(self) -> Dict[str, str]:
-        """Returns a mapping of edge_type -> SQL SELECT for that edge type."""
+        """Returns a mapping of edge_type -> SQL SELECT for that edge type.
+        Uses normalized composite IDs (leading zeros stripped) for consistency."""
+        so_item = self._composite("soi.sales_order", "soi.sales_order_item")
+        del_item = self._composite("odi.delivery_document", "odi.delivery_document_item")
+        del_ref = self._composite("odi.reference_sd_document", "odi.reference_sd_document_item")
+        inv_item = self._composite("bdi.billing_document", "bdi.billing_document_item")
+        inv_ref = self._composite("bdi.reference_sd_document", "bdi.reference_sd_document_item")
+        addr_id = self._composite("bpa.business_partner", "bpa.address_id")
+
         return {
             "PLACED": """
                 SELECT soh.sold_to_party::text AS source_id, 'Customer'::text AS source_type,
                        soh.sales_order::text AS target_id, 'SalesOrder'::text AS target_type, 'PLACED'::text AS type
                 FROM sales_order_headers soh WHERE soh.sold_to_party IS NOT NULL
             """,
-            "HAS_ITEM_SO": """
+            "HAS_ITEM_SO": f"""
                 SELECT soi.sales_order::text AS source_id, 'SalesOrder'::text AS source_type,
-                       (soi.sales_order || '-' || soi.sales_order_item)::text AS target_id,
+                       {so_item}::text AS target_id,
                        'SalesOrderItem'::text AS target_type, 'HAS_ITEM'::text AS type
                 FROM sales_order_items soi
             """,
-            "INCLUDES": """
-                SELECT (soi.sales_order || '-' || soi.sales_order_item)::text AS source_id,
+            "INCLUDES": f"""
+                SELECT {so_item}::text AS source_id,
                        'SalesOrderItem'::text AS source_type, soi.material::text AS target_id,
                        'Product'::text AS target_type, 'INCLUDES'::text AS type
                 FROM sales_order_items soi WHERE soi.material IS NOT NULL
             """,
-            "HAS_ITEM_DEL": """
+            "HAS_ITEM_DEL": f"""
                 SELECT odi.delivery_document::text AS source_id, 'Delivery'::text AS source_type,
-                       (odi.delivery_document || '-' || odi.delivery_document_item)::text AS target_id,
+                       {del_item}::text AS target_id,
                        'DeliveryItem'::text AS target_type, 'HAS_ITEM'::text AS type
                 FROM outbound_delivery_items odi
             """,
-            "FULFILLS": """
-                SELECT (odi.delivery_document || '-' || odi.delivery_document_item)::text AS source_id,
+            "FULFILLS": f"""
+                SELECT {del_item}::text AS source_id,
                        'DeliveryItem'::text AS source_type,
-                       (odi.reference_sd_document || '-' || odi.reference_sd_document_item)::text AS target_id,
+                       {del_ref}::text AS target_id,
                        'SalesOrderItem'::text AS target_type, 'FULFILLS'::text AS type
                 FROM outbound_delivery_items odi WHERE odi.reference_sd_document IS NOT NULL
             """,
-            "HAS_ITEM_INV": """
+            "HAS_ITEM_INV": f"""
                 SELECT bdi.billing_document::text AS source_id, 'Invoice'::text AS source_type,
-                       (bdi.billing_document || '-' || bdi.billing_document_item)::text AS target_id,
+                       {inv_item}::text AS target_id,
                        'InvoiceItem'::text AS target_type, 'HAS_ITEM'::text AS type
                 FROM billing_document_items bdi
             """,
-            "BILLS_FOR": """
-                SELECT (bdi.billing_document || '-' || bdi.billing_document_item)::text AS source_id,
+            "BILLS_FOR": f"""
+                SELECT {inv_item}::text AS source_id,
                        'InvoiceItem'::text AS source_type,
-                       (bdi.reference_sd_document || '-' || bdi.reference_sd_document_item)::text AS target_id,
+                       {inv_ref}::text AS target_id,
                        'DeliveryItem'::text AS target_type, 'BILLS_FOR'::text AS type
                 FROM billing_document_items bdi WHERE bdi.reference_sd_document IS NOT NULL
             """,
@@ -369,9 +420,9 @@ class GraphRepository:
                        par.clearing_accounting_document::text AS target_id, 'JournalEntry'::text AS target_type, 'CLEARS'::text AS type
                 FROM payments_accounts_receivable par WHERE par.clearing_accounting_document IS NOT NULL
             """,
-            "HAS_ADDRESS": """
+            "HAS_ADDRESS": f"""
                 SELECT bpa.business_partner::text AS source_id, 'Customer'::text AS source_type,
-                       (bpa.business_partner || '-' || bpa.address_id)::text AS target_id,
+                       {addr_id}::text AS target_id,
                        'Address'::text AS target_type, 'HAS_ADDRESS'::text AS type
                 FROM business_partner_addresses bpa
             """,
@@ -430,82 +481,105 @@ class GraphRepository:
         SELECT source_id, source_type, target_id, target_type, type FROM ranked WHERE rn <= :limit
         """
 
+        logger.debug("get_flow | flow_id=%s limit=%d — executing query", flow_id, limit)
         result = await self.db.execute(text(query), {"limit": limit})
 
         nodes_map: Dict = {}
         edges: List[Edge] = []
         for s_id, s_type, t_id, t_type, e_type in result:
+            s_node_id = f"{s_type}:{s_id}"
+            t_node_id = f"{t_type}:{t_id}"
             if (s_type, s_id) not in nodes_map:
-                nodes_map[(s_type, s_id)] = Node(id=s_id, type=s_type, label=f"{s_type} {s_id}")
+                nodes_map[(s_type, s_id)] = Node(id=s_node_id, type=s_type, label=f"{s_type} {s_id}")
             if (t_type, t_id) not in nodes_map:
-                nodes_map[(t_type, t_id)] = Node(id=t_id, type=t_type, label=f"{t_type} {t_id}")
-            edges.append(Edge(id=f"{s_id}-{t_id}-{e_type}", source=s_id, target=t_id, type=e_type))
+                nodes_map[(t_type, t_id)] = Node(id=t_node_id, type=t_type, label=f"{t_type} {t_id}")
+            edges.append(Edge(id=f"{s_node_id}-{t_node_id}-{e_type}", source=s_node_id, target=t_node_id, type=e_type))
 
+        logger.info(
+            "get_flow | flow_id=%s limit=%d → nodes=%d edges=%d",
+            flow_id, limit, len(nodes_map), len(edges),
+        )
         return GraphSubgraphResponse(nodes=list(nodes_map.values()), edges=edges)
 
     async def get_full_graph(self, node_limit: int = 20, type_filter: Optional[List[str]] = None) -> GraphSubgraphResponse:
-        """Returns a sampled view of the full graph, up to node_limit entities per type."""
-        all_node_types = [
+        """
+        Returns a sampled knowledge graph using edge-first sampling.
+
+        Strategy: sample edges per edge-type (up to `node_limit` each), then
+        collect all referenced nodes.  This guarantees every edge has both
+        endpoints present and cross-document links (FULFILLS, BILLS_FOR,
+        GENERATES, CLEARS) are always represented.
+        """
+        all_node_types = {
             "Customer", "SalesOrder", "SalesOrderItem",
             "Delivery", "DeliveryItem",
             "Invoice", "InvoiceItem",
             "JournalEntry", "Payment",
             "Product", "Address",
-        ]
-        active_types = type_filter if type_filter else all_node_types
-
-        # Collect a sample of IDs per type
-        type_to_query: Dict[str, str] = {
-            "SalesOrder":     "SELECT sales_order::text FROM sales_order_headers LIMIT :limit",
-            "SalesOrderItem": "SELECT (sales_order || '-' || sales_order_item)::text FROM sales_order_items LIMIT :limit",
-            "Delivery":       "SELECT delivery_document::text FROM outbound_delivery_headers LIMIT :limit",
-            "DeliveryItem":   "SELECT (delivery_document || '-' || delivery_document_item)::text FROM outbound_delivery_items LIMIT :limit",
-            "Invoice":        "SELECT billing_document::text FROM billing_document_headers LIMIT :limit",
-            "InvoiceItem":    "SELECT (billing_document || '-' || billing_document_item)::text FROM billing_document_items LIMIT :limit",
-            "JournalEntry":   "SELECT DISTINCT accounting_document::text FROM journal_entry_items_accounts_receivable LIMIT :limit",
-            "Payment":        "SELECT DISTINCT accounting_document::text FROM payments_accounts_receivable LIMIT :limit",
-            "Product":        "SELECT product::text FROM products LIMIT :limit",
-            "Customer":       "SELECT business_partner::text FROM business_partners LIMIT :limit",
-            "Address":        "SELECT (business_partner || '-' || address_id)::text FROM business_partner_addresses LIMIT :limit",
         }
+        active_types = set(type_filter) if type_filter else all_node_types
 
-        sampled_ids: Dict[str, set] = {}
-        for node_type in active_types:
-            if node_type not in type_to_query:
-                continue
-            res = await self.db.execute(text(type_to_query[node_type]), {"limit": node_limit})
-            sampled_ids[node_type] = {row[0] for row in res}
+        edge_queries = self._get_individual_edge_queries()
+
+        # Build a UNION ALL of all edge types, each limited to `node_limit` rows,
+        # filtered to only include edges whose both endpoints are in active_types.
+        node_type_list = ", ".join(f"'{t}'" for t in active_types)
+        sampled_parts: List[str] = []
+        for key, sql in edge_queries.items():
+            sampled_parts.append(f"""
+                (SELECT source_id, source_type, target_id, target_type, type
+                 FROM ({sql}) AS _{key}
+                 WHERE source_type IN ({node_type_list})
+                   AND target_type IN ({node_type_list})
+                 LIMIT :limit)
+            """)
+
+        if not sampled_parts:
+            return GraphSubgraphResponse(nodes=[], edges=[])
+
+        full_query = " UNION ALL ".join(sampled_parts)
+        logger.debug("get_full_graph | node_limit=%d type_filter=%s — executing edge-first sampling", node_limit, type_filter)
+        result = await self.db.execute(text(full_query), {"limit": node_limit})
 
         nodes_map: Dict = {}
-        for node_type, ids in sampled_ids.items():
-            for nid in ids:
-                nodes_map[(node_type, nid)] = Node(id=nid, type=node_type, label=f"{node_type} {nid}")
-
-        # Fetch all edges and keep only those where both endpoints are in our sample
-        all_edges_sql = self._get_edges_union_query()
-        edge_result = await self.db.execute(text(f"SELECT source_id, source_type, target_id, target_type, type FROM ({all_edges_sql}) AS all_edges"))
-
         edges: List[Edge] = []
-        for s_id, s_type, t_id, t_type, e_type in edge_result:
-            if (s_type, s_id) in nodes_map and (t_type, t_id) in nodes_map:
-                edges.append(Edge(id=f"{s_id}-{t_id}-{e_type}", source=s_id, target=t_id, type=e_type))
+        for s_id, s_type, t_id, t_type, e_type in result:
+            s_node_id = f"{s_type}:{s_id}"
+            t_node_id = f"{t_type}:{t_id}"
+            if (s_type, s_id) not in nodes_map:
+                nodes_map[(s_type, s_id)] = Node(
+                    id=s_node_id, type=s_type, label=f"{s_type} {s_id}"
+                )
+            if (t_type, t_id) not in nodes_map:
+                nodes_map[(t_type, t_id)] = Node(
+                    id=t_node_id, type=t_type, label=f"{t_type} {t_id}"
+                )
+            edges.append(Edge(
+                id=f"{s_node_id}-{t_node_id}-{e_type}",
+                source=s_node_id, target=t_node_id, type=e_type,
+            ))
 
+        logger.info(
+            "get_full_graph | node_limit=%d type_filter=%s → nodes=%d edges=%d",
+            node_limit, type_filter, len(nodes_map), len(edges),
+        )
         return GraphSubgraphResponse(nodes=list(nodes_map.values()), edges=edges)
 
     async def get_entities(self, node_type: str, limit: int = 50) -> GraphEntityResponse:
         """Returns a sample of entity IDs and labels for the given node type."""
+        norm = self._norm
         type_to_query: Dict[str, tuple] = {
             "SalesOrder":     ("sales_order_headers",          "sales_order"),
-            "SalesOrderItem": ("sales_order_items",            "sales_order || '-' || sales_order_item"),
+            "SalesOrderItem": ("sales_order_items",            f"sales_order || '-' || {norm('sales_order_item')}"),
             "Delivery":       ("outbound_delivery_headers",    "delivery_document"),
-            "DeliveryItem":   ("outbound_delivery_items",      "delivery_document || '-' || delivery_document_item"),
+            "DeliveryItem":   ("outbound_delivery_items",      f"delivery_document || '-' || {norm('delivery_document_item')}"),
             "Invoice":        ("billing_document_headers",     "billing_document"),
-            "InvoiceItem":    ("billing_document_items",       "billing_document || '-' || billing_document_item"),
+            "InvoiceItem":    ("billing_document_items",       f"billing_document || '-' || {norm('billing_document_item')}"),
             "JournalEntry":   ("journal_entry_items_accounts_receivable", "accounting_document"),
             "Payment":        ("payments_accounts_receivable", "accounting_document"),
             "Product":        ("products",                     "product"),
             "Customer":       ("business_partners",            "business_partner"),
-            "Address":        ("business_partner_addresses",   "business_partner || '-' || address_id"),
+            "Address":        ("business_partner_addresses",   f"business_partner || '-' || {norm('address_id')}"),
         }
 
         if node_type not in type_to_query:
@@ -518,4 +592,5 @@ class GraphRepository:
         )
 
         entities = [{"id": row[0], "label": f"{node_type} {row[0]}"} for row in result]
+        logger.info("get_entities | node_type=%s limit=%d → returned=%d", node_type, limit, len(entities))
         return GraphEntityResponse(type=node_type, entities=entities)
