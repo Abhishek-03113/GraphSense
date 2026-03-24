@@ -32,7 +32,7 @@ export const FlowExplorer: React.FC<FlowExplorerProps> = ({ onBack }) => {
   }
 
   return (
-    <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+    <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex' }}>
       {/* Top bar */}
       <div style={{
         position: 'absolute', top: '1.5rem', left: '1.5rem', zIndex: 1000,
@@ -87,11 +87,25 @@ export const FlowExplorer: React.FC<FlowExplorerProps> = ({ onBack }) => {
         </div>
       )}
 
-      {graphData && !isLoading && (
+      {graphData && !isLoading && graphData.nodes.length > 0 && (
         <>
           <GraphExplorer data={graphData} />
           <InspectorPanel />
         </>
+      )}
+
+      {graphData && !isLoading && graphData.nodes.length === 0 && (
+        <div className="empty-state">
+          <h3>No Data</h3>
+          <p>The flow &ldquo;{selectedFlow.label}&rdquo; returned no nodes. Data may not be ingested yet.</p>
+        </div>
+      )}
+
+      {!graphData && !isLoading && !error && selectedFlow && (
+        <div className="empty-state">
+          <h3>Waiting for data&hellip;</h3>
+          <p>If this persists, check the browser console for API errors.</p>
+        </div>
       )}
     </div>
   );

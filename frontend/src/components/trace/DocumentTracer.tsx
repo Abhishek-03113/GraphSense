@@ -48,7 +48,7 @@ export const DocumentTracer: React.FC<DocumentTracerProps> = ({ onBack }) => {
 
   if (target && (isLoading || graphData || error)) {
     return (
-      <div style={{ width: '100%', height: '100%', position: 'relative' }}>
+      <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex' }}>
         <div style={{
           position: 'absolute', top: '1.5rem', left: '1.5rem', zIndex: 1000,
           display: 'flex', gap: '1rem', alignItems: 'center'
@@ -100,11 +100,25 @@ export const DocumentTracer: React.FC<DocumentTracerProps> = ({ onBack }) => {
           </div>
         )}
 
-        {graphData && !isLoading && (
+        {graphData && !isLoading && graphData.nodes.length > 0 && (
           <>
             <GraphExplorer data={graphData} />
             <InspectorPanel />
           </>
+        )}
+
+        {graphData && !isLoading && graphData.nodes.length === 0 && (
+          <div className="empty-state">
+            <h3>No Trace Data</h3>
+            <p>No relationships found for {target.docType} {target.docId}. Verify the document ID exists.</p>
+          </div>
+        )}
+
+        {!graphData && !isLoading && !error && (
+          <div className="empty-state">
+            <h3>Waiting for data&hellip;</h3>
+            <p>If this persists, check the browser console for API errors.</p>
+          </div>
         )}
       </div>
     );

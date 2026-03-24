@@ -245,11 +245,24 @@ class GraphRepository:
         ]
 
         node_counts: Dict[str, int] = {}
+        empty_tables: List[str] = []
         for table, node_type in node_tables:
-            result = await self.db.execute(text(f"SELECT COUNT(*) FROM {table} AS _t"))
-            count = result.scalar()
+            try:
+                result = await self.db.execute(text(f"SELECT COUNT(*) FROM {table} AS _t"))
+                count = result.scalar()
+            except Exception as exc:
+                logger.error("get_summary | FAILED to count node_type=%s table=%s — %s", node_type, table, exc)
+                count = 0
             node_counts[node_type] = count
+            if count == 0:
+                empty_tables.append(node_type)
             logger.debug("get_summary | node_type=%-20s count=%d", node_type, count)
+
+        if empty_tables:
+            logger.warning(
+                "get_summary | EMPTY TABLES detected: %s — data may not be ingested",
+                ", ".join(empty_tables),
+            )
 
         edges_union = self._get_edges_union_query()
         result = await self.db.execute(
@@ -317,7 +330,23 @@ class GraphRepository:
 
         params = {"root_id": root_id, "root_type": root_type, "depth": depth}
         logger.debug("get_subgraph | root=%s:%s depth=%d — executing query", root_type, root_id, depth)
-        result = await self.db.execute(text(subgraph_query), params)
+
+        try:
+            result = await self.db.execute(text(subgraph_query), params)
+        except Exception as exc:
+            logger.error("get_subgraph | root=%s:%s depth=%d — QUERY FAILED: %s", root_type, root_id, depth, exc)
+            raise
+
+        rows = result.fetchall()
+        logger.debug("get_subgraph | root=%s:%s depth=%d — raw rows returned: %d", root_type, root_id, depth, len(rows))
+
+        if not rows:
+            logger.warning(
+                "get_subgraph | root=%s:%s depth=%d — ZERO edges found. "
+                "Possible causes: (1) root_id does not exist in any table, "
+                "(2) tables are empty, (3) root_type is misspelled",
+                root_type, root_id, depth,
+            )
 
         nodes_map: Dict = {}
         edges: List[Edge] = []
@@ -327,7 +356,7 @@ class GraphRepository:
             id=f"{root_type}:{root_id}", type=root_type, label=f"{root_type} {root_id}"
         )
 
-        for s_id, s_type, t_id, t_type, e_type in result:
+        for s_id, s_type, t_id, t_type, e_type in rows:
             s_node_id = f"{s_type}:{s_id}"
             t_node_id = f"{t_type}:{t_id}"
             if (s_type, s_id) not in nodes_map:
@@ -349,6 +378,12 @@ class GraphRepository:
             "get_subgraph | root=%s:%s depth=%d → nodes=%d edges=%d",
             root_type, root_id, depth, len(nodes_map), len(edges),
         )
+
+        if len(edges) > 0:
+            edge_type_counts: Dict[str, int] = {}
+            for e in edges:
+                edge_type_counts[e.type] = edge_type_counts.get(e.type, 0) + 1
+            logger.debug("get_subgraph | edge breakdown: %s", edge_type_counts)
         return GraphSubgraphResponse(nodes=list(nodes_map.values()), edges=edges)
 
     def _get_individual_edge_queries(self) -> Dict[str, str]:
@@ -445,27 +480,82 @@ class GraphRepository:
         """Returns a sampled subgraph for a predefined O2C flow."""
         flow = FLOW_DEFINITIONS.get(flow_id)
         if not flow:
+            logger.warning("get_flow | flow_id=%s — NOT FOUND in FLOW_DEFINITIONS", flow_id)
             return GraphSubgraphResponse(nodes=[], edges=[])
 
         edge_queries = self._get_individual_edge_queries()
         included_edge_types = set(flow["edge_types"])
         node_types = set(flow["node_types"])
 
+        logger.debug(
+            "get_flow | flow_id=%s node_types=%s edge_types=%s",
+            flow_id, sorted(node_types), sorted(included_edge_types),
+        )
+
         # Collect relevant query keys for this flow's edge types
         query_parts: List[str] = []
+        matched_keys: List[str] = []
         for logical_edge_type in included_edge_types:
             keys = self._EDGE_TYPE_TO_QUERY_KEYS.get(logical_edge_type, [logical_edge_type])
             for key in keys:
                 if key in edge_queries:
                     query_parts.append(edge_queries[key])
+                    matched_keys.append(key)
+                else:
+                    logger.warning("get_flow | flow_id=%s — edge query key '%s' not found in edge_queries", flow_id, key)
+
+        logger.debug("get_flow | flow_id=%s — matched %d query parts: %s", flow_id, len(query_parts), matched_keys)
 
         if not query_parts:
+            logger.warning("get_flow | flow_id=%s — NO query parts matched, returning empty", flow_id)
             return GraphSubgraphResponse(nodes=[], edges=[])
 
         union_sql = " UNION ALL ".join(query_parts)
         # Filter to only include edges where both endpoints are in node_types for this flow,
         # then sample up to `limit` rows per source_type
         node_type_list = ", ".join(f"'{t}'" for t in node_types)
+
+        # First: count raw edges BEFORE node_type filtering to diagnose data issues
+        raw_count_query = f"SELECT type, COUNT(*) FROM ({union_sql}) AS _raw GROUP BY type ORDER BY type"
+        try:
+            raw_result = await self.db.execute(text(raw_count_query))
+            raw_counts = {row[0]: row[1] for row in raw_result}
+            logger.info("get_flow | flow_id=%s — RAW edge counts (before node_type filter): %s", flow_id, raw_counts)
+            if not raw_counts:
+                logger.warning(
+                    "get_flow | flow_id=%s — ZERO raw edges from source tables. "
+                    "Tables are likely empty — check data ingestion.",
+                    flow_id,
+                )
+        except Exception as exc:
+            logger.error("get_flow | flow_id=%s — raw count query FAILED: %s", flow_id, exc)
+            raw_counts = {}
+
+        # Second: count after node_type filtering to see if filtering removes everything
+        filtered_count_query = f"""
+        WITH flow_edges AS ({union_sql})
+        SELECT type, source_type, target_type, COUNT(*)
+        FROM flow_edges
+        WHERE source_type IN ({node_type_list}) AND target_type IN ({node_type_list})
+        GROUP BY type, source_type, target_type
+        ORDER BY type
+        """
+        try:
+            filt_result = await self.db.execute(text(filtered_count_query))
+            filt_rows = filt_result.fetchall()
+            if filt_rows:
+                for etype, stype, ttype, cnt in filt_rows:
+                    logger.debug("get_flow | flow_id=%s — filtered: %s (%s→%s) count=%d", flow_id, etype, stype, ttype, cnt)
+            else:
+                logger.warning(
+                    "get_flow | flow_id=%s — ALL edges filtered out by node_type constraint. "
+                    "raw_counts=%s, allowed_node_types=%s. "
+                    "Check if source_type/target_type values match flow node_types.",
+                    flow_id, raw_counts, sorted(node_types),
+                )
+        except Exception as exc:
+            logger.error("get_flow | flow_id=%s — filtered count query FAILED: %s", flow_id, exc)
+
         query = f"""
         WITH flow_edges AS (
             {union_sql}
@@ -481,8 +571,12 @@ class GraphRepository:
         SELECT source_id, source_type, target_id, target_type, type FROM ranked WHERE rn <= :limit
         """
 
-        logger.debug("get_flow | flow_id=%s limit=%d — executing query", flow_id, limit)
-        result = await self.db.execute(text(query), {"limit": limit})
+        logger.debug("get_flow | flow_id=%s limit=%d — executing main query", flow_id, limit)
+        try:
+            result = await self.db.execute(text(query), {"limit": limit})
+        except Exception as exc:
+            logger.error("get_flow | flow_id=%s — main query FAILED: %s", flow_id, exc)
+            raise
 
         nodes_map: Dict = {}
         edges: List[Edge] = []
@@ -538,12 +632,27 @@ class GraphRepository:
             return GraphSubgraphResponse(nodes=[], edges=[])
 
         full_query = " UNION ALL ".join(sampled_parts)
-        logger.debug("get_full_graph | node_limit=%d type_filter=%s — executing edge-first sampling", node_limit, type_filter)
-        result = await self.db.execute(text(full_query), {"limit": node_limit})
+        logger.debug("get_full_graph | node_limit=%d type_filter=%s active_types=%s — executing edge-first sampling", node_limit, type_filter, sorted(active_types))
+
+        try:
+            result = await self.db.execute(text(full_query), {"limit": node_limit})
+        except Exception as exc:
+            logger.error("get_full_graph | node_limit=%d type_filter=%s — QUERY FAILED: %s", node_limit, type_filter, exc)
+            raise
+
+        rows = result.fetchall()
+        logger.debug("get_full_graph | raw rows returned: %d", len(rows))
+
+        if not rows:
+            logger.warning(
+                "get_full_graph | ZERO rows returned. "
+                "Possible causes: (1) all tables empty, (2) type_filter excludes all edge endpoints. "
+                "active_types=%s", sorted(active_types),
+            )
 
         nodes_map: Dict = {}
         edges: List[Edge] = []
-        for s_id, s_type, t_id, t_type, e_type in result:
+        for s_id, s_type, t_id, t_type, e_type in rows:
             s_node_id = f"{s_type}:{s_id}"
             t_node_id = f"{t_type}:{t_id}"
             if (s_type, s_id) not in nodes_map:
