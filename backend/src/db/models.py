@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String, Date, Time, DateTime, Boolean, Numeric, ForeignKey, PrimaryKeyConstraint, BigInteger
 from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
-from .session import Base
+from .base import Base
 
 class BillingDocumentHeader(Base):
     __tablename__ = "billing_document_headers"

@@ -14,14 +14,22 @@ export const InspectorPanel: React.FC = () => {
     return <Info size={14} />;
   };
 
-  const getHeaderColor = (type: string) => {
-    switch (type) {
-      case 'SalesOrder': return 'var(--node-so)';
-      case 'Delivery': return 'var(--node-delivery)';
-      case 'BillingDocument': return 'var(--node-billing)';
-      case 'Payment': return 'var(--node-payment)';
-      default: return 'var(--node-default)';
-    }
+  const getHeaderColor = (type: string): string => {
+    // Header types share color with their item counterpart
+    const colors: Record<string, string> = {
+      'Customer':      '#56d364',
+      'SalesOrder':    '#79c0ff',
+      'SalesOrderItem':'#4d9de0',
+      'Delivery':      '#d2a8ff',
+      'DeliveryItem':  '#a371f7',
+      'Invoice':       '#ffa657',
+      'InvoiceItem':   '#e07b2a',
+      'JournalEntry':  '#f0883e',
+      'Payment':       '#7ee787',
+      'Product':       '#ff9580',
+      'Address':       '#8b949e',
+    };
+    return colors[type] ?? '#8b949e';
   };
 
   return (

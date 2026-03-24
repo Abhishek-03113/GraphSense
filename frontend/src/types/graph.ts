@@ -40,3 +40,18 @@ export type GraphEdge = z.infer<typeof GraphEdgeSchema>;
 export type GraphData = z.infer<typeof GraphDataSchema>;
 export type GraphSummary = z.infer<typeof GraphSummarySchema>;
 export type GraphEntity = z.infer<typeof GraphEntitySchema>;
+
+export const FlowDefinitionSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+  description: z.string(),
+  node_types: z.array(z.string()),
+  edge_types: z.array(z.string()),
+});
+
+export const FlowListResponseSchema = z.object({
+  flows: z.array(FlowDefinitionSchema),
+});
+
+export type FlowDefinition = z.infer<typeof FlowDefinitionSchema>;
+export type FlowListResponse = z.infer<typeof FlowListResponseSchema>;

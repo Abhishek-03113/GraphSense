@@ -1,6 +1,18 @@
 from typing import Dict, List, Optional, Any
 from pydantic import BaseModel, Field
 
+
+class FlowDefinition(BaseModel):
+    id: str
+    label: str
+    description: str
+    node_types: List[str]
+    edge_types: List[str]
+
+
+class FlowListResponse(BaseModel):
+    flows: List[FlowDefinition]
+
 class Node(BaseModel):
     id: str
     type: str

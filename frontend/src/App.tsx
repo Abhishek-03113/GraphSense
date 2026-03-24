@@ -5,12 +5,15 @@ import { GraphExplorer } from './components/graph/GraphExplorer';
 import { InspectorPanel } from './components/graph/InspectorPanel';
 import { Dashboard } from './components/ui/Dashboard';
 import { EntitySelector } from './components/ui/EntitySelector';
+import { FlowExplorer } from './components/flows/FlowExplorer';
+import { DocumentTracer } from './components/trace/DocumentTracer';
+import { KnowledgeGraph } from './components/knowledge/KnowledgeGraph';
 import './index.css';
 
 const queryClient = new QueryClient();
 
 function GraphDashboard() {
-  const [view, setView] = useState<'dashboard' | 'selector' | 'graph'>('dashboard');
+  const [view, setView] = useState<'dashboard' | 'selector' | 'graph' | 'flows' | 'trace' | 'knowledge-graph'>('dashboard');
   const [selectedType, setSelectedType] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
@@ -45,9 +48,21 @@ function GraphDashboard() {
     setView('dashboard');
   };
 
+  if (view === 'flows') return <FlowExplorer onBack={handleBackToDashboard} />;
+  if (view === 'trace') return <DocumentTracer onBack={handleBackToDashboard} />;
+  if (view === 'knowledge-graph') return <KnowledgeGraph onBack={handleBackToDashboard} />;
+
   if (view === 'dashboard') {
     if (loadingSummary) return <div className="loading-screen">Loading dataset summary...</div>;
-    return <Dashboard summary={summary!} onSelectType={handleSelectType} />;
+    return (
+      <Dashboard
+        summary={summary!}
+        onSelectType={handleSelectType}
+        onExploreFlows={() => setView('flows')}
+        onTraceDocument={() => setView('trace')}
+        onKnowledgeGraph={() => setView('knowledge-graph')}
+      />
+    );
   }
 
   if (view === 'selector') {
