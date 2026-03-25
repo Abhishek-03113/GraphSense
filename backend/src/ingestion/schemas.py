@@ -16,20 +16,26 @@ class BaseSchema(BaseModel):
 
     @field_validator("*", mode="before")
     @classmethod
-    def transform_sap_data(cls, v: Any) -> Any:
+    def transform_sap_data(cls, v: Any, info: Any) -> Any:
         if v == "":
             return None
         if isinstance(v, dict) and "hours" in v and "minutes" in v and "seconds" in v:
             return SAPTime(**v).to_time()
-        if isinstance(v, str):
-            # Handle ISO datetime strings for date fields
+        if isinstance(v, str) and "T" in v and v.endswith("Z"):
             try:
-                # Check if it looks like an ISO datetime
-                if "T" in v and v.endswith("Z"):
-                    dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
-                    return dt.date()
+                dt = datetime.fromisoformat(v.replace("Z", "+00:00"))
+                # Preserve full datetime for datetime-typed fields
+                field_type = cls.model_fields.get(info.field_name)
+                if field_type and field_type.annotation in (
+                    Optional[datetime],
+                    datetime,
+                ):
+                    return dt
+                return dt.date()
             except ValueError:
                 pass
+        if isinstance(v, str) and v in ("True", "False"):
+            return v == "True"
         return v
 
 class BillingDocumentHeaderSchema(BaseSchema):
@@ -56,7 +62,6 @@ class BillingDocumentCancellationSchema(BaseSchema):
     last_change_datetime: Optional[datetime] = Field(None, alias="lastChangeDateTime")
     billing_document_date: Optional[date] = Field(None, alias="billingDocumentDate")
     billing_document_is_cancelled: bool = Field(False, alias="billingDocumentIsCancelled")
-    cancelled_billing_document: Optional[str] = Field(None, alias="cancelledBillingDocument")
     total_net_amount: Optional[float] = Field(None, alias="totalNetAmount")
     transaction_currency: Optional[str] = Field(None, alias="transactionCurrency")
     company_code: Optional[str] = Field(None, alias="companyCode")
@@ -84,18 +89,10 @@ class BusinessPartnerAddressSchema(BaseSchema):
     address_time_zone: Optional[str] = Field(None, alias="addressTimeZone")
     city_name: Optional[str] = Field(None, alias="cityName")
     country: Optional[str] = Field(None, alias="country")
-    po_box: Optional[str] = Field(None, alias="poBox")
-    po_box_deviating_city_name: Optional[str] = Field(None, alias="poBoxDeviatingCityName")
-    po_box_deviating_country: Optional[str] = Field(None, alias="poBoxDeviatingCountry")
-    po_box_deviating_region: Optional[str] = Field(None, alias="poBoxDeviatingRegion")
     po_box_is_without_number: bool = Field(False, alias="poBoxIsWithoutNumber")
-    po_box_lobby_name: Optional[str] = Field(None, alias="poBoxLobbyName")
-    po_box_postal_code: Optional[str] = Field(None, alias="poBoxPostalCode")
     postal_code: Optional[str] = Field(None, alias="postalCode")
     region: Optional[str] = Field(None, alias="region")
     street_name: Optional[str] = Field(None, alias="streetName")
-    tax_jurisdiction: Optional[str] = Field(None, alias="taxJurisdiction")
-    transport_zone: Optional[str] = Field(None, alias="transportZone")
 
 class BusinessPartnerSchema(BaseSchema):
     business_partner: str = Field(alias="businessPartner")
@@ -104,15 +101,11 @@ class BusinessPartnerSchema(BaseSchema):
     business_partner_full_name: Optional[str] = Field(None, alias="businessPartnerFullName")
     business_partner_grouping: Optional[str] = Field(None, alias="businessPartnerGrouping")
     business_partner_name: Optional[str] = Field(None, alias="businessPartnerName")
-    correspondence_language: Optional[str] = Field(None, alias="correspondenceLanguage")
     created_by_user: Optional[str] = Field(None, alias="createdByUser")
     creation_date: Optional[date] = Field(None, alias="creationDate")
     creation_time: Optional[time] = Field(None, alias="creationTime")
-    first_name: Optional[str] = Field(None, alias="firstName")
     form_of_address: Optional[str] = Field(None, alias="formOfAddress")
-    industry: Optional[str] = Field(None, alias="industry")
     last_change_date: Optional[date] = Field(None, alias="lastChangeDate")
-    last_name: Optional[str] = Field(None, alias="lastName")
     organization_bp_name1: Optional[str] = Field(None, alias="organizationBpName1")
     organization_bp_name2: Optional[str] = Field(None, alias="organizationBpName2")
     business_partner_is_blocked: bool = Field(False, alias="businessPartnerIsBlocked")
@@ -121,13 +114,6 @@ class BusinessPartnerSchema(BaseSchema):
 class CustomerCompanyAssignmentSchema(BaseSchema):
     customer: str = Field(alias="customer")
     company_code: str = Field(alias="companyCode")
-    accounting_clerk: Optional[str] = Field(None, alias="accountingClerk")
-    accounting_clerk_fax_number: Optional[str] = Field(None, alias="accountingClerkFaxNumber")
-    accounting_clerk_internet_address: Optional[str] = Field(None, alias="accountingClerkInternetAddress")
-    accounting_clerk_phone_number: Optional[str] = Field(None, alias="accountingClerkPhoneNumber")
-    alternative_payer_account: Optional[str] = Field(None, alias="alternativePayerAccount")
-    payment_blocking_reason: Optional[str] = Field(None, alias="paymentBlockingReason")
-    payment_methods_list: Optional[str] = Field(None, alias="paymentMethodsList")
     payment_terms: Optional[str] = Field(None, alias="paymentTerms")
     reconciliation_account: Optional[str] = Field(None, alias="reconciliationAccount")
     deletion_indicator: bool = Field(False, alias="deletionIndicator")
@@ -138,20 +124,14 @@ class CustomerSalesAreaAssignmentSchema(BaseSchema):
     sales_organization: str = Field(alias="salesOrganization")
     distribution_channel: str = Field(alias="distributionChannel")
     division: str = Field(alias="division")
-    billing_is_blocked_for_customer: Optional[str] = Field(None, alias="billingIsBlockedForCustomer")
     complete_delivery_is_defined: bool = Field(False, alias="completeDeliveryIsDefined")
-    credit_control_area: Optional[str] = Field(None, alias="creditControlArea")
     currency: Optional[str] = Field(None, alias="currency")
     customer_payment_terms: Optional[str] = Field(None, alias="customerPaymentTerms")
     delivery_priority: Optional[str] = Field(None, alias="deliveryPriority")
     incoterms_classification: Optional[str] = Field(None, alias="incotermsClassification")
     incoterms_location1: Optional[str] = Field(None, alias="incotermsLocation1")
-    sales_group: Optional[str] = Field(None, alias="salesGroup")
-    sales_office: Optional[str] = Field(None, alias="salesOffice")
     shipping_condition: Optional[str] = Field(None, alias="shippingCondition")
     sls_unlmtd_ovrdeliv_is_allwd: bool = Field(False, alias="slsUnlmtdOvrdelivIsAllwd")
-    supplying_plant: Optional[str] = Field(None, alias="supplyingPlant")
-    sales_district: Optional[str] = Field(None, alias="salesDistrict")
     exchange_rate_type: Optional[str] = Field(None, alias="exchangeRateType")
 
 class JournalEntryItemAccountsReceivableSchema(BaseSchema):
@@ -161,7 +141,6 @@ class JournalEntryItemAccountsReceivableSchema(BaseSchema):
     accounting_document_item: str = Field(alias="accountingDocumentItem")
     gl_account: Optional[str] = Field(None, alias="glAccount")
     reference_document: Optional[str] = Field(None, alias="referenceDocument")
-    cost_center: Optional[str] = Field(None, alias="costCenter")
     profit_center: Optional[str] = Field(None, alias="profitCenter")
     transaction_currency: Optional[str] = Field(None, alias="transactionCurrency")
     amount_in_transaction_currency: Optional[float] = Field(None, alias="amountInTransactionCurrency")
@@ -170,7 +149,6 @@ class JournalEntryItemAccountsReceivableSchema(BaseSchema):
     posting_date: Optional[date] = Field(None, alias="postingDate")
     document_date: Optional[date] = Field(None, alias="documentDate")
     accounting_document_type: Optional[str] = Field(None, alias="accountingDocumentType")
-    assignment_reference: Optional[str] = Field(None, alias="assignmentReference")
     last_change_datetime: Optional[datetime] = Field(None, alias="lastChangeDateTime")
     customer: Optional[str] = Field(None, alias="customer")
     financial_account_type: Optional[str] = Field(None, alias="financialAccountType")
@@ -184,13 +162,10 @@ class OutboundDeliveryHeaderSchema(BaseSchema):
     actual_goods_movement_time: Optional[time] = Field(None, alias="actualGoodsMovementTime")
     creation_date: Optional[date] = Field(None, alias="creationDate")
     creation_time: Optional[time] = Field(None, alias="creationTime")
-    delivery_block_reason: Optional[str] = Field(None, alias="deliveryBlockReason")
     hdr_general_incompletion_status: Optional[str] = Field(None, alias="hdrGeneralIncompletionStatus")
-    header_billing_block_reason: Optional[str] = Field(None, alias="headerBillingBlockReason")
     last_change_date: Optional[date] = Field(None, alias="lastChangeDate")
     overall_goods_movement_status: Optional[str] = Field(None, alias="overallGoodsMovementStatus")
     overall_picking_status: Optional[str] = Field(None, alias="overallPickingStatus")
-    overall_proof_of_delivery_status: Optional[str] = Field(None, alias="overallProofOfDeliveryStatus")
     shipping_point: Optional[str] = Field(None, alias="shippingPoint")
 
 class OutboundDeliveryItemSchema(BaseSchema):
@@ -199,8 +174,6 @@ class OutboundDeliveryItemSchema(BaseSchema):
     actual_delivery_quantity: Optional[float] = Field(None, alias="actualDeliveryQuantity")
     batch: Optional[str] = Field(None, alias="batch")
     delivery_quantity_unit: Optional[str] = Field(None, alias="deliveryQuantityUnit")
-    item_billing_block_reason: Optional[str] = Field(None, alias="itemBillingBlockReason")
-    last_change_date: Optional[date] = Field(None, alias="lastChangeDate")
     plant: Optional[str] = Field(None, alias="plant")
     reference_sd_document: Optional[str] = Field(None, alias="referenceSdDocument")
     reference_sd_document_item: Optional[str] = Field(None, alias="referenceSdDocumentItem")
@@ -219,17 +192,11 @@ class PaymentAccountsReceivableSchema(BaseSchema):
     amount_in_company_code_currency: Optional[float] = Field(None, alias="amountInCompanyCodeCurrency")
     company_code_currency: Optional[str] = Field(None, alias="companyCodeCurrency")
     customer: Optional[str] = Field(None, alias="customer")
-    invoice_reference: Optional[str] = Field(None, alias="invoiceReference")
-    invoice_reference_fiscal_year: Optional[str] = Field(None, alias="invoiceReferenceFiscalYear")
-    sales_document: Optional[str] = Field(None, alias="salesDocument")
-    sales_document_item: Optional[str] = Field(None, alias="salesDocumentItem")
     posting_date: Optional[date] = Field(None, alias="postingDate")
     document_date: Optional[date] = Field(None, alias="documentDate")
-    assignment_reference: Optional[str] = Field(None, alias="assignmentReference")
     gl_account: Optional[str] = Field(None, alias="glAccount")
     financial_account_type: Optional[str] = Field(None, alias="financialAccountType")
     profit_center: Optional[str] = Field(None, alias="profitCenter")
-    cost_center: Optional[str] = Field(None, alias="costCenter")
 
 class PlantSchema(BaseSchema):
     plant: str = Field(alias="plant")
@@ -238,10 +205,8 @@ class PlantSchema(BaseSchema):
     plant_customer: Optional[str] = Field(None, alias="plantCustomer")
     plant_supplier: Optional[str] = Field(None, alias="plantSupplier")
     factory_calendar: Optional[str] = Field(None, alias="factoryCalendar")
-    default_purchasing_organization: Optional[str] = Field(None, alias="defaultPurchasingOrganization")
     sales_organization: Optional[str] = Field(None, alias="salesOrganization")
     address_id: Optional[str] = Field(None, alias="addressId")
-    plant_category: Optional[str] = Field(None, alias="plantCategory")
     distribution_channel: Optional[str] = Field(None, alias="distributionChannel")
     division: Optional[str] = Field(None, alias="division")
     language: Optional[str] = Field(None, alias="language")
@@ -255,11 +220,7 @@ class ProductDescriptionSchema(BaseSchema):
 class ProductPlantSchema(BaseSchema):
     product: str = Field(alias="product")
     plant: str = Field(alias="plant")
-    country_of_origin: Optional[str] = Field(None, alias="countryOfOrigin")
-    region_of_origin: Optional[str] = Field(None, alias="regionOfOrigin")
-    production_invtry_managed_loc: Optional[str] = Field(None, alias="productionInvtryManagedLoc")
     availability_check_type: Optional[str] = Field(None, alias="availabilityCheckType")
-    fiscal_year_variant: Optional[str] = Field(None, alias="fiscalYearVariant")
     profit_center: Optional[str] = Field(None, alias="profitCenter")
     mrp_type: Optional[str] = Field(None, alias="mrpType")
 
@@ -267,14 +228,10 @@ class ProductStorageLocationSchema(BaseSchema):
     product: str = Field(alias="product")
     plant: str = Field(alias="plant")
     storage_location: str = Field(alias="storageLocation")
-    physical_inventory_block_ind: Optional[str] = Field(None, alias="physicalInventoryBlockInd")
-    date_of_last_posted_cnt_un_rstrcd_stk: Optional[date] = Field(None, alias="dateOfLastPostedCntUnRstrcdStk")
 
 class ProductSchema(BaseSchema):
     product: str = Field(alias="product")
     product_type: Optional[str] = Field(None, alias="productType")
-    cross_plant_status: Optional[str] = Field(None, alias="crossPlantStatus")
-    cross_plant_status_validity_date: Optional[date] = Field(None, alias="crossPlantStatusValidityDate")
     creation_date: Optional[date] = Field(None, alias="creationDate")
     created_by_user: Optional[str] = Field(None, alias="createdByUser")
     last_change_date: Optional[date] = Field(None, alias="lastChangeDate")
@@ -295,25 +252,18 @@ class SalesOrderHeaderSchema(BaseSchema):
     sales_organization: Optional[str] = Field(None, alias="salesOrganization")
     distribution_channel: Optional[str] = Field(None, alias="distributionChannel")
     organization_division: Optional[str] = Field(None, alias="organizationDivision")
-    sales_group: Optional[str] = Field(None, alias="salesGroup")
-    sales_office: Optional[str] = Field(None, alias="salesOffice")
     sold_to_party: Optional[str] = Field(None, alias="soldToParty")
     creation_date: Optional[date] = Field(None, alias="creationDate")
     created_by_user: Optional[str] = Field(None, alias="createdByUser")
     last_change_datetime: Optional[datetime] = Field(None, alias="lastChangeDateTime")
     total_net_amount: Optional[float] = Field(None, alias="totalNetAmount")
     overall_delivery_status: Optional[str] = Field(None, alias="overallDeliveryStatus")
-    overall_ord_reltd_billg_status: Optional[str] = Field(None, alias="overallOrdReltdBillgStatus")
-    overall_sd_doc_reference_status: Optional[str] = Field(None, alias="overallSdDocReferenceStatus")
     transaction_currency: Optional[str] = Field(None, alias="transactionCurrency")
     pricing_date: Optional[date] = Field(None, alias="pricingDate")
     requested_delivery_date: Optional[date] = Field(None, alias="requestedDeliveryDate")
-    header_billing_block_reason: Optional[str] = Field(None, alias="headerBillingBlockReason")
-    delivery_block_reason: Optional[str] = Field(None, alias="deliveryBlockReason")
     incoterms_classification: Optional[str] = Field(None, alias="incotermsClassification")
     incoterms_location1: Optional[str] = Field(None, alias="incotermsLocation1")
     customer_payment_terms: Optional[str] = Field(None, alias="customerPaymentTerms")
-    total_credit_check_status: Optional[str] = Field(None, alias="totalCreditCheckStatus")
 
 class SalesOrderItemSchema(BaseSchema):
     sales_order: str = Field(alias="salesOrder")
@@ -328,7 +278,6 @@ class SalesOrderItemSchema(BaseSchema):
     production_plant: Optional[str] = Field(None, alias="productionPlant")
     storage_location: Optional[str] = Field(None, alias="storageLocation")
     sales_document_rjcn_reason: Optional[str] = Field(None, alias="salesDocumentRjcnReason")
-    item_billing_block_reason: Optional[str] = Field(None, alias="itemBillingBlockReason")
 
 class SalesOrderScheduleLineSchema(BaseSchema):
     sales_order: str = Field(alias="salesOrder")

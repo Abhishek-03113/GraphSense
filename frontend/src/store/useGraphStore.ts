@@ -3,7 +3,6 @@ import type { GraphNode } from '../types/graph';
 
 interface GraphState {
   selectedNode: GraphNode | null;
-  layoutMode: 'cose-bilkent' | 'concentric' | 'dagre';
   isInspectorOpen: boolean;
 
   // Knowledge graph filter state
@@ -13,7 +12,6 @@ interface GraphState {
 
   // Actions
   setSelectedNode: (node: GraphNode | null) => void;
-  setLayoutMode: (mode: 'cose-bilkent' | 'concentric' | 'dagre') => void;
   toggleInspector: (open?: boolean) => void;
   setTypeFilter: (types: string[]) => void;
   setNodeLimit: (limit: number) => void;
@@ -22,7 +20,6 @@ interface GraphState {
 
 export const useGraphStore = create<GraphState>((set) => ({
   selectedNode: null,
-  layoutMode: 'cose-bilkent',
   isInspectorOpen: false,
   typeFilter: [],
   nodeLimit: 20,
@@ -30,13 +27,11 @@ export const useGraphStore = create<GraphState>((set) => ({
 
   setSelectedNode: (node) => set({
     selectedNode: node,
-    isInspectorOpen: node !== null
+    isInspectorOpen: node !== null,
   }),
 
-  setLayoutMode: (mode) => set({ layoutMode: mode }),
-
   toggleInspector: (open) => set((state) => ({
-    isInspectorOpen: open !== undefined ? open : !state.isInspectorOpen
+    isInspectorOpen: open !== undefined ? open : !state.isInspectorOpen,
   })),
 
   setTypeFilter: (types) => set({ typeFilter: types }),

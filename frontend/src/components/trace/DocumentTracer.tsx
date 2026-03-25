@@ -3,7 +3,6 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { GraphExplorer } from '../graph/GraphExplorer';
 import { InspectorPanel } from '../graph/InspectorPanel';
-import { useGraphStore } from '../../store/useGraphStore';
 
 const TRACEABLE_TYPES = [
   'Invoice',
@@ -26,8 +25,6 @@ export const DocumentTracer: React.FC<DocumentTracerProps> = ({ onBack }) => {
   const [docType, setDocType] = useState('Invoice');
   const [docId, setDocId] = useState('');
   const [target, setTarget] = useState<TraceTarget | null>(null);
-  const { setLayoutMode } = useGraphStore();
-
   const { data: graphData, isLoading, error } = useQuery({
     queryKey: ['trace', target?.docType, target?.docId],
     queryFn: () => api.getTrace(target!.docType, target!.docId, 4),
@@ -37,7 +34,6 @@ export const DocumentTracer: React.FC<DocumentTracerProps> = ({ onBack }) => {
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!docId.trim()) return;
-    setLayoutMode('dagre');
     setTarget({ docType, docId: docId.trim() });
   };
 

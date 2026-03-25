@@ -4,7 +4,6 @@ import { api } from '../../services/api';
 import { GraphExplorer } from '../graph/GraphExplorer';
 import { InspectorPanel } from '../graph/InspectorPanel';
 import { FlowSelector } from './FlowSelector';
-import { useGraphStore } from '../../store/useGraphStore';
 import type { FlowDefinition } from '../../types/graph';
 
 interface FlowExplorerProps {
@@ -13,7 +12,6 @@ interface FlowExplorerProps {
 
 export const FlowExplorer: React.FC<FlowExplorerProps> = ({ onBack }) => {
   const [selectedFlow, setSelectedFlow] = useState<FlowDefinition | null>(null);
-  const { setLayoutMode } = useGraphStore();
 
   const { data: graphData, isLoading, error } = useQuery({
     queryKey: ['flow', selectedFlow?.id],
@@ -23,8 +21,6 @@ export const FlowExplorer: React.FC<FlowExplorerProps> = ({ onBack }) => {
 
   const handleSelectFlow = (flow: FlowDefinition) => {
     setSelectedFlow(flow);
-    // Dagre hierarchy layout works best for left-to-right process flows
-    setLayoutMode('dagre');
   };
 
   if (!selectedFlow) {

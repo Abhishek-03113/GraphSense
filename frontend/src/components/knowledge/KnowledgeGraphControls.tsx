@@ -1,27 +1,6 @@
 import React from 'react';
 import { useGraphStore } from '../../store/useGraphStore';
-
-const ALL_NODE_TYPES = [
-  'Customer', 'SalesOrder', 'SalesOrderItem',
-  'Delivery', 'DeliveryItem',
-  'Invoice', 'InvoiceItem',
-  'JournalEntry', 'Payment',
-  'Product', 'Address',
-];
-
-const NODE_TYPE_COLORS: Record<string, string> = {
-  Customer: '#56d364',
-  SalesOrder: '#79c0ff',
-  SalesOrderItem: '#4d9de0',
-  Delivery: '#d2a8ff',
-  DeliveryItem: '#a371f7',
-  Invoice: '#ffa657',
-  InvoiceItem: '#e07b2a',
-  JournalEntry: '#f0883e',
-  Payment: '#7ee787',
-  Product: '#ff9580',
-  Address: '#8b949e',
-};
+import { ALL_NODE_TYPES, NODE_TYPE_COLORS, DEFAULT_NODE_COLOR } from '../../constants/graph';
 
 interface KnowledgeGraphControlsProps {
   onRefetch: () => void;
@@ -59,7 +38,6 @@ export const KnowledgeGraphControls: React.FC<KnowledgeGraphControlsProps> = ({ 
         Knowledge Graph
       </div>
 
-      {/* Search */}
       <input
         type="text"
         placeholder="Search nodes..."
@@ -78,7 +56,6 @@ export const KnowledgeGraphControls: React.FC<KnowledgeGraphControlsProps> = ({ 
         onBlur={(e) => { e.currentTarget.style.borderColor = 'var(--border-color)'; }}
       />
 
-      {/* Node limit slider */}
       <div>
         <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.3rem' }}>
           <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>Nodes per type</span>
@@ -95,14 +72,13 @@ export const KnowledgeGraphControls: React.FC<KnowledgeGraphControlsProps> = ({ 
         />
       </div>
 
-      {/* Type filter */}
       <div>
         <div style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', marginBottom: '0.5rem' }}>
           Entity types
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: '0.3rem' }}>
           {ALL_NODE_TYPES.map((type) => {
-            const color = NODE_TYPE_COLORS[type] || '#8b949e';
+            const color = NODE_TYPE_COLORS[type] || DEFAULT_NODE_COLOR;
             const isActive = typeFilter.length === 0 || typeFilter.includes(type);
             return (
               <button
@@ -135,7 +111,6 @@ export const KnowledgeGraphControls: React.FC<KnowledgeGraphControlsProps> = ({ 
         </div>
       </div>
 
-      {/* Refresh button */}
       <button
         onClick={onRefetch}
         style={{

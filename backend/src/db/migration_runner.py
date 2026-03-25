@@ -149,9 +149,16 @@ async def apply_pending(engine: AsyncEngine) -> List[MigrationFile]:
             content = m.filepath.read_text(encoding="utf-8")
             checksum = _get_checksum(content)
 
-            # Apply the SQL file
+            # Apply the SQL file — split by semicolons because asyncpg
+            # does not support multiple statements in a single prepared stmt.
             if content.strip():
-                await conn.execute(text(content))
+                # Strip comments and split on semicolons
+                lines = [l for l in content.splitlines() if not l.strip().startswith("--")]
+                clean_sql = "\n".join(lines)
+                for stmt in clean_sql.split(";"):
+                    stmt = stmt.strip()
+                    if stmt:
+                        await conn.execute(text(stmt))
             
             # Record it
             await conn.execute(

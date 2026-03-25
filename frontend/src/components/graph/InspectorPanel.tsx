@@ -1,5 +1,6 @@
 import React from 'react';
 import { useGraphStore } from '../../store/useGraphStore';
+import { NODE_TYPE_COLORS, DEFAULT_NODE_COLOR } from '../../constants/graph';
 import { X, Info, Tag, Hash, Calendar } from 'lucide-react';
 
 export const InspectorPanel: React.FC = () => {
@@ -14,35 +15,19 @@ export const InspectorPanel: React.FC = () => {
     return <Info size={14} />;
   };
 
-  const getHeaderColor = (type: string): string => {
-    // Header types share color with their item counterpart
-    const colors: Record<string, string> = {
-      'Customer':      '#56d364',
-      'SalesOrder':    '#79c0ff',
-      'SalesOrderItem':'#4d9de0',
-      'Delivery':      '#d2a8ff',
-      'DeliveryItem':  '#a371f7',
-      'Invoice':       '#ffa657',
-      'InvoiceItem':   '#e07b2a',
-      'JournalEntry':  '#f0883e',
-      'Payment':       '#7ee787',
-      'Product':       '#ff9580',
-      'Address':       '#8b949e',
-    };
-    return colors[type] ?? '#8b949e';
-  };
+  const headerColor = NODE_TYPE_COLORS[selectedNode.type] ?? DEFAULT_NODE_COLOR;
 
   return (
     <aside className="inspector-panel animate-fade-in">
-      <div 
-        className="panel-header" 
-        style={{ borderBottom: `2px solid ${getHeaderColor(selectedNode.type)}` }}
+      <div
+        className="panel-header"
+        style={{ borderBottom: `2px solid ${headerColor}` }}
       >
-        <div className="flex justify-between items-start" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
           <div>
-            <div 
-              className="node-chip" 
-              style={{ backgroundColor: getHeaderColor(selectedNode.type), color: '#000' }}
+            <div
+              className="node-chip"
+              style={{ backgroundColor: headerColor, color: '#000' }}
             >
               {selectedNode.type}
             </div>
@@ -50,14 +35,14 @@ export const InspectorPanel: React.FC = () => {
               {selectedNode.label}
             </h2>
           </div>
-          <button 
-            onClick={() => setSelectedNode(null)} 
-            style={{ 
-              background: 'none', 
-              border: 'none', 
-              color: 'var(--text-secondary)', 
+          <button
+            onClick={() => setSelectedNode(null)}
+            style={{
+              background: 'none',
+              border: 'none',
+              color: 'var(--text-secondary)',
               cursor: 'pointer',
-              padding: '4px'
+              padding: '4px',
             }}
           >
             <X size={20} />
@@ -84,7 +69,7 @@ export const InspectorPanel: React.FC = () => {
             </div>
           </div>
         ))}
-        
+
         {(!selectedNode.properties || Object.keys(selectedNode.properties).length === 0) && (
           <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '0.9rem' }}>
             No additional metadata available for this node.

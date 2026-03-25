@@ -1,28 +1,39 @@
-import React, { useEffect, useRef, useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useRef, useMemo, useCallback } from 'react';
 import CytoscapeComponent from 'react-cytoscapejs';
 import cytoscape from 'cytoscape';
-import type { Core, StylesheetCSS, EventObject, NodeSingular } from 'cytoscape';
+import type { Core, EventObject, LayoutOptions, NodeSingular } from 'cytoscape';
 import { useGraphStore } from '../../store/useGraphStore';
+import { NODE_TYPE_COLORS, DEFAULT_NODE_COLOR } from '../../constants/graph';
 import type { GraphData } from '../../types/graph';
 
-import dagre from 'cytoscape-dagre';
 // @ts-ignore - cytoscape-cose-bilkent does not have TypeScript definitions
-import cosBilkent from 'cytoscape-cose-bilkent';
+import coseBilkent from 'cytoscape-cose-bilkent';
 
-cytoscape.use(dagre);
-cytoscape.use(cosBilkent);
-
-// Cytoscape event names and CSS class constants
-const CYTOSCAPE_EVENTS = {
-  MOUSEOVER: 'mouseover',
-  MOUSEOUT: 'mouseout',
-  TAP: 'tap'
-} as const;
+cytoscape.use(coseBilkent);
 
 const CSS_CLASSES = {
-  HIGHLIGHTED: 'highlighted',
-  DIMMED: 'dimmed'
+  FOCUSED: 'focused',
+  DIMMED: 'dimmed',
+  SELECTED: 'selected',
 } as const;
+
+// ─── Obsidian-style force-directed layout ──────────────────────────
+// cose-bilkent accepts extra properties beyond base LayoutOptions;
+// cast at call sites rather than on the constant.
+const LAYOUT_OPTIONS = {
+  name: 'cose-bilkent' as const,
+  animate: 'end' as const,
+  animationDuration: 400,
+  nodeRepulsion: 12000,
+  idealEdgeLength: 80,
+  edgeElasticity: 0.05,
+  gravity: 0.15,
+  gravityRange: 5.0,
+  numIter: 2500,
+  tile: false,
+  randomize: true,
+  nestingFactor: 0.1,
+};
 
 interface Props {
   data: GraphData;
@@ -30,300 +41,245 @@ interface Props {
 
 export const GraphExplorer: React.FC<Props> = ({ data }) => {
   const cyRef = useRef<Core | null>(null);
-  const { setSelectedNode, layoutMode, setLayoutMode } = useGraphStore();
-  const [hoveredNodeId, setHoveredNodeId] = useState<string | null>(null);
+  const { setSelectedNode } = useGraphStore();
 
-  // Node type → color. Groups share a hue to signal they belong to the same
-  // document family (e.g. Invoice and InvoiceItem are both amber).
-  const NODE_TYPE_COLORS: Record<string, string> = {
-    // Core flow — O2C progression
-    'Customer':      '#56d364',  // green
-    'SalesOrder':    '#79c0ff',  // blue
-    'SalesOrderItem':'#4d9de0',  // blue (darker shade for item)
-    'Delivery':      '#d2a8ff',  // purple
-    'DeliveryItem':  '#a371f7',  // purple (darker shade for item)
-    'Invoice':       '#ffa657',  // amber
-    'InvoiceItem':   '#e07b2a',  // amber (darker shade for item)
-    'JournalEntry':  '#f0883e',  // orange
-    'Payment':       '#7ee787',  // bright green
-    // Supporting entities
-    'Product':       '#ff9580',  // salmon
-    'Address':       '#8b949e',  // grey
-  };
-
-  // Compute degree (number of connections) for each node for sizing
+  // ── Degree map (for subtle size variance) ──────────────────────
   const degreeMap = useMemo(() => {
     const degrees = new Map<string, number>();
-    data.nodes.forEach(node => degrees.set(node.id, 0));
-    data.edges.forEach(edge => {
-      degrees.set(edge.source, (degrees.get(edge.source) || 0) + 1);
-      degrees.set(edge.target, (degrees.get(edge.target) || 0) + 1);
+    data.nodes.forEach((n) => degrees.set(n.id, 0));
+    data.edges.forEach((e) => {
+      degrees.set(e.source, (degrees.get(e.source) || 0) + 1);
+      degrees.set(e.target, (degrees.get(e.target) || 0) + 1);
     });
     return degrees;
   }, [data]);
 
-  // Compute max degree once to avoid O(n) calculation per node
   const maxDegree = useMemo(() => {
-    const values = Array.from(degreeMap.values());
-    return values.length > 0 ? Math.max(...values) : 0;
+    const vals = Array.from(degreeMap.values());
+    return vals.length > 0 ? Math.max(...vals) : 0;
   }, [degreeMap]);
 
-  // Helper to compute node size based on degree (O(1) with precomputed maxDegree)
-  const getNodeSize = useCallback((nodeId: string): number => {
-    const degree = degreeMap.get(nodeId) || 0;
-    const minSize = 30;
-    const maxSize = 80;
-    if (maxDegree === 0) return minSize;
-    return minSize + (degree / maxDegree) * (maxSize - minSize);
-  }, [degreeMap, maxDegree]);
+  const getNodeSize = useCallback(
+    (nodeId: string): number => {
+      const degree = degreeMap.get(nodeId) || 0;
+      const MIN = 6;
+      const MAX = 18;
+      if (maxDegree === 0) return MIN;
+      return MIN + (degree / maxDegree) * (MAX - MIN);
+    },
+    [degreeMap, maxDegree],
+  );
 
-  // Pre-compute color map to avoid switch statement in hot path
-  const colorMap = useMemo(() => {
-    const colors = new Map<string, string>();
-    data.nodes.forEach(node => {
-      colors.set(node.id, NODE_TYPE_COLORS[node.type] || '#8b949e');
-    });
-    return colors;
-  }, [data.nodes]);
+  // ── Elements ───────────────────────────────────────────────────
+  const elements = useMemo(
+    () => [
+      ...data.nodes.map((node) => ({
+        data: {
+          id: node.id,
+          label: node.label,
+          type: node.type,
+          properties: node.properties,
+        },
+      })),
+      ...data.edges.map((edge) => ({
+        data: {
+          id: edge.id,
+          source: edge.source,
+          target: edge.target,
+          label: edge.type,
+          properties: edge.properties,
+        },
+      })),
+    ],
+    [data],
+  );
 
-  const elements = [
-    ...data.nodes.map(node => ({
-      data: {
-        id: node.id,
-        label: node.label,
-        type: node.type,
-        properties: node.properties
-      }
-    })),
-    ...data.edges.map(edge => ({
-      data: {
-        id: edge.id,
-        source: edge.source,
-        target: edge.target,
-        label: edge.type,
-        properties: edge.properties
-      }
-    }))
-  ];
+  // ── Stylesheet (Obsidian-style: tiny dots, thin edges, no labels) ─
+  const stylesheet = useMemo(
+    () =>
+      [
+        {
+          selector: 'node',
+          css: {
+            label: '',
+            'background-color': (node: NodeSingular) =>
+              NODE_TYPE_COLORS[node.data('type')] || DEFAULT_NODE_COLOR,
+            'background-opacity': 0.85,
+            width: (node: NodeSingular) => getNodeSize(node.data('id')),
+            height: (node: NodeSingular) => getNodeSize(node.data('id')),
+            'border-width': 0,
+            'overlay-padding': 4,
+            'transition-property':
+              'background-opacity, width, height, border-width, border-color, opacity',
+            'transition-duration': '150ms',
+          },
+        },
+        {
+          selector: 'edge',
+          css: {
+            width: 0.4,
+            'line-color': '#30363d',
+            'target-arrow-color': '#30363d',
+            'target-arrow-shape': 'triangle',
+            'arrow-scale': 0.3,
+            'curve-style': 'bezier',
+            label: '',
+            opacity: 0.08,
+            'transition-property': 'line-color, width, opacity, target-arrow-color',
+            'transition-duration': '150ms',
+          },
+        },
+        // ── Hover focus: soft highlight ──────────────────────────
+        {
+          selector: `node.${CSS_CLASSES.FOCUSED}`,
+          css: {
+            label: 'data(label)',
+            'font-size': '9px',
+            color: '#8b949e',
+            'text-valign': 'bottom',
+            'text-halign': 'center',
+            'text-margin-y': 5,
+            'background-opacity': 1,
+            'border-width': 1,
+            'border-color': '#58a6ff',
+            'z-index': 10,
+          },
+        },
+        {
+          selector: `edge.${CSS_CLASSES.FOCUSED}`,
+          css: {
+            'line-color': '#58a6ff',
+            'target-arrow-color': '#58a6ff',
+            width: 1,
+            opacity: 0.5,
+            'z-index': 10,
+          },
+        },
+        {
+          selector: `node.${CSS_CLASSES.DIMMED}`,
+          css: { opacity: 0.06 },
+        },
+        {
+          selector: `edge.${CSS_CLASSES.DIMMED}`,
+          css: { opacity: 0.02 },
+        },
+        // ── Click selection: strong isolate ──────────────────────
+        {
+          selector: `node.${CSS_CLASSES.SELECTED}`,
+          css: {
+            label: 'data(label)',
+            'font-size': '11px',
+            color: '#c9d1d9',
+            'text-valign': 'bottom',
+            'text-halign': 'center',
+            'text-margin-y': 7,
+            'background-opacity': 1,
+            'border-width': 2,
+            'border-color': '#58a6ff',
+            'z-index': 20,
+          },
+        },
+        {
+          selector: `edge.${CSS_CLASSES.SELECTED}`,
+          css: {
+            'line-color': '#58a6ff',
+            'target-arrow-color': '#58a6ff',
+            width: 1.8,
+            opacity: 0.85,
+            'z-index': 20,
+          },
+        },
+      ] as cytoscape.StylesheetCSS[],
+    [getNodeSize],
+  );
 
-  const stylesheet: StylesheetCSS[] = [
-    // Base node styling with dynamic sizing
-    {
-      selector: 'node',
-      css: {
-        'label': 'data(label)',
-        'background-color': (node: NodeSingular) => colorMap.get(node.data('id')) || '#8b949e',
-        'background-opacity': 0.9,
-        'color': '#c9d1d9',
-        'font-size': '11px',
-        'text-valign': 'center',
-        'text-halign': 'center',
-        'text-margin-y': 0,
-        'width': (node: NodeSingular) => `${getNodeSize(node.data('id'))}px`,
-        'height': (node: NodeSingular) => `${getNodeSize(node.data('id'))}px`,
-        'border-width': 2,
-        'border-color': '#30363d',
-        'overlay-padding': 6
-      } as any
-    },
-    // Base edge styling
-    {
-      selector: 'edge',
-      css: {
-        'width': 2,
-        'line-color': '#30363d',
-        'target-arrow-color': '#30363d',
-        'target-arrow-shape': 'triangle',
-        'curve-style': 'bezier',
-        'label': 'data(label)',
-        'font-size': '9px',
-        'color': '#8b949e',
-        'text-rotation': 'autorotate',
-        'text-margin-y': -8,
-        'opacity': 0.6,
-        'transition-property': 'line-color,width,opacity',
-        'transition-duration': '200ms'
-      }
-    },
-    // Selected node with glow effect
-    {
-      selector: 'node:selected',
-      css: {
-        'border-width': 3,
-        'border-color': '#58a6ff',
-        'shadow-blur': 20,
-        'shadow-color': '#58a6ff',
-        'shadow-opacity': 0.8,
-        'shadow-offset-x': 0,
-        'shadow-offset-y': 0
-      } as any
-    },
-    // Highlighted nodes (hovered node + connected)
-    {
-      selector: `node.${CSS_CLASSES.HIGHLIGHTED}`,
-      css: {
-        'border-color': '#58a6ff',
-        'border-width': 3,
-        'background-opacity': 1
-      }
-    },
-    // Dimmed nodes (not connected to hovered)
-    {
-      selector: `node.${CSS_CLASSES.DIMMED}`,
-      css: {
-        'opacity': 0.15
-      }
-    },
-    // Highlighted edges
-    {
-      selector: `edge.${CSS_CLASSES.HIGHLIGHTED}`,
-      css: {
-        'line-color': '#58a6ff',
-        'width': 3,
-        'opacity': 1
-      }
-    },
-    // Dimmed edges
-    {
-      selector: `edge.${CSS_CLASSES.DIMMED}`,
-      css: {
-        'opacity': 0.05
-      }
-    }
-  ];
-
-  // Handle hover interactions
+  // ── Hover: highlight neighbours ─────────────────────────────────
+  // Re-binds when data changes so handlers reference the current cy instance
+  // after CytoscapeComponent remounts with new elements.
   useEffect(() => {
-    if (!cyRef.current) return;
-
     const cy = cyRef.current;
+    if (!cy) return;
 
     const handleMouseover = (evt: EventObject) => {
       const node = evt.target;
       if (!node.isNode()) return;
 
-      const nodeId = node.id();
-
-      // Idempotence guard: only update if hovering a different node
-      if (hoveredNodeId === nodeId) return;
-      setHoveredNodeId(nodeId);
-
-      // Get all directly connected nodes and edges
-      const connectedNodes = node.connectedEdges().connectedNodes();
-      const connectedEdges = node.connectedEdges();
-
-      // Highlight hovered node and connected elements
-      node.addClass(CSS_CLASSES.HIGHLIGHTED);
-      connectedNodes.addClass(CSS_CLASSES.HIGHLIGHTED);
-      connectedEdges.addClass(CSS_CLASSES.HIGHLIGHTED);
-
-      // Dim unconnected elements (optimize query by excluding connected in one go)
-      const unconnected = cy.elements().not(node).not(connectedNodes).not(connectedEdges);
-      unconnected.addClass(CSS_CLASSES.DIMMED);
+      const hood = node.closedNeighborhood();
+      hood.addClass(CSS_CLASSES.FOCUSED);
+      cy.elements().not(hood).addClass(CSS_CLASSES.DIMMED);
     };
 
     const handleMouseout = () => {
-      if (hoveredNodeId === null) return; // Guard: only clear if something was highlighted
-      setHoveredNodeId(null);
-
-      cy.nodes().removeClass(`${CSS_CLASSES.HIGHLIGHTED} ${CSS_CLASSES.DIMMED}`);
-      cy.edges().removeClass(`${CSS_CLASSES.HIGHLIGHTED} ${CSS_CLASSES.DIMMED}`);
+      cy.elements().removeClass(`${CSS_CLASSES.FOCUSED} ${CSS_CLASSES.DIMMED}`);
     };
 
-    cy.on(CYTOSCAPE_EVENTS.MOUSEOVER, 'node', handleMouseover);
-    cy.on(CYTOSCAPE_EVENTS.MOUSEOUT, 'node', handleMouseout);
+    cy.on('mouseover', 'node', handleMouseover);
+    cy.on('mouseout', 'node', handleMouseout);
 
     return () => {
-      cy.off(CYTOSCAPE_EVENTS.MOUSEOVER, 'node', handleMouseover);
-      cy.off(CYTOSCAPE_EVENTS.MOUSEOUT, 'node', handleMouseout);
+      cy.off('mouseover', 'node', handleMouseover);
+      cy.off('mouseout', 'node', handleMouseout);
     };
-  }, [hoveredNodeId]);
+  }, [data]);
 
-  // Handle node selection
+  // ── Click: isolate neighbourhood + inspector panel ──────────────
   useEffect(() => {
-    if (!cyRef.current) return;
-
     const cy = cyRef.current;
+    if (!cy) return;
 
-    const handleNodeTap = (evt: EventObject) => {
+    const clearSelection = () => {
+      cy.elements().removeClass(
+        `${CSS_CLASSES.SELECTED} ${CSS_CLASSES.DIMMED}`
+      );
+    };
+
+    const handleTap = (evt: EventObject) => {
       const node = evt.target;
       if (!node.isNode()) return;
+
+      clearSelection();
+      // Also clear hover state to avoid conflict
+      cy.elements().removeClass(`${CSS_CLASSES.FOCUSED}`);
+
+      const hood = node.closedNeighborhood();
+      hood.addClass(CSS_CLASSES.SELECTED);
+      cy.elements().not(hood).addClass(CSS_CLASSES.DIMMED);
+
       setSelectedNode({
         id: node.data('id'),
         type: node.data('type'),
         label: node.data('label'),
-        properties: node.data('properties')
+        properties: node.data('properties'),
       });
     };
 
     const handleCanvasTap = (evt: EventObject) => {
       if (evt.target === cy) {
+        clearSelection();
         setSelectedNode(null);
       }
     };
 
-    cy.on(CYTOSCAPE_EVENTS.TAP, 'node', handleNodeTap);
-    cy.on(CYTOSCAPE_EVENTS.TAP, handleCanvasTap);
+    cy.on('tap', 'node', handleTap);
+    cy.on('tap', handleCanvasTap);
 
     return () => {
-      cy.off(CYTOSCAPE_EVENTS.TAP, 'node', handleNodeTap);
-      cy.off(CYTOSCAPE_EVENTS.TAP, handleCanvasTap);
+      cy.off('tap', 'node', handleTap);
+      cy.off('tap', handleCanvasTap);
     };
-  }, [setSelectedNode]);
+  }, [setSelectedNode, data]);
 
-  // Re-run layout on layoutMode change or data change
+  // ── Layout: re-run on data change ───────────────────────────────
   useEffect(() => {
-    if (cyRef.current) {
-      const layoutOptions: any = {
-        name: layoutMode,
-        animate: true,
-        animationDuration: 300,
-        animationEasing: 'ease-out'
-      };
+    const cy = cyRef.current;
+    if (!cy) return;
+    const layout = cy.layout(LAYOUT_OPTIONS as LayoutOptions);
+    layout.run();
+    return () => { layout.stop(); };
+  }, [data]);
 
-      // Add layout-specific options
-      if (layoutMode === 'cose-bilkent') {
-        Object.assign(layoutOptions, {
-          nodeSpacing: 10,
-          gravity: 0.05,
-          gravityRange: Infinity,
-          friction: 0.9,
-          numIter: 1000,
-          initialTemp: 200,
-          coolingFactor: 0.95,
-          minTemp: 1.0,
-          randomize: false
-        });
-      } else if (layoutMode === 'concentric') {
-        Object.assign(layoutOptions, {
-          minNodeSpacing: 40,
-          concentric: (node: NodeSingular) => {
-            return degreeMap.get(node.data('id')) || 0;
-          },
-          levelWidth: (height: number) => height * 0.8,
-          equidistant: false
-        });
-      }
-
-      cyRef.current.layout(layoutOptions).run();
-    }
-  }, [layoutMode, data, degreeMap, maxDegree]);
-
-  // Canvas controls handlers
-  const handleFitView = () => {
-    if (cyRef.current) {
-      cyRef.current.fit(undefined, 30);
-    }
-  };
-
-  const handleCenterOnSelected = () => {
-    if (cyRef.current) {
-      const selected = cyRef.current.$(':selected');
-      if (selected.length > 0) {
-        cyRef.current.center(selected.first());
-      }
-    }
-  };
+  // ── Canvas controls ─────────────────────────────────────────────
+  const handleFitView = () => cyRef.current?.fit(undefined, 30);
 
   return (
     <div className="graph-container">
@@ -334,44 +290,22 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
         cy={(cy: Core) => {
           cyRef.current = cy;
         }}
-        layout={{ name: layoutMode } as any}
-        wheelSensitivity={0.1}
+        layout={LAYOUT_OPTIONS as LayoutOptions}
+        wheelSensitivity={0.15}
+        minZoom={0.1}
+        maxZoom={6}
       />
 
-      {/* Top-right canvas controls */}
+      {/* Top-right: fit view */}
       <div className="graph-canvas-controls">
         <button
+          type="button"
           onClick={handleFitView}
           title="Fit all nodes in view"
           aria-label="Fit view"
         >
           ◻
         </button>
-        <button
-          onClick={handleCenterOnSelected}
-          title="Center on selected node"
-          aria-label="Center selected"
-        >
-          ◎
-        </button>
-      </div>
-
-      {/* Bottom-left layout controls */}
-      <div className="graph-controls">
-        {[
-          { key: 'cose-bilkent', label: 'Force' },
-          { key: 'concentric', label: 'Radial' },
-          { key: 'dagre', label: 'Hierarchy' }
-        ].map(({ key, label }) => (
-          <button
-            key={key}
-            onClick={() => setLayoutMode(key as any)}
-            className={layoutMode === key ? 'active' : ''}
-            title={`Switch to ${label} layout`}
-          >
-            {label}
-          </button>
-        ))}
       </div>
     </div>
   );

@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '../../services/api';
 import { GraphExplorer } from '../graph/GraphExplorer';
@@ -12,13 +12,8 @@ interface KnowledgeGraphProps {
 }
 
 export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ onBack }) => {
-  const { typeFilter, nodeLimit, searchQuery, setLayoutMode } = useGraphStore();
+  const { typeFilter, nodeLimit, searchQuery } = useGraphStore();
   const [fetchParams, setFetchParams] = useState({ nodeLimit, typeFilter: typeFilter.slice() });
-
-  // Use cose-bilkent for the knowledge graph (force layout reveals clusters)
-  useEffect(() => {
-    setLayoutMode('cose-bilkent');
-  }, [setLayoutMode]);
 
   const { data: rawData, isLoading, error, refetch } = useQuery({
     queryKey: ['full-graph', fetchParams.nodeLimit, fetchParams.typeFilter.join(',')],
