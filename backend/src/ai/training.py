@@ -1,15 +1,20 @@
 """Training data for the text-to-SQL RAG pipeline.
 
-Trains ChromaDB with:
+Trains pgvector rag_embeddings table with:
 1. DDL schemas for all 17 tables
 2. Documentation about O2C graph relationships and domain context
 3. SQL question-answer pairs for common query patterns
+4. Data summaries derived from ingested PostgreSQL data
 """
 
-import hashlib
 import structlog
+from sqlalchemy import text
 
-from .embeddings import get_ddl_collection, get_docs_collection, get_sql_collection
+from .embeddings import (
+    content_hash,
+    generate_embeddings,
+    upsert_embeddings,
+)
 
 logger = structlog.get_logger(__name__)
 
@@ -260,7 +265,6 @@ DDL_SCHEMAS: list[str] = [
 # ---------------------------------------------------------------------------
 
 DOCUMENTATION: list[str] = [
-    # O2C flow overview
     """This is an SAP Order-to-Cash (O2C) dataset. The O2C process flow is:
 Customer places a Sales Order -> Sales Order has line items (Sales Order Items) ->
 Each Sales Order Item references a Product (material) ->
@@ -274,7 +278,6 @@ SalesOrderItem <- DeliveryItem <- Delivery,
 DeliveryItem <- InvoiceItem <- Invoice -> Customer,
 Invoice -> JournalEntry <- Payment.""",
 
-    # Table relationships
     """Key relationships between tables:
 - sales_order_headers.sold_to_party = business_partners.customer (Customer who placed the order)
 - sales_order_items.sales_order = sales_order_headers.sales_order (Order line items)
@@ -288,21 +291,18 @@ Invoice -> JournalEntry <- Payment.""",
 - payments_accounts_receivable.clearing_accounting_document = journal_entry_items_accounts_receivable.accounting_document (Payment clears journal entry)
 - business_partner_addresses.business_partner = business_partners.business_partner (Customer address)""",
 
-    # Item number normalization
     """IMPORTANT: Item numbers have different formats across tables.
 In source tables (sales_order_items, outbound_delivery_items, billing_document_items), item numbers
 are zero-padded like '000010', '000020'. In cross-document reference fields (reference_sd_document_item),
 they may be stored as '10', '20' without padding. When joining across documents, either use
 REGEXP_REPLACE(column, '^0+', '') to strip leading zeros, or CAST to integer for comparison.""",
 
-    # Billing document types
     """Billing documents can be invoices or cancellations:
 - billing_document_headers has billing_document_is_cancelled flag
 - billing_document_cancellations table stores cancellation documents
 - cancelled_billing_document in billing_document_headers references the original document
 To find active (non-cancelled) invoices: WHERE billing_document_is_cancelled = FALSE""",
 
-    # Business partners and customers
     """Business partners and customers are related but distinct:
 - business_partners.business_partner is the BP ID
 - business_partners.customer is the customer number used in sales/billing
@@ -310,14 +310,12 @@ To find active (non-cancelled) invoices: WHERE billing_document_is_cancelled = F
 - billing_document_headers.sold_to_party also references business_partners.customer
 - To find a customer name: JOIN business_partners ON customer = sold_to_party""",
 
-    # Delivery and fulfillment status
     """Delivery status tracking:
 - sales_order_headers.overall_delivery_status: 'A' = not delivered, 'B' = partially delivered, 'C' = fully delivered
 - outbound_delivery_headers.overall_goods_movement_status: 'A' = not started, 'C' = completed
 - outbound_delivery_headers.overall_picking_status: 'A' = not started, 'B' = partial, 'C' = completed
 A 'broken flow' means a sales order that has been delivered but not billed, or billed without delivery.""",
 
-    # Financial data
     """Financial amounts:
 - All amount fields use NUMERIC(18,4) precision
 - transaction_currency stores the ISO currency code (e.g., 'USD', 'EUR')
@@ -547,54 +545,248 @@ LIMIT 20;"""
 ]
 
 
-def _content_hash(content: str) -> str:
-    return hashlib.md5(content.encode()).hexdigest()[:12]
+# ---------------------------------------------------------------------------
+# 4. Data-driven summaries from ingested PostgreSQL data
+# ---------------------------------------------------------------------------
+
+DATA_SUMMARY_QUERIES: list[tuple[str, str]] = [
+    (
+        "customer_overview",
+        """SELECT
+            'The dataset contains ' || COUNT(DISTINCT bp.customer) || ' customers. '
+            || 'Top customers by order volume: '
+            || string_agg(sub.summary, '; ')
+        AS summary
+        FROM business_partners bp,
+        LATERAL (
+            SELECT bp2.customer || ' (' || bp2.business_partner_full_name || ', '
+                || COUNT(DISTINCT soh.sales_order) || ' orders, '
+                || COALESCE(SUM(soh.total_net_amount)::text, '0') || ' ' || COALESCE(soh.transaction_currency, '') || ')'
+                AS summary
+            FROM business_partners bp2
+            JOIN sales_order_headers soh ON soh.sold_to_party = bp2.customer
+            GROUP BY bp2.customer, bp2.business_partner_full_name, soh.transaction_currency
+            ORDER BY COUNT(DISTINCT soh.sales_order) DESC
+            LIMIT 10
+        ) sub;""",
+    ),
+    (
+        "product_overview",
+        """SELECT
+            'The dataset contains ' || COUNT(DISTINCT p.product) || ' products. '
+            || 'Top products by sales volume: '
+            || string_agg(sub.summary, '; ')
+        AS summary
+        FROM products p,
+        LATERAL (
+            SELECT p2.product || ' (' || COALESCE(pd.product_description, 'no description') || ', '
+                || COALESCE(SUM(soi.requested_quantity)::text, '0') || ' units across '
+                || COUNT(DISTINCT soi.sales_order) || ' orders)'
+                AS summary
+            FROM products p2
+            LEFT JOIN product_descriptions pd ON p2.product = pd.product AND pd.language = 'EN'
+            JOIN sales_order_items soi ON soi.material = p2.product
+            GROUP BY p2.product, pd.product_description
+            ORDER BY SUM(soi.requested_quantity) DESC NULLS LAST
+            LIMIT 10
+        ) sub;""",
+    ),
+    (
+        "order_statistics",
+        """SELECT
+            'Sales order statistics: '
+            || COUNT(*) || ' total orders, '
+            || 'total value ' || COALESCE(SUM(total_net_amount)::text, '0') || ' ' || COALESCE(transaction_currency, '') || ', '
+            || 'average order value ' || COALESCE(ROUND(AVG(total_net_amount), 2)::text, '0') || ', '
+            || 'date range: ' || COALESCE(MIN(creation_date)::text, 'N/A') || ' to ' || COALESCE(MAX(creation_date)::text, 'N/A') || '. '
+            || 'Delivery status breakdown: '
+            || string_agg(DISTINCT
+                CASE overall_delivery_status
+                    WHEN 'A' THEN 'Not delivered'
+                    WHEN 'B' THEN 'Partially delivered'
+                    WHEN 'C' THEN 'Fully delivered'
+                    ELSE overall_delivery_status
+                END || ': ' || cnt::text, ', ')
+        AS summary
+        FROM sales_order_headers,
+        LATERAL (
+            SELECT overall_delivery_status AS ds, COUNT(*) AS cnt
+            FROM sales_order_headers
+            GROUP BY overall_delivery_status
+        ) status_counts
+        GROUP BY transaction_currency;""",
+    ),
+    (
+        "billing_overview",
+        """SELECT
+            'Billing overview: '
+            || COUNT(*) || ' total billing documents, '
+            || COUNT(*) FILTER (WHERE billing_document_is_cancelled = FALSE) || ' active invoices, '
+            || COUNT(*) FILTER (WHERE billing_document_is_cancelled = TRUE) || ' cancelled, '
+            || 'total invoiced amount: ' || COALESCE(SUM(total_net_amount) FILTER (WHERE billing_document_is_cancelled = FALSE)::text, '0')
+            || ' ' || COALESCE(transaction_currency, '') || ', '
+            || 'date range: ' || COALESCE(MIN(billing_document_date)::text, 'N/A')
+            || ' to ' || COALESCE(MAX(billing_document_date)::text, 'N/A')
+        AS summary
+        FROM billing_document_headers
+        GROUP BY transaction_currency;""",
+    ),
+    (
+        "payment_overview",
+        """SELECT
+            'Payment overview: '
+            || COUNT(DISTINCT accounting_document) || ' payment documents, '
+            || 'total payment amount: ' || COALESCE(SUM(amount_in_transaction_currency)::text, '0')
+            || ' ' || COALESCE(transaction_currency, '') || ', '
+            || 'date range: ' || COALESCE(MIN(posting_date)::text, 'N/A')
+            || ' to ' || COALESCE(MAX(posting_date)::text, 'N/A')
+        AS summary
+        FROM payments_accounts_receivable
+        GROUP BY transaction_currency;""",
+    ),
+    (
+        "delivery_overview",
+        """SELECT
+            'Delivery overview: '
+            || COUNT(*) || ' outbound deliveries, '
+            || 'goods movement status — completed: '
+            || COUNT(*) FILTER (WHERE overall_goods_movement_status = 'C')
+            || ', not started: '
+            || COUNT(*) FILTER (WHERE overall_goods_movement_status = 'A')
+            || '. Picking status — completed: '
+            || COUNT(*) FILTER (WHERE overall_picking_status = 'C')
+            || ', partial: '
+            || COUNT(*) FILTER (WHERE overall_picking_status = 'B')
+            || ', not started: '
+            || COUNT(*) FILTER (WHERE overall_picking_status = 'A')
+            || '. Date range: ' || COALESCE(MIN(creation_date)::text, 'N/A')
+            || ' to ' || COALESCE(MAX(creation_date)::text, 'N/A')
+        AS summary
+        FROM outbound_delivery_headers;""",
+    ),
+    (
+        "plant_overview",
+        """SELECT
+            'The dataset contains ' || COUNT(*) || ' plants: '
+            || string_agg(plant || ' (' || COALESCE(plant_name, 'unnamed') || ')', ', ')
+        AS summary
+        FROM plants;""",
+    ),
+    (
+        "flow_completeness",
+        """SELECT
+            'O2C flow completeness: '
+            || 'Orders with deliveries: ' || COUNT(DISTINCT soh.sales_order) FILTER (
+                WHERE EXISTS (SELECT 1 FROM outbound_delivery_items odi WHERE odi.reference_sd_document = soh.sales_order)
+            ) || ' of ' || COUNT(DISTINCT soh.sales_order) || ' total orders. '
+            || 'Orders with invoices: ' || COUNT(DISTINCT soh.sales_order) FILTER (
+                WHERE EXISTS (
+                    SELECT 1 FROM outbound_delivery_items odi
+                    JOIN billing_document_items bdi ON bdi.reference_sd_document = odi.delivery_document
+                    WHERE odi.reference_sd_document = soh.sales_order
+                )
+            ) || '. '
+            || 'Invoices with journal entries: ' || (
+                SELECT COUNT(*) FROM billing_document_headers WHERE accounting_document IS NOT NULL AND billing_document_is_cancelled = FALSE
+            ) || '. '
+            || 'Journal entries with payments: ' || (
+                SELECT COUNT(DISTINCT je.accounting_document)
+                FROM journal_entry_items_accounts_receivable je
+                WHERE EXISTS (SELECT 1 FROM payments_accounts_receivable p WHERE p.clearing_accounting_document = je.accounting_document)
+            )
+        AS summary
+        FROM sales_order_headers soh;""",
+    ),
+]
+
+
+# ---------------------------------------------------------------------------
+# Train functions
+# ---------------------------------------------------------------------------
+
+def _embed_and_prepare(
+    texts: list[str],
+    category: str,
+    metadatas: list[dict] | None = None,
+) -> list[dict]:
+    """Generate embeddings and build upsert-ready rows."""
+    if not texts:
+        return []
+
+    embeddings = generate_embeddings(texts)
+    items: list[dict] = []
+
+    for i, (txt, emb) in enumerate(zip(texts, embeddings)):
+        items.append({
+            "category": category,
+            "content": txt,
+            "metadata": metadatas[i] if metadatas else {},
+            "embedding": emb,
+            "content_hash": content_hash(f"{category}:{txt}"),
+        })
+
+    return items
+
+
+def _train_static(engine) -> dict[str, int]:
+    """Train DDL, docs, and SQL pairs (static data)."""
+    # DDL schemas
+    ddl_items = _embed_and_prepare(DDL_SCHEMAS, "ddl")
+    ddl_count = upsert_embeddings(engine, ddl_items)
+    logger.info("train.ddl", count=ddl_count)
+
+    # Documentation
+    doc_items = _embed_and_prepare(DOCUMENTATION, "documentation")
+    doc_count = upsert_embeddings(engine, doc_items)
+    logger.info("train.docs", count=doc_count)
+
+    # SQL pairs — embed the question, store the SQL in metadata
+    questions = [q for q, _ in SQL_PAIRS]
+    sql_metas = [{"sql": sql, "question": q} for q, sql in SQL_PAIRS]
+    sql_items = _embed_and_prepare(questions, "sql_pair", sql_metas)
+    sql_count = upsert_embeddings(engine, sql_items)
+    logger.info("train.sql_pairs", count=sql_count)
+
+    return {"ddl": ddl_count, "documentation": doc_count, "sql_pairs": sql_count}
+
+
+def _train_data_summaries(engine) -> int:
+    """Generate and embed summaries from actual ingested data."""
+    summaries: list[str] = []
+    metas: list[dict] = []
+
+    with engine.connect() as conn:
+        for name, query in DATA_SUMMARY_QUERIES:
+            try:
+                row = conn.execute(text(query)).fetchone()
+                if row and row[0]:
+                    summary = str(row[0])
+                    summaries.append(summary)
+                    metas.append({"source_query": name})
+                    logger.info("train.data_summary.ok", name=name, length=len(summary))
+                else:
+                    logger.warning("train.data_summary.empty", name=name)
+            except Exception:
+                logger.exception("train.data_summary.failed", name=name)
+
+    if not summaries:
+        return 0
+
+    items = _embed_and_prepare(summaries, "data_summary", metas)
+    count = upsert_embeddings(engine, items)
+    logger.info("train.data_summaries", count=count)
+    return count
 
 
 def train_all() -> dict[str, int]:
-    """Load all training data into ChromaDB collections. Returns counts."""
-    ddl_col = get_ddl_collection()
-    docs_col = get_docs_collection()
-    sql_col = get_sql_collection()
+    """Load all training data into pgvector rag_embeddings. Returns counts."""
+    from src.ai.chat import _get_sync_engine
 
-    # Train DDL
-    ddl_ids = []
-    ddl_docs = []
-    for i, ddl in enumerate(DDL_SCHEMAS):
-        doc_id = f"ddl-{i}-{_content_hash(ddl)}"
-        ddl_ids.append(doc_id)
-        ddl_docs.append(ddl)
+    engine = _get_sync_engine()
 
-    if ddl_ids:
-        ddl_col.upsert(ids=ddl_ids, documents=ddl_docs)
-    logger.info("train.ddl", count=len(ddl_ids))
+    counts = _train_static(engine)
+    data_count = _train_data_summaries(engine)
+    counts["data_summaries"] = data_count
 
-    # Train documentation
-    doc_ids = []
-    doc_docs = []
-    for i, doc in enumerate(DOCUMENTATION):
-        doc_id = f"doc-{i}-{_content_hash(doc)}"
-        doc_ids.append(doc_id)
-        doc_docs.append(doc)
-
-    if doc_ids:
-        docs_col.upsert(ids=doc_ids, documents=doc_docs)
-    logger.info("train.docs", count=len(doc_ids))
-
-    # Train SQL pairs
-    sql_ids = []
-    sql_docs = []
-    sql_metas = []
-    for i, (question, sql) in enumerate(SQL_PAIRS):
-        doc_id = f"sql-{i}-{_content_hash(question)}"
-        sql_ids.append(doc_id)
-        sql_docs.append(question)
-        sql_metas.append({"sql": sql, "question": question})
-
-    if sql_ids:
-        sql_col.upsert(ids=sql_ids, documents=sql_docs, metadatas=sql_metas)
-    logger.info("train.sql_pairs", count=len(sql_ids))
-
-    counts = {"ddl": len(ddl_ids), "documentation": len(doc_ids), "sql_pairs": len(sql_ids)}
     logger.info("train.complete", **counts)
     return counts

@@ -9,7 +9,7 @@ DodgeAI is a graph-based data modeling and query system for SAP Order-to-Cash (O
 - A React + TypeScript frontend for visualizing entity relationships as an interactive graph
 - PostgreSQL database with pgvector extension for storing and querying relational data
 - Data ingestion pipeline for loading JSONL-formatted SAP data
-- **LLM-powered conversational query interface** using Gemini + ChromaDB RAG for text-to-SQL
+- **LLM-powered conversational query interface** using Gemini + pgvector RAG for text-to-SQL
 
 ## Architecture
 
@@ -36,8 +36,8 @@ The backend follows a layered architecture:
   - `flow_definitions.py` - `FLOW_DEFINITIONS` constant: predefined O2C flow metadata (node types, edge types per flow)
 
 - **`src/ai/`** - LLM-powered chat pipeline (text-to-SQL RAG)
-  - `config.py` - AI settings (Gemini API key, model, ChromaDB path)
-  - `embeddings.py` - ChromaDB vector store (DDL, docs, SQL pair collections)
+  - `config.py` - AI settings (Gemini API key, model, embedding model)
+  - `embeddings.py` - pgvector embedding store using Gemini text-embedding-004 (DDL, docs, SQL pairs, data summaries)
   - `training.py` - Training data: 17 DDL schemas, 7 domain docs, 15 SQL question-answer pairs
   - `guardrails.py` - Domain restriction: rejects off-topic queries, SQL injection, prompt injection
   - `chat.py` - Full pipeline: guardrails → RAG retrieval → SQL generation → execution → synthesis
@@ -155,10 +155,10 @@ npm run build                  # TypeScript + Vite build
 - `POST /api/chat` - Accepts `{ message }`, returns `{ answer, sql, data, entities, error }`
 - `POST /api/chat/train` - Triggers (re-)training of the RAG pipeline
 
-**Pipeline**: Guardrails → ChromaDB RAG retrieval (DDL + docs + SQL pairs) → Gemini SQL generation → PostgreSQL execution → Gemini response synthesis
+**Pipeline**: Guardrails → pgvector RAG retrieval (DDL + docs + SQL pairs + data summaries) → Gemini SQL generation → PostgreSQL execution → Gemini response synthesis
 
 **Architecture**:
-- **ChromaDB** stores embeddings for 17 DDL schemas, 7 domain docs, and 15 SQL question-answer pairs
+- **pgvector** stores embeddings (Gemini text-embedding-004, 768 dims) for 17 DDL schemas, 7 domain docs, 15 SQL question-answer pairs, and data summaries derived from ingested data
 - **Google Gemini** (`gemini-2.0-flash`) generates SQL from RAG context and synthesizes natural language answers
 - **Guardrails** reject off-topic queries, SQL injection, and prompt injection attempts
 - Entities extracted from query results are highlighted on the graph visualization

@@ -1,8 +1,8 @@
-"""Text-to-SQL chat pipeline using Gemini + ChromaDB RAG.
+"""Text-to-SQL chat pipeline using Gemini + pgvector RAG.
 
 Pipeline:
 1. Guardrails → reject off-topic queries
-2. RAG retrieval → fetch relevant DDL, docs, SQL pairs from ChromaDB
+2. RAG retrieval → fetch relevant DDL, docs, SQL pairs, data summaries from pgvector
 3. SQL generation → Gemini generates SQL from context + question
 4. SQL execution → execute against PostgreSQL (read-only)
 5. Response synthesis → Gemini produces natural language answer from results
@@ -17,7 +17,7 @@ from google import genai
 from sqlalchemy import create_engine, text
 
 from .config import ai_settings
-from .embeddings import get_ddl_collection, get_docs_collection, get_sql_collection
+from .embeddings import generate_embedding, query_similar
 from .guardrails import check_guardrails
 from .training import train_all
 
@@ -79,43 +79,57 @@ _trained = False
 def _ensure_trained():
     global _trained
     if not _trained:
-        train_all()
+        # Check if embeddings already exist in pgvector
+        engine = _get_sync_engine()
+        with engine.connect() as conn:
+            result = conn.execute(text("SELECT COUNT(*) FROM rag_embeddings"))
+            count = result.scalar()
+        if count == 0:
+            train_all()
         _trained = True
 
 
 # ---------------------------------------------------------------------------
-# RAG retrieval
+# RAG retrieval (pgvector cosine similarity)
 # ---------------------------------------------------------------------------
 
 def _retrieve_context(question: str, n_results: int = 5) -> str:
-    """Retrieve relevant DDL, docs, and SQL pairs for the question."""
+    """Retrieve relevant DDL, docs, SQL pairs, and data summaries from pgvector."""
     _ensure_trained()
+
+    engine = _get_sync_engine()
+    question_embedding = generate_embedding(question)
 
     parts: list[str] = []
 
     # DDL schemas
-    ddl_col = get_ddl_collection()
-    ddl_results = ddl_col.query(query_texts=[question], n_results=min(n_results, ddl_col.count()))
-    if ddl_results["documents"] and ddl_results["documents"][0]:
+    ddl_results = query_similar(engine, question_embedding, category="ddl", n_results=n_results)
+    if ddl_results:
         parts.append("=== RELEVANT TABLE SCHEMAS ===")
-        for doc in ddl_results["documents"][0]:
-            parts.append(doc)
+        for r in ddl_results:
+            parts.append(r["content"])
 
     # Documentation
-    docs_col = get_docs_collection()
-    docs_results = docs_col.query(query_texts=[question], n_results=min(n_results, docs_col.count()))
-    if docs_results["documents"] and docs_results["documents"][0]:
+    doc_results = query_similar(engine, question_embedding, category="documentation", n_results=n_results)
+    if doc_results:
         parts.append("\n=== DOMAIN DOCUMENTATION ===")
-        for doc in docs_results["documents"][0]:
-            parts.append(doc)
+        for r in doc_results:
+            parts.append(r["content"])
 
     # SQL pairs
-    sql_col = get_sql_collection()
-    sql_results = sql_col.query(query_texts=[question], n_results=min(n_results, sql_col.count()))
-    if sql_results["metadatas"] and sql_results["metadatas"][0]:
+    sql_results = query_similar(engine, question_embedding, category="sql_pair", n_results=n_results)
+    if sql_results:
         parts.append("\n=== EXAMPLE SQL QUERIES ===")
-        for meta in sql_results["metadatas"][0]:
-            parts.append(f"Question: {meta['question']}\nSQL:\n{meta['sql']}")
+        for r in sql_results:
+            meta = r["metadata"]
+            parts.append(f"Question: {meta.get('question', '')}\nSQL:\n{meta.get('sql', '')}")
+
+    # Data summaries (from ingested data)
+    data_results = query_similar(engine, question_embedding, category="data_summary", n_results=3)
+    if data_results:
+        parts.append("\n=== DATASET CONTEXT (from actual data) ===")
+        for r in data_results:
+            parts.append(r["content"])
 
     return "\n\n".join(parts)
 

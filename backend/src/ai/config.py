@@ -18,9 +18,7 @@ class AISettings(BaseSettings):
 
     GEMINI_API_KEY: str = Field(default="")
     GEMINI_MODEL: str = Field(default="gemini-2.0-flash")
-    CHROMA_PERSIST_DIR: str = Field(
-        default=str(_BACKEND_DIR / ".chroma_data"),
-    )
+    GEMINI_EMBEDDING_MODEL: str = Field(default="text-embedding-004")
 
 
 ai_settings: AISettings = AISettings()

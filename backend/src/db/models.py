@@ -1,5 +1,6 @@
-from sqlalchemy import Column, String, Date, Time, DateTime, Boolean, Numeric, ForeignKey, PrimaryKeyConstraint, BigInteger
-from sqlalchemy.dialects.postgresql import TIMESTAMP, UUID
+from sqlalchemy import Column, String, Date, Time, DateTime, Boolean, Numeric, ForeignKey, PrimaryKeyConstraint, BigInteger, Text, func
+from sqlalchemy.dialects.postgresql import JSONB, TIMESTAMP, UUID
+from pgvector.sqlalchemy import Vector
 from .base import Base
 
 class BillingDocumentHeader(Base):
@@ -270,3 +271,14 @@ class SalesOrderScheduleLine(Base):
     confirmed_delivery_date = Column(Date)
     order_quantity_unit = Column(String(255))
     confd_order_qty_by_matl_avail_check = Column(Numeric(18, 2))
+
+
+class RagEmbedding(Base):
+    __tablename__ = "rag_embeddings"
+    id = Column(BigInteger, primary_key=True, autoincrement=True)
+    category = Column(String(32), nullable=False)
+    content = Column(Text, nullable=False)
+    metadata_ = Column("metadata", JSONB, nullable=False, server_default="{}")
+    embedding = Column(Vector(768), nullable=False)
+    content_hash = Column(String(32), nullable=False, unique=True)
+    created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
