@@ -1,0 +1,356 @@
+"""Text-to-SQL chat pipeline using Gemini + ChromaDB RAG.
+
+Pipeline:
+1. Guardrails → reject off-topic queries
+2. RAG retrieval → fetch relevant DDL, docs, SQL pairs from ChromaDB
+3. SQL generation → Gemini generates SQL from context + question
+4. SQL execution → execute against PostgreSQL (read-only)
+5. Response synthesis → Gemini produces natural language answer from results
+"""
+
+import re
+from dataclasses import dataclass, field
+
+import pandas as pd
+import structlog
+from google import genai
+from sqlalchemy import create_engine, text
+
+from .config import ai_settings
+from .embeddings import get_ddl_collection, get_docs_collection, get_sql_collection
+from .guardrails import check_guardrails
+from .training import train_all
+
+logger = structlog.get_logger(__name__)
+
+
+@dataclass(frozen=True)
+class ChatResponse:
+    answer: str
+    sql: str | None = None
+    data: list[dict] | None = None
+    entities: list[dict] = field(default_factory=list)
+    error: str | None = None
+
+
+# ---------------------------------------------------------------------------
+# Singleton engine for synchronous SQL execution (read-only)
+# ---------------------------------------------------------------------------
+
+_sync_engine = None
+
+
+def _get_sync_engine():
+    global _sync_engine
+    if _sync_engine is None:
+        from src.db.config import db_settings
+
+        dsn = str(db_settings.DATABASE_DSN)
+        sync_dsn = dsn.replace("postgresql+asyncpg://", "postgresql+psycopg2://")
+        _sync_engine = create_engine(sync_dsn, pool_pre_ping=True, pool_size=3)
+    return _sync_engine
+
+
+# ---------------------------------------------------------------------------
+# Gemini client
+# ---------------------------------------------------------------------------
+
+_gemini_client = None
+
+
+def _get_gemini_client() -> genai.Client:
+    global _gemini_client
+    if _gemini_client is None:
+        if not ai_settings.GEMINI_API_KEY:
+            raise RuntimeError(
+                "GEMINI_API_KEY is not set. Please set it in backend/.env"
+            )
+        _gemini_client = genai.Client(api_key=ai_settings.GEMINI_API_KEY)
+    return _gemini_client
+
+
+# ---------------------------------------------------------------------------
+# Ensure training data is loaded
+# ---------------------------------------------------------------------------
+
+_trained = False
+
+
+def _ensure_trained():
+    global _trained
+    if not _trained:
+        train_all()
+        _trained = True
+
+
+# ---------------------------------------------------------------------------
+# RAG retrieval
+# ---------------------------------------------------------------------------
+
+def _retrieve_context(question: str, n_results: int = 5) -> str:
+    """Retrieve relevant DDL, docs, and SQL pairs for the question."""
+    _ensure_trained()
+
+    parts: list[str] = []
+
+    # DDL schemas
+    ddl_col = get_ddl_collection()
+    ddl_results = ddl_col.query(query_texts=[question], n_results=min(n_results, ddl_col.count()))
+    if ddl_results["documents"] and ddl_results["documents"][0]:
+        parts.append("=== RELEVANT TABLE SCHEMAS ===")
+        for doc in ddl_results["documents"][0]:
+            parts.append(doc)
+
+    # Documentation
+    docs_col = get_docs_collection()
+    docs_results = docs_col.query(query_texts=[question], n_results=min(n_results, docs_col.count()))
+    if docs_results["documents"] and docs_results["documents"][0]:
+        parts.append("\n=== DOMAIN DOCUMENTATION ===")
+        for doc in docs_results["documents"][0]:
+            parts.append(doc)
+
+    # SQL pairs
+    sql_col = get_sql_collection()
+    sql_results = sql_col.query(query_texts=[question], n_results=min(n_results, sql_col.count()))
+    if sql_results["metadatas"] and sql_results["metadatas"][0]:
+        parts.append("\n=== EXAMPLE SQL QUERIES ===")
+        for meta in sql_results["metadatas"][0]:
+            parts.append(f"Question: {meta['question']}\nSQL:\n{meta['sql']}")
+
+    return "\n\n".join(parts)
+
+
+# ---------------------------------------------------------------------------
+# SQL generation
+# ---------------------------------------------------------------------------
+
+_SQL_SYSTEM_PROMPT = """You are an expert PostgreSQL SQL query generator for an SAP Order-to-Cash dataset.
+
+RULES:
+1. Generate ONLY valid PostgreSQL SELECT queries. Never generate INSERT, UPDATE, DELETE, DROP, ALTER, or any data-modification statements.
+2. Use only the tables and columns provided in the context. Do not invent tables or columns.
+3. When joining across documents (e.g., delivery items to sales order items), use REGEXP_REPLACE(column, '^0+', '') to normalize item numbers that may have different zero-padding.
+4. Always use table aliases for clarity.
+5. Use LIMIT to prevent returning too many rows (default LIMIT 25 unless the user asks for more).
+6. For customer lookups, remember: sales_order_headers.sold_to_party = business_partners.customer (NOT business_partner).
+7. Return ONLY the SQL query, no explanation. Do not wrap in markdown code blocks.
+8. If you cannot generate a valid query for the question, return exactly: CANNOT_GENERATE
+9. For aggregations, include relevant GROUP BY clauses.
+10. Use LEFT JOIN when the relationship might not exist (e.g., not all orders have deliveries).
+"""
+
+
+def _generate_sql(question: str, context: str) -> str | None:
+    """Use Gemini to generate SQL from question + RAG context."""
+    client = _get_gemini_client()
+
+    prompt = f"""{_SQL_SYSTEM_PROMPT}
+
+CONTEXT:
+{context}
+
+USER QUESTION: {question}
+
+Generate a PostgreSQL SELECT query to answer this question:"""
+
+    response = client.models.generate_content(
+        model=ai_settings.GEMINI_MODEL,
+        contents=prompt,
+    )
+
+    sql = response.text.strip() if response.text else None
+    if not sql or sql == "CANNOT_GENERATE":
+        return None
+
+    # Clean up markdown code fences if present
+    sql = re.sub(r"^```(?:sql)?\s*\n?", "", sql)
+    sql = re.sub(r"\n?```\s*$", "", sql)
+    sql = sql.strip()
+
+    # Safety: reject any mutation
+    if re.search(r"\b(INSERT|UPDATE|DELETE|DROP|ALTER|TRUNCATE|CREATE)\b", sql, re.I):
+        logger.warning("sql_generation.mutation_detected", sql=sql[:200])
+        return None
+
+    return sql
+
+
+# ---------------------------------------------------------------------------
+# SQL execution
+# ---------------------------------------------------------------------------
+
+def _execute_sql(sql: str) -> tuple[list[dict], list[str]]:
+    """Execute SQL and return (rows_as_dicts, column_names)."""
+    engine = _get_sync_engine()
+    with engine.connect() as conn:
+        result = conn.execute(text(sql))
+        columns = list(result.keys())
+        rows = [dict(zip(columns, row)) for row in result.fetchall()]
+    return rows, columns
+
+
+# ---------------------------------------------------------------------------
+# Response synthesis
+# ---------------------------------------------------------------------------
+
+_SYNTHESIS_SYSTEM_PROMPT = """You are a helpful data analyst assistant for an SAP Order-to-Cash dataset.
+
+Given a user question, the SQL query that was executed, and the query results, provide a clear,
+concise natural language answer.
+
+RULES:
+1. Answer based ONLY on the data provided. Do not make up information.
+2. If the results are empty, say so clearly.
+3. Include specific numbers, names, and values from the results.
+4. Keep the answer conversational but factual.
+5. If the data contains amounts, include the currency.
+6. Format large numbers with commas for readability.
+7. Do not include the SQL query in your response.
+8. Highlight key findings or patterns in the data.
+"""
+
+
+def _synthesize_response(question: str, sql: str, data: list[dict], columns: list[str]) -> str:
+    """Use Gemini to produce a natural language answer from query results."""
+    client = _get_gemini_client()
+
+    # Truncate data for the prompt if too large
+    display_data = data[:50]
+    df = pd.DataFrame(display_data, columns=columns) if display_data else pd.DataFrame()
+
+    prompt = f"""{_SYNTHESIS_SYSTEM_PROMPT}
+
+USER QUESTION: {question}
+
+SQL EXECUTED:
+{sql}
+
+QUERY RESULTS ({len(data)} total rows, showing first {len(display_data)}):
+{df.to_string(index=False) if not df.empty else "(no results)"}
+
+Provide a natural language answer:"""
+
+    response = client.models.generate_content(
+        model=ai_settings.GEMINI_MODEL,
+        contents=prompt,
+    )
+
+    return response.text.strip() if response.text else "I was unable to generate a response."
+
+
+# ---------------------------------------------------------------------------
+# Entity extraction for graph highlighting
+# ---------------------------------------------------------------------------
+
+def _extract_entities(data: list[dict]) -> list[dict]:
+    """Extract entity references from query results for graph highlighting."""
+    entities: list[dict] = []
+    seen: set[str] = set()
+
+    entity_column_map: dict[str, str] = {
+        "sales_order": "SalesOrder",
+        "delivery_document": "Delivery",
+        "delivery": "Delivery",
+        "billing_document": "Invoice",
+        "invoice": "Invoice",
+        "accounting_document": "JournalEntry",
+        "journal_entry": "JournalEntry",
+        "payment_document": "Payment",
+        "customer": "Customer",
+        "product": "Product",
+        "material": "Product",
+        "business_partner": "Customer",
+    }
+
+    for row in data[:100]:
+        for col, val in row.items():
+            if val is None:
+                continue
+            col_lower = col.lower()
+            for key, node_type in entity_column_map.items():
+                if key in col_lower:
+                    entity_key = f"{node_type}:{val}"
+                    if entity_key not in seen:
+                        seen.add(entity_key)
+                        entities.append({"id": entity_key, "type": node_type, "value": str(val)})
+                    break
+
+    return entities
+
+
+# ---------------------------------------------------------------------------
+# Main chat function
+# ---------------------------------------------------------------------------
+
+def chat(message: str) -> ChatResponse:
+    """Process a chat message through the full pipeline."""
+    logger.info("chat.start", message=message[:100])
+
+    # 1. Guardrails
+    rejection = check_guardrails(message)
+    if rejection:
+        logger.info("chat.rejected", reason=rejection[:80])
+        return ChatResponse(answer=rejection, error="guardrail")
+
+    try:
+        # 2. RAG retrieval
+        context = _retrieve_context(message)
+        logger.debug("chat.context_retrieved", context_length=len(context))
+
+        # 3. SQL generation
+        sql = _generate_sql(message, context)
+        if not sql:
+            return ChatResponse(
+                answer="I wasn't able to generate a query for that question. "
+                       "Could you rephrase it or be more specific about which entities "
+                       "(orders, invoices, customers, etc.) you're asking about?",
+                error="sql_generation_failed",
+            )
+        logger.info("chat.sql_generated", sql=sql[:200])
+
+        # 4. SQL execution
+        try:
+            data, columns = _execute_sql(sql)
+            logger.info("chat.sql_executed", rows=len(data))
+        except Exception as exc:
+            logger.error("chat.sql_execution_failed", error=str(exc), sql=sql[:200])
+            return ChatResponse(
+                answer="The generated query encountered an error. Let me try a different approach - "
+                       "could you rephrase your question?",
+                sql=sql,
+                error=f"sql_execution_error: {str(exc)[:200]}",
+            )
+
+        # 5. Response synthesis
+        answer = _synthesize_response(message, sql, data, columns)
+        logger.info("chat.response_synthesized", answer_length=len(answer))
+
+        # 6. Entity extraction for graph highlighting
+        entities = _extract_entities(data)
+
+        # Serialize data (convert non-serializable types)
+        serialized_data = []
+        for row in data[:100]:
+            serialized_row = {}
+            for k, v in row.items():
+                if v is None:
+                    serialized_row[k] = None
+                elif isinstance(v, (int, float, str, bool)):
+                    serialized_row[k] = v
+                else:
+                    serialized_row[k] = str(v)
+            serialized_data.append(serialized_row)
+
+        return ChatResponse(
+            answer=answer,
+            sql=sql,
+            data=serialized_data,
+            entities=entities,
+        )
+
+    except Exception as exc:
+        logger.exception("chat.unexpected_error")
+        return ChatResponse(
+            answer="An unexpected error occurred while processing your question. Please try again.",
+            error=str(exc)[:300],
+        )

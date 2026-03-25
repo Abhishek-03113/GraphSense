@@ -6,7 +6,7 @@ import { useGraphStore } from '../../store/useGraphStore';
 import { NODE_TYPE_COLORS, DEFAULT_NODE_COLOR } from '../../constants/graph';
 import type { GraphData } from '../../types/graph';
 
-// @ts-ignore - cytoscape-cose-bilkent does not have TypeScript definitions
+// @ts-expect-error - cytoscape-cose-bilkent does not have TypeScript definitions
 import coseBilkent from 'cytoscape-cose-bilkent';
 
 cytoscape.use(coseBilkent);
@@ -17,19 +17,16 @@ const CSS_CLASSES = {
   SELECTED: 'selected',
 } as const;
 
-// ─── Obsidian-style force-directed layout ──────────────────────────
-// cose-bilkent accepts extra properties beyond base LayoutOptions;
-// cast at call sites rather than on the constant.
 const LAYOUT_OPTIONS = {
   name: 'cose-bilkent' as const,
   animate: 'end' as const,
-  animationDuration: 400,
-  nodeRepulsion: 12000,
-  idealEdgeLength: 80,
-  edgeElasticity: 0.05,
-  gravity: 0.15,
+  animationDuration: 500,
+  nodeRepulsion: 14000,
+  idealEdgeLength: 90,
+  edgeElasticity: 0.04,
+  gravity: 0.12,
   gravityRange: 5.0,
-  numIter: 2500,
+  numIter: 3000,
   tile: false,
   randomize: true,
   nestingFactor: 0.1,
@@ -41,9 +38,9 @@ interface Props {
 
 export const GraphExplorer: React.FC<Props> = ({ data }) => {
   const cyRef = useRef<Core | null>(null);
-  const { setSelectedNode } = useGraphStore();
+  const { setSelectedNode, highlightedEntities } = useGraphStore();
 
-  // ── Degree map (for subtle size variance) ──────────────────────
+  // ── Degree map ────────────────────────────────────────────
   const degreeMap = useMemo(() => {
     const degrees = new Map<string, number>();
     data.nodes.forEach((n) => degrees.set(n.id, 0));
@@ -62,15 +59,15 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
   const getNodeSize = useCallback(
     (nodeId: string): number => {
       const degree = degreeMap.get(nodeId) || 0;
-      const MIN = 6;
-      const MAX = 18;
+      const MIN = 5;
+      const MAX = 16;
       if (maxDegree === 0) return MIN;
       return MIN + (degree / maxDegree) * (MAX - MIN);
     },
     [degreeMap, maxDegree],
   );
 
-  // ── Elements ───────────────────────────────────────────────────
+  // ── Elements ──────────────────────────────────────────────
   const elements = useMemo(
     () => [
       ...data.nodes.map((node) => ({
@@ -94,7 +91,7 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
     [data],
   );
 
-  // ── Stylesheet (Obsidian-style: tiny dots, thin edges, no labels) ─
+  // ── Stylesheet ────────────────────────────────────────────
   const stylesheet = useMemo(
     () =>
       [
@@ -104,88 +101,92 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
             label: '',
             'background-color': (node: NodeSingular) =>
               NODE_TYPE_COLORS[node.data('type')] || DEFAULT_NODE_COLOR,
-            'background-opacity': 0.85,
+            'background-opacity': 0.9,
             width: (node: NodeSingular) => getNodeSize(node.data('id')),
             height: (node: NodeSingular) => getNodeSize(node.data('id')),
             'border-width': 0,
             'overlay-padding': 4,
             'transition-property':
               'background-opacity, width, height, border-width, border-color, opacity',
-            'transition-duration': '150ms',
+            'transition-duration': '200ms',
           },
         },
         {
           selector: 'edge',
           css: {
             width: 0.4,
-            'line-color': '#30363d',
-            'target-arrow-color': '#30363d',
+            'line-color': '#1e293b',
+            'target-arrow-color': '#1e293b',
             'target-arrow-shape': 'triangle',
-            'arrow-scale': 0.3,
+            'arrow-scale': 0.25,
             'curve-style': 'bezier',
             label: '',
-            opacity: 0.08,
+            opacity: 0.12,
             'transition-property': 'line-color, width, opacity, target-arrow-color',
-            'transition-duration': '150ms',
+            'transition-duration': '200ms',
           },
         },
-        // ── Hover focus: soft highlight ──────────────────────────
+        // Hover focus
         {
           selector: `node.${CSS_CLASSES.FOCUSED}`,
           css: {
             label: 'data(label)',
+            'font-family': "'Space Grotesk', system-ui, sans-serif",
             'font-size': '9px',
-            color: '#8b949e',
+            'font-weight': 500,
+            color: '#94a3b8',
             'text-valign': 'bottom',
             'text-halign': 'center',
             'text-margin-y': 5,
             'background-opacity': 1,
-            'border-width': 1,
-            'border-color': '#58a6ff',
+            'border-width': 1.5,
+            'border-color': '#6366f1',
             'z-index': 10,
           },
         },
         {
           selector: `edge.${CSS_CLASSES.FOCUSED}`,
           css: {
-            'line-color': '#58a6ff',
-            'target-arrow-color': '#58a6ff',
-            width: 1,
-            opacity: 0.5,
+            'line-color': '#6366f1',
+            'target-arrow-color': '#6366f1',
+            width: 0.8,
+            opacity: 0.45,
             'z-index': 10,
           },
         },
         {
           selector: `node.${CSS_CLASSES.DIMMED}`,
-          css: { opacity: 0.06 },
+          css: { opacity: 0.05 },
         },
         {
           selector: `edge.${CSS_CLASSES.DIMMED}`,
-          css: { opacity: 0.02 },
+          css: { opacity: 0.015 },
         },
-        // ── Click selection: strong isolate ──────────────────────
+        // Click selection
         {
           selector: `node.${CSS_CLASSES.SELECTED}`,
           css: {
             label: 'data(label)',
+            'font-family': "'Space Grotesk', system-ui, sans-serif",
             'font-size': '11px',
-            color: '#c9d1d9',
+            'font-weight': 600,
+            color: '#e2e8f0',
             'text-valign': 'bottom',
             'text-halign': 'center',
             'text-margin-y': 7,
             'background-opacity': 1,
             'border-width': 2,
-            'border-color': '#58a6ff',
+            'border-color': '#818cf8',
             'z-index': 20,
           },
         },
         {
           selector: `edge.${CSS_CLASSES.SELECTED}`,
           css: {
-            'line-color': '#58a6ff',
-            'target-arrow-color': '#58a6ff',
-            width: 1.8,
-            opacity: 0.85,
+            'line-color': '#818cf8',
+            'target-arrow-color': '#818cf8',
+            width: 1.5,
+            opacity: 0.8,
             'z-index': 20,
           },
         },
@@ -193,9 +194,7 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
     [getNodeSize],
   );
 
-  // ── Hover: highlight neighbours ─────────────────────────────────
-  // Re-binds when data changes so handlers reference the current cy instance
-  // after CytoscapeComponent remounts with new elements.
+  // ── Hover: highlight neighbours ───────────────────────────
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
@@ -203,7 +202,6 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
     const handleMouseover = (evt: EventObject) => {
       const node = evt.target;
       if (!node.isNode()) return;
-
       const hood = node.closedNeighborhood();
       hood.addClass(CSS_CLASSES.FOCUSED);
       cy.elements().not(hood).addClass(CSS_CLASSES.DIMMED);
@@ -222,15 +220,13 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
     };
   }, [data]);
 
-  // ── Click: isolate neighbourhood + inspector panel ──────────────
+  // ── Click: isolate neighbourhood + inspector ──────────────
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
 
     const clearSelection = () => {
-      cy.elements().removeClass(
-        `${CSS_CLASSES.SELECTED} ${CSS_CLASSES.DIMMED}`
-      );
+      cy.elements().removeClass(`${CSS_CLASSES.SELECTED} ${CSS_CLASSES.DIMMED}`);
     };
 
     const handleTap = (evt: EventObject) => {
@@ -238,8 +234,7 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
       if (!node.isNode()) return;
 
       clearSelection();
-      // Also clear hover state to avoid conflict
-      cy.elements().removeClass(`${CSS_CLASSES.FOCUSED}`);
+      cy.elements().removeClass(CSS_CLASSES.FOCUSED);
 
       const hood = node.closedNeighborhood();
       hood.addClass(CSS_CLASSES.SELECTED);
@@ -269,16 +264,37 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
     };
   }, [setSelectedNode, data]);
 
-  // ── Layout: re-run on data change ───────────────────────────────
+  // ── Chat entity highlighting ─────────────────────────────
+  useEffect(() => {
+    const cy = cyRef.current;
+    if (!cy || highlightedEntities.length === 0) return;
+
+    // Find nodes matching highlighted entity IDs
+    const matchedNodes = cy.nodes().filter((n) => highlightedEntities.includes(n.data('id')));
+    if (matchedNodes.length === 0) return;
+
+    const hood = matchedNodes.closedNeighborhood();
+    cy.elements().removeClass(`${CSS_CLASSES.SELECTED} ${CSS_CLASSES.DIMMED}`);
+    hood.addClass(CSS_CLASSES.SELECTED);
+    cy.elements().not(hood).addClass(CSS_CLASSES.DIMMED);
+
+    // Fit view to highlighted nodes
+    if (matchedNodes.length > 0) {
+      cy.animate({ fit: { eles: matchedNodes, padding: 50 } }, { duration: 500 });
+    }
+  }, [highlightedEntities]);
+
+  // ── Layout ────────────────────────────────────────────────
   useEffect(() => {
     const cy = cyRef.current;
     if (!cy) return;
     const layout = cy.layout(LAYOUT_OPTIONS as LayoutOptions);
     layout.run();
-    return () => { layout.stop(); };
+    return () => {
+      layout.stop();
+    };
   }, [data]);
 
-  // ── Canvas controls ─────────────────────────────────────────────
   const handleFitView = () => cyRef.current?.fit(undefined, 30);
 
   return (
@@ -296,7 +312,6 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
         maxZoom={6}
       />
 
-      {/* Top-right: fit view */}
       <div className="graph-canvas-controls">
         <button
           type="button"
@@ -304,7 +319,7 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
           title="Fit all nodes in view"
           aria-label="Fit view"
         >
-          ◻
+          &#x2B1C;
         </button>
       </div>
     </div>

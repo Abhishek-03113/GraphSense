@@ -57,6 +57,9 @@ build/
 *.sqlite3
 *.duckdb
 
+# ChromaDB vector store
+.chroma_data/
+
 # IDEs and Editors
 .vscode/
 .idea/

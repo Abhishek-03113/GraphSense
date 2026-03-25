@@ -88,7 +88,7 @@ async def trace_document(
 
 @router.get("/full", response_model=GraphSubgraphResponse)
 async def get_full_graph(
-    node_limit: int = Query(20, ge=1, le=100, description="Max entities sampled per node type"),
+    node_limit: int = Query(20, ge=1, le=500, description="Max entities sampled per node type"),
     type_filter: Optional[str] = Query(None, description="Comma-separated node types to include"),
     db: AsyncSession = Depends(get_db_session)
 ):

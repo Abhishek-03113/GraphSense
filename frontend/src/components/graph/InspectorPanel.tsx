@@ -9,16 +9,17 @@ export const InspectorPanel: React.FC = () => {
   if (!isInspectorOpen || !selectedNode) return null;
 
   const getIcon = (key: string) => {
-    if (key.toLowerCase().includes('date') || key.toLowerCase().includes('time')) return <Calendar size={14} />;
-    if (key.toLowerCase().includes('amount') || key.toLowerCase().includes('price')) return <Hash size={14} />;
-    if (key.toLowerCase().includes('type') || key.toLowerCase().includes('category')) return <Tag size={14} />;
-    return <Info size={14} />;
+    const k = key.toLowerCase();
+    if (k.includes('date') || k.includes('time')) return <Calendar size={13} />;
+    if (k.includes('amount') || k.includes('price')) return <Hash size={13} />;
+    if (k.includes('type') || k.includes('category')) return <Tag size={13} />;
+    return <Info size={13} />;
   };
 
   const headerColor = NODE_TYPE_COLORS[selectedNode.type] ?? DEFAULT_NODE_COLOR;
 
   return (
-    <aside className="inspector-panel animate-fade-in">
+    <aside className="inspector-panel">
       <div
         className="panel-header"
         style={{ borderBottom: `2px solid ${headerColor}` }}
@@ -27,11 +28,11 @@ export const InspectorPanel: React.FC = () => {
           <div>
             <div
               className="node-chip"
-              style={{ backgroundColor: headerColor, color: '#000' }}
+              style={{ backgroundColor: headerColor, color: '#0b0f18' }}
             >
               {selectedNode.type}
             </div>
-            <h2 style={{ fontSize: '1.25rem', margin: '0.25rem 0', fontWeight: 'bold' }}>
+            <h2 style={{ fontSize: '1.1rem', margin: '0.25rem 0 0', fontWeight: 600, letterSpacing: '-0.01em' }}>
               {selectedNode.label}
             </h2>
           </div>
@@ -40,12 +41,16 @@ export const InspectorPanel: React.FC = () => {
             style={{
               background: 'none',
               border: 'none',
-              color: 'var(--text-secondary)',
+              color: 'var(--text-muted)',
               cursor: 'pointer',
               padding: '4px',
+              borderRadius: '4px',
+              transition: 'color 0.15s',
             }}
+            onMouseEnter={(e) => { e.currentTarget.style.color = 'var(--text-primary)'; }}
+            onMouseLeave={(e) => { e.currentTarget.style.color = 'var(--text-muted)'; }}
           >
-            <X size={20} />
+            <X size={18} />
           </button>
         </div>
       </div>
@@ -53,7 +58,7 @@ export const InspectorPanel: React.FC = () => {
       <div className="panel-content">
         <div className="property-group">
           <div className="property-label">Entity ID</div>
-          <div className="property-value" style={{ fontSize: '1rem', color: 'var(--accent-color)' }}>
+          <div className="property-value" style={{ color: 'var(--highlight)' }}>
             {selectedNode.id}
           </div>
         </div>
@@ -71,8 +76,8 @@ export const InspectorPanel: React.FC = () => {
         ))}
 
         {(!selectedNode.properties || Object.keys(selectedNode.properties).length === 0) && (
-          <div style={{ color: 'var(--text-secondary)', fontStyle: 'italic', fontSize: '0.9rem' }}>
-            No additional metadata available for this node.
+          <div style={{ color: 'var(--text-muted)', fontStyle: 'italic', fontSize: '0.82rem' }}>
+            No additional metadata available.
           </div>
         )}
       </div>

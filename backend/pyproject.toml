@@ -17,6 +17,8 @@ dependencies = [
     "asyncpg>=0.31.0",
     "psycopg2-binary>=2.9.11",
     "greenlet>=3.3.2",
+    "google-genai>=1.0.0",
+    "chromadb>=1.0.0",
 ]
 
 [build-system]

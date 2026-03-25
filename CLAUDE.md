@@ -9,6 +9,7 @@ DodgeAI is a graph-based data modeling and query system for SAP Order-to-Cash (O
 - A React + TypeScript frontend for visualizing entity relationships as an interactive graph
 - PostgreSQL database with pgvector extension for storing and querying relational data
 - Data ingestion pipeline for loading JSONL-formatted SAP data
+- **LLM-powered conversational query interface** using Gemini + ChromaDB RAG for text-to-SQL
 
 ## Architecture
 
@@ -19,6 +20,7 @@ The backend follows a layered architecture:
 - **`src/api/`** - FastAPI routers and request handling
   - `graph.py` - Endpoints for graph queries (summary, subgraph, flows, trace, full graph, entity listing)
   - `ingest.py` - Endpoint to trigger background data ingestion
+  - `chat.py` - Chat endpoint (`POST /api/chat`) and training trigger (`POST /api/chat/train`)
 
 - **`src/db/`** - Database layer
   - `models.py` - SQLAlchemy ORM models (BillingDocumentHeader, BillingDocumentItem, etc.)
@@ -32,6 +34,13 @@ The backend follows a layered architecture:
 - **`src/domain/`** - Response schemas and domain models
   - `graph_models.py` - Pydantic models for API responses (`Node`, `Edge`, `GraphSubgraphResponse`, `FlowDefinition`, `FlowListResponse`, etc.)
   - `flow_definitions.py` - `FLOW_DEFINITIONS` constant: predefined O2C flow metadata (node types, edge types per flow)
+
+- **`src/ai/`** - LLM-powered chat pipeline (text-to-SQL RAG)
+  - `config.py` - AI settings (Gemini API key, model, ChromaDB path)
+  - `embeddings.py` - ChromaDB vector store (DDL, docs, SQL pair collections)
+  - `training.py` - Training data: 17 DDL schemas, 7 domain docs, 15 SQL question-answer pairs
+  - `guardrails.py` - Domain restriction: rejects off-topic queries, SQL injection, prompt injection
+  - `chat.py` - Full pipeline: guardrails → RAG retrieval → SQL generation → execution → synthesis
 
 - **`src/ingestion/`** - Data loading utilities
   - `jsonl_loader.py` - JSONL file parsing and database insertion
@@ -59,7 +68,9 @@ Database models represent SAP O2C entities (BillingDocumentHeader, BillingDocume
 - **`src/components/knowledge/`** - Obsidian-style knowledge graph
   - `KnowledgeGraph.tsx` - Full entity graph with client-side search filtering
   - `KnowledgeGraphControls.tsx` - Right-side panel: type filter, node limit slider, search, refresh
-- **`src/store/`** - Zustand store for client-side state (includes `typeFilter`, `nodeLimit`, `searchQuery` for knowledge graph)
+- **`src/components/chat/`** - Conversational query interface
+  - `ChatPanel.tsx` - Slide-out chat panel with message history, SQL display, data tables, entity chips
+- **`src/store/`** - Zustand store for client-side state (includes `typeFilter`, `nodeLimit`, `searchQuery`, `isChatOpen`, `highlightedEntities`)
 - **`src/types/`** - TypeScript type definitions (includes `FlowDefinition`, `FlowListResponse` Zod schemas)
 
 Data flow: Dashboard → (EntitySelector → GraphExplorer) | FlowExplorer | DocumentTracer | KnowledgeGraph. All graph views share GraphExplorer as the rendering layer. State managed by Zustand, async data fetched via TanStack React Query.
@@ -138,6 +149,19 @@ npm run build                  # TypeScript + Vite build
 - `GET /api/graph/flow?flow_id=full_o2c&limit=50` - Returns a sampled subgraph for a named flow (`sales`, `fulfillment`, `billing`, `financial`, `full_o2c`)
 - `GET /api/graph/trace?doc_type=Invoice&doc_id=X&depth=4` - Traces the full O2C lifecycle for a document (reuses subgraph traversal at depth 4)
 - `GET /api/graph/full?node_limit=20&type_filter=Customer,Invoice` - Returns a sampled knowledge graph (up to `node_limit` entities per type)
+
+### Conversational Query (Chat) API
+
+- `POST /api/chat` - Accepts `{ message }`, returns `{ answer, sql, data, entities, error }`
+- `POST /api/chat/train` - Triggers (re-)training of the RAG pipeline
+
+**Pipeline**: Guardrails → ChromaDB RAG retrieval (DDL + docs + SQL pairs) → Gemini SQL generation → PostgreSQL execution → Gemini response synthesis
+
+**Architecture**:
+- **ChromaDB** stores embeddings for 17 DDL schemas, 7 domain docs, and 15 SQL question-answer pairs
+- **Google Gemini** (`gemini-2.0-flash`) generates SQL from RAG context and synthesizes natural language answers
+- **Guardrails** reject off-topic queries, SQL injection, and prompt injection attempts
+- Entities extracted from query results are highlighted on the graph visualization
 
 ### Data Ingestion
 

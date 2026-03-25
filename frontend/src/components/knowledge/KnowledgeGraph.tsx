@@ -1,124 +1,123 @@
-import React, { useState, useCallback } from 'react';
-import { useQuery } from '@tanstack/react-query';
-import { api } from '../../services/api';
+import React, { useMemo } from 'react';
+import { MessageCircle } from 'lucide-react';
 import { GraphExplorer } from '../graph/GraphExplorer';
 import { InspectorPanel } from '../graph/InspectorPanel';
-import { KnowledgeGraphControls } from './KnowledgeGraphControls';
+import { ChatPanel } from '../chat/ChatPanel';
 import { useGraphStore } from '../../store/useGraphStore';
+import { NODE_TYPE_COLORS, DEFAULT_NODE_COLOR } from '../../constants/graph';
 import type { GraphData } from '../../types/graph';
 
 interface KnowledgeGraphProps {
-  onBack: () => void;
+  data: GraphData;
 }
 
-export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ onBack }) => {
-  const { typeFilter, nodeLimit, searchQuery } = useGraphStore();
-  const [fetchParams, setFetchParams] = useState({ nodeLimit, typeFilter: typeFilter.slice() });
+export const KnowledgeGraph: React.FC<KnowledgeGraphProps> = ({ data }) => {
+  const { searchQuery, setSearchQuery, isChatOpen, setChatOpen } = useGraphStore();
 
-  const { data: rawData, isLoading, error, refetch } = useQuery({
-    queryKey: ['full-graph', fetchParams.nodeLimit, fetchParams.typeFilter.join(',')],
-    queryFn: () =>
-      api.getFullGraph(
-        fetchParams.nodeLimit,
-        fetchParams.typeFilter.length > 0 ? fetchParams.typeFilter : undefined
-      ),
-  });
-
-  const handleRefetch = useCallback(() => {
-    setFetchParams({ nodeLimit, typeFilter: typeFilter.slice() });
-    // refetch is triggered automatically because queryKey changed
-  }, [nodeLimit, typeFilter]);
-
-  // Client-side search filter: highlight matching nodes by filtering the graph data
-  const graphData: GraphData | undefined = React.useMemo(() => {
-    if (!rawData) return undefined;
-    if (!searchQuery.trim()) return rawData;
+  const graphData: GraphData = useMemo(() => {
+    if (!searchQuery.trim()) return data;
 
     const q = searchQuery.toLowerCase();
     const matchingIds = new Set(
-      rawData.nodes
-        .filter((n) => n.id.toLowerCase().includes(q) || (n.label || '').toLowerCase().includes(q) || n.type.toLowerCase().includes(q))
-        .map((n) => n.id)
+      data.nodes
+        .filter(
+          (n) =>
+            n.id.toLowerCase().includes(q) ||
+            (n.label || '').toLowerCase().includes(q) ||
+            n.type.toLowerCase().includes(q),
+        )
+        .map((n) => n.id),
     );
 
-    // Keep all nodes but dim non-matches by injecting a property (used by GraphExplorer via class)
-    // For simplicity: just filter to matching nodes + their directly connected neighbours
     const connectedIds = new Set<string>(matchingIds);
-    rawData.edges.forEach((e) => {
+    data.edges.forEach((e) => {
       if (matchingIds.has(e.source)) connectedIds.add(e.target);
       if (matchingIds.has(e.target)) connectedIds.add(e.source);
     });
 
-    const filteredNodes = rawData.nodes.filter((n) => connectedIds.has(n.id));
-    const filteredEdges = rawData.edges.filter((e) => connectedIds.has(e.source) && connectedIds.has(e.target));
-    return { nodes: filteredNodes, edges: filteredEdges };
-  }, [rawData, searchQuery]);
+    return {
+      nodes: data.nodes.filter((n) => connectedIds.has(n.id)),
+      edges: data.edges.filter((e) => connectedIds.has(e.source) && connectedIds.has(e.target)),
+    };
+  }, [data, searchQuery]);
+
+  const typeCounts = useMemo(() => {
+    const counts = new Map<string, number>();
+    graphData.nodes.forEach((n) => counts.set(n.type, (counts.get(n.type) || 0) + 1));
+    return counts;
+  }, [graphData]);
 
   return (
     <div style={{ width: '100%', height: '100%', position: 'relative', display: 'flex' }}>
-      {/* Top-left back button */}
-      <div style={{
-        position: 'absolute', top: '1.5rem', left: '1.5rem', zIndex: 1000,
-        display: 'flex', gap: '1rem', alignItems: 'center',
-      }}>
-        <button
-          onClick={onBack}
-          style={{
-            background: 'var(--bg-secondary)',
-            color: 'var(--text-primary)',
-            border: '1px solid var(--border-color)',
-            padding: '0.6rem 1.2rem',
-            borderRadius: '8px',
-            cursor: 'pointer',
-            fontWeight: 600,
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-          }}
-        >
-          ← Dashboard
-        </button>
-        <div style={{ color: 'var(--text-secondary)', fontSize: '0.9rem' }}>
-          Knowledge Graph
-          {graphData && (
-            <span style={{ color: 'var(--accent-color)', marginLeft: '0.5rem' }}>
-              · {graphData.nodes.length} nodes, {graphData.edges.length} edges
-            </span>
-          )}
+      <div style={{ flex: 1, position: 'relative', display: 'flex', flexDirection: 'column' }}>
+        {/* Header */}
+        <div className="graph-header">
+          <div className="graph-title">
+            <h1>DodgeAI</h1>
+            <span className="subtitle">Knowledge Graph</span>
+          </div>
+          <div className="graph-stats">
+            <span><span className="stat-accent">{graphData.nodes.length}</span> nodes</span>
+            <span className="stat-divider" />
+            <span><span className="stat-accent">{graphData.edges.length}</span> edges</span>
+          </div>
         </div>
+
+        {/* Search */}
+        <div className="search-container">
+          <span className="search-icon">&#x2315;</span>
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Search nodes..."
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+
+        {/* Graph */}
+        {graphData.nodes.length > 0 ? (
+          <GraphExplorer data={graphData} />
+        ) : (
+          <div className="empty-state">
+            <h3>No matches</h3>
+            <p>No nodes match "{searchQuery}"</p>
+          </div>
+        )}
+
+        {/* Legend */}
+        <div className="graph-legend">
+          {Array.from(typeCounts.entries())
+            .sort((a, b) => b[1] - a[1])
+            .map(([type, count]) => (
+              <div key={type} className="legend-item">
+                <span
+                  className="legend-dot"
+                  style={{ background: NODE_TYPE_COLORS[type] || DEFAULT_NODE_COLOR }}
+                />
+                {type} ({count})
+              </div>
+            ))}
+        </div>
+
+        {/* Chat toggle button */}
+        {!isChatOpen && (
+          <button
+            className="chat-toggle-btn"
+            onClick={() => setChatOpen(true)}
+            title="Open Query Assistant"
+            aria-label="Open chat"
+          >
+            <MessageCircle size={20} />
+          </button>
+        )}
       </div>
 
-      {/* Right-side controls panel */}
-      <KnowledgeGraphControls onRefetch={handleRefetch} />
+      {/* Chat Panel */}
+      <ChatPanel isOpen={isChatOpen} onClose={() => setChatOpen(false)} />
 
-      {isLoading && <div className="loading-screen">Building knowledge graph...</div>}
-
-      {error && (
-        <div className="error-screen">
-          <h3>Failed to Load Graph</h3>
-          <p>{(error as Error).message}</p>
-          <button onClick={() => refetch()}>Retry</button>
-        </div>
-      )}
-
-      {graphData && !isLoading && graphData.nodes.length > 0 && (
-        <>
-          <GraphExplorer data={graphData} />
-          <InspectorPanel />
-        </>
-      )}
-
-      {graphData && !isLoading && graphData.nodes.length === 0 && (
-        <div className="empty-state">
-          <h3>No Data</h3>
-          <p>The knowledge graph returned no nodes. Data may not be ingested yet.</p>
-        </div>
-      )}
-
-      {!graphData && !isLoading && !error && (
-        <div className="empty-state">
-          <h3>Waiting for data&hellip;</h3>
-          <p>If this persists, check the browser console for API errors.</p>
-        </div>
-      )}
+      {/* Inspector Panel */}
+      {!isChatOpen && <InspectorPanel />}
     </div>
   );
 };

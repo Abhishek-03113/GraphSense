@@ -49,7 +49,7 @@ ENTITIES = {
     "outbound_delivery_items": "deliveryDocument",
     "journal_entry_items_accounts_receivable": "accountingDocument",
     "payments_accounts_receivable": "accountingDocument",
-    "business_partners": "businessPartner",
+    "business_partners": "businessPartner", 
     "business_partner_addresses": "businessPartner",
     "products": "product",
 }
