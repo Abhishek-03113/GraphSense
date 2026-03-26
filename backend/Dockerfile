@@ -13,10 +13,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-install-project
 
-# Copy source and install the project (editable install via hatchling)
-COPY backend/src/ src/
-COPY backend/migrations/ migrations/
-COPY backend/migrate.py backend/README.md ./
+# Copy source and install the project
+COPY backend/ .
 RUN uv sync --frozen
 
 ENV PYTHONUNBUFFERED=1 \
