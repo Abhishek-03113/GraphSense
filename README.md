@@ -383,34 +383,85 @@ Even after the LLM generates SQL, a regex check rejects any mutation statements 
 - Docker & Docker Compose
 - Google Gemini API key ([free tier](https://ai.google.dev))
 
-### 1. Clone and start the database
+---
+
+### Step 1: Clone the Repository
 
 ```bash
 git clone https://github.com/Abhishek-03113/DodgeAI.git
 cd DodgeAI
+```
+
+---
+
+### Step 2: Start the Database (Docker)
+
+Start PostgreSQL with pgvector extension:
+
+```bash
 docker-compose up -d
 ```
 
-### 2. Backend setup
+Verify the database is running:
+
+```bash
+docker-compose ps
+```
+
+---
+
+### Step 3: Backend Setup
+
+**3.1 Create and activate virtual environment:**
 
 ```bash
 cd backend
 python -m venv .venv
-source .venv/bin/activate
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+**3.2 Install dependencies:**
+
+```bash
 pip install -e .
+```
 
-# Configure environment
+**3.3 Configure environment variables:**
+
+```bash
 cp .env.example .env
-# Edit .env and set GEMINI_API_KEY=<your-key>
+```
 
-# Run migrations
+Edit `.env` and add your Google Gemini API key:
+
+```env
+GEMINI_API_KEY=your_actual_api_key_here
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dodgeai
+```
+
+> **Get your API key:** Visit [Google AI Studio](https://ai.google.dev) to create a free API key.
+
+**3.4 Run database migrations:**
+
+```bash
 python migrate.py apply
+```
 
-# Start the server
+**3.5 Start the backend server:**
+
+```bash
 uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
 ```
 
-### 3. Frontend setup
+The API will be available at `http://localhost:8000`.
+
+> **Keep this terminal open** — the backend server needs to stay running.
+
+---
+
+### Step 4: Frontend Setup
+
+**Open a new terminal** and navigate to the frontend directory:
 
 ```bash
 cd frontend
@@ -418,22 +469,112 @@ npm install
 npm run dev
 ```
 
-The app will be available at `http://localhost:5173`.
+The frontend will be available at `http://localhost:5173`.
 
-### 4. Ingest data
+---
 
-Place JSONL data files in `backend/data/sap-o2c-data/`, then trigger ingestion:
+### Step 5: Ingest Data
+
+**5.1 Place your data files:**
+
+Put your JSONL data files in the `backend/data/sap-o2c-data/` directory.
+
+**5.2 Trigger data ingestion:**
 
 ```bash
 curl -X POST http://localhost:8000/api/ingest
 ```
 
-### 5. Train the RAG pipeline
+Or open in your browser: `http://localhost:8000/api/ingest` (POST request required)
 
-The chat pipeline auto-trains on first query, or you can trigger it manually:
+---
+
+### Step 6: Train the RAG Pipeline
+
+The chat pipeline auto-trains on the first query, but you can pre-train it manually:
 
 ```bash
 curl -X POST http://localhost:8000/api/chat/train
+```
+
+---
+
+### Step 7: Access the Application
+
+Open your browser and navigate to:
+
+**http://localhost:5173**
+
+You should see:
+- **Knowledge Graph** — Interactive Cytoscape.js visualization of SAP O2C entities
+- **Chat Panel** — Natural language query interface for asking questions about your data
+- **Inspector Panel** — Metadata and entity details
+
+---
+
+### Quick Start Script
+
+For a faster setup, run all steps in sequence:
+
+```bash
+# From project root
+docker-compose up -d
+
+# Backend
+cd backend
+python -m venv .venv
+source .venv/bin/activate
+pip install -e .
+cp .env.example .env
+# Edit .env with your GEMINI_API_KEY
+python migrate.py apply
+uvicorn src.main:app --reload --host 0.0.0.0 --port 8000 &
+
+# Frontend (new terminal)
+cd frontend
+npm install
+npm run dev
+```
+
+---
+
+### Troubleshooting
+
+**Database connection issues:**
+
+```bash
+# Check if PostgreSQL is running
+docker-compose ps
+
+# View database logs
+docker-compose logs postgres
+```
+
+**Backend errors:**
+
+```bash
+# Verify virtual environment is active
+which python  # Should point to backend/.venv/bin/python
+
+# Check if dependencies are installed
+pip list | grep -E "(fastapi|chromadb|google-genai)"
+```
+
+**Frontend build issues:**
+
+```bash
+# Clear cache and reinstall
+cd frontend
+rm -rf node_modules package-lock.json
+npm install
+npm run dev
+```
+
+**API not responding:**
+
+```bash
+# Test health endpoint
+curl http://localhost:8000/health
 ```
 
 ---
