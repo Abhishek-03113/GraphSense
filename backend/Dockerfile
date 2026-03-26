@@ -21,9 +21,9 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
-# Use PORT env variable (Railway sets this dynamically)
+# Railway sets PORT dynamically, default to 8000 for local dev
 ENV PORT=8000
 EXPOSE 8000
 
-# Use $PORT environment variable for Railway compatibility
-CMD ["sh", "-c", "uvicorn src.main:app --host 0.0.0.0 --port ${PORT}"]
+# Use shell form for proper $PORT variable expansion
+CMD uvicorn src.main:app --host 0.0.0.0 --port $PORT
