@@ -10,13 +10,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies first (better layer caching)
-COPY pyproject.toml uv.lock ./
+COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv sync --frozen --no-install-project
 
 # Copy source and install the project (editable install via hatchling)
-COPY src/ src/
-COPY migrations/ migrations/
-COPY migrate.py README.md ./
+COPY backend/src/ src/
+COPY backend/migrations/ migrations/
+COPY backend/migrate.py backend/README.md ./
 RUN uv sync --frozen
 
 ENV PYTHONUNBUFFERED=1 \
