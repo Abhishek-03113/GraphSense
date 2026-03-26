@@ -12,12 +12,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 # Install uv
 RUN pip install --no-cache-dir uv
 
-# Install dependencies from pyproject.toml
+# Install dependencies (without building the package itself)
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv pip install --system --no-cache -e .
+RUN uv pip install --system --no-cache -r pyproject.toml --no-install-project
 
-# Copy app source
+# Copy app source then install the project
 COPY backend/ .
+RUN uv pip install --system --no-cache -e . --no-deps
 
 # Stage: production
 FROM python:3.12-slim AS production
