@@ -9,18 +9,14 @@ CREATE TABLE IF NOT EXISTS rag_embeddings (
     category        VARCHAR(32)     NOT NULL,  -- 'ddl', 'documentation', 'sql_pair', 'data_summary'
     content         TEXT            NOT NULL,
     metadata        JSONB           NOT NULL DEFAULT '{}',
-    embedding       vector(768)     NOT NULL,  -- Gemini text-embedding-004 outputs 768 dimensions
+    embedding       vector(3072)    NOT NULL,  -- gemini-embedding-2-preview outputs 3072 dimensions
     content_hash    VARCHAR(32)     NOT NULL,  -- MD5 hash for idempotent upserts
     created_at      TIMESTAMPTZ     NOT NULL DEFAULT now(),
     CONSTRAINT uq_rag_embeddings_hash UNIQUE (content_hash)
 );
 
--- IVFFlat index for fast cosine similarity search
--- lists = 4 * sqrt(expected_rows) — start small, recreate after bulk load if needed
-CREATE INDEX IF NOT EXISTS idx_rag_embeddings_cosine
-    ON rag_embeddings
-    USING ivfflat (embedding vector_cosine_ops)
-    WITH (lists = 20);
+-- Note: ANN index skipped — vector(3072) exceeds pgvector's 2000-dim index limit.
+-- Exact cosine search is used instead (fine for small RAG datasets < 10k rows).
 
 CREATE INDEX IF NOT EXISTS idx_rag_embeddings_category
     ON rag_embeddings (category);

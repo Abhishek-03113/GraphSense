@@ -4,6 +4,7 @@ Replaces ChromaDB — all embeddings live in the rag_embeddings table.
 """
 
 import hashlib
+import json
 from typing import Optional
 
 import structlog
@@ -82,17 +83,20 @@ def upsert_embeddings(
 
     with engine.begin() as conn:
         for item in items:
+            metadata = item["metadata"]
+            if isinstance(metadata, dict):
+                metadata = json.dumps(metadata)
             stmt = insert(RagEmbedding).values(
                 category=item["category"],
                 content=item["content"],
-                metadata_=item["metadata"],
+                metadata_=metadata,
                 embedding=item["embedding"],
                 content_hash=item["content_hash"],
             ).on_conflict_do_update(
                 index_elements=["content_hash"],
                 set_={
                     "content": item["content"],
-                    "metadata_": item["metadata"],
+                    "metadata": metadata,
                     "embedding": item["embedding"],
                     "category": item["category"],
                 },
@@ -112,8 +116,11 @@ def query_similar(
 
     Returns list of dicts with keys: content, metadata, distance.
     """
-    # Build the query using raw SQL for pgvector operator support
-    params: dict = {"embedding": str(question_embedding), "limit": n_results}
+    # Build the query using raw SQL for pgvector operator support.
+    # The embedding vector is inlined as a literal (it's a float array from the model,
+    # not user input) to avoid placeholder conflicts with pgvector's :: cast syntax.
+    embedding_literal = str(question_embedding)
+    params: dict = {"limit": n_results}
 
     category_filter = ""
     if category:
@@ -121,10 +128,10 @@ def query_similar(
         params["category"] = category
 
     sql = f"""
-        SELECT content, metadata, 1 - (embedding <=> :embedding::vector) AS similarity
+        SELECT content, metadata, 1 - (embedding <=> '{embedding_literal}'::vector) AS similarity
         FROM rag_embeddings
         WHERE 1=1 {category_filter}
-        ORDER BY embedding <=> :embedding::vector
+        ORDER BY embedding <=> '{embedding_literal}'::vector
         LIMIT :limit
     """
 
@@ -132,7 +139,11 @@ def query_similar(
         rows = conn.execute(text(sql), params).fetchall()
 
     return [
-        {"content": row[0], "metadata": row[1], "similarity": float(row[2])}
+        {
+            "content": row[0],
+            "metadata": json.loads(row[1]) if isinstance(row[1], str) else (row[1] or {}),
+            "similarity": float(row[2]),
+        }
         for row in rows
     ]
 

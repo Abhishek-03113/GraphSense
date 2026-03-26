@@ -279,6 +279,6 @@ class RagEmbedding(Base):
     category = Column(String(32), nullable=False)
     content = Column(Text, nullable=False)
     metadata_ = Column("metadata", JSONB, nullable=False, server_default="{}")
-    embedding = Column(Vector(768), nullable=False)
+    embedding = Column(Vector(3072), nullable=False)
     content_hash = Column(String(32), nullable=False, unique=True)
     created_at = Column(TIMESTAMP(timezone=True), nullable=False, server_default=func.now())
