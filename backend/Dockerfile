@@ -8,10 +8,10 @@ RUN apk add --no-cache gcc musl-dev libpq-dev
 # Install uv for fast dependency resolution
 RUN pip install --no-cache-dir uv
 
-COPY pyproject.toml uv.lock ./
+COPY backend/pyproject.toml backend/uv.lock ./
 RUN uv pip install --system --no-cache -r pyproject.toml
 
-COPY . .
+COPY backend/ .
 
 # Stage: production
 FROM python:3.12-alpine AS production
