@@ -10,18 +10,20 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 # Install dependencies first (better layer caching)
-COPY backend/pyproject.toml backend/uv.lock ./
+COPY pyproject.toml uv.lock ./
 RUN uv sync --frozen --no-install-project
 
 # Copy source and install the project
-COPY backend/ .
+COPY . .
 RUN uv sync --frozen
 
 ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
+# Use PORT env variable (Railway sets this dynamically)
 ENV PORT=8000
 EXPOSE 8000
 
-CMD ["sh", "-c", "uvicorn src.main:app --host 0.0.0.0 --port 8000"]
+# Use $PORT environment variable for Railway compatibility
+CMD ["sh", "-c", "uvicorn src.main:app --host 0.0.0.0 --port ${PORT}"]
