@@ -32,6 +32,8 @@ class ChatResponse:
     data: list[dict] | None = None
     entities: list[dict] = field(default_factory=list)
     error: str | None = None
+    row_count: int = 0
+    summary: str = ""
 
 
 # ---------------------------------------------------------------------------
@@ -191,13 +193,15 @@ concise natural language answer.
 
 RULES:
 1. Answer based ONLY on the data provided. Do not make up information.
-2. If the results are empty, say so clearly.
-3. Include specific numbers, names, and values from the results.
-4. Keep the answer conversational but factual.
-5. If the data contains amounts, include the currency.
-6. Format large numbers with commas for readability.
-7. Do not include the SQL query in your response.
-8. Highlight key findings or patterns in the data.
+2. ALWAYS begin your answer by citing the data: e.g. "Based on 12 records found..." or "From the 0 results returned...".
+3. If the results are empty, say clearly "No matching records were found in the dataset." and explain what was searched.
+4. Include specific numbers, entity IDs, names, and values from the results.
+5. Keep the answer conversational but factual.
+6. If the data contains amounts, include the currency.
+7. Format large numbers with commas for readability.
+8. Do not include the SQL query in your response.
+9. Highlight key findings or patterns in the data.
+10. If you are showing top results from a larger set (the row count is at the LIMIT of 25), note: "Showing top 25 results — there may be more in the dataset."
 """
 
 
@@ -234,23 +238,36 @@ Provide a natural language answer:"""
 # ---------------------------------------------------------------------------
 
 def _extract_entities(data: list[dict]) -> list[dict]:
-    """Extract entity references from query results for graph highlighting."""
+    """Extract entity references from query results for graph highlighting.
+
+    Graph node IDs are in the format "{Type}:{pk_value}" (e.g. "Invoice:5001").
+    The entity_key produced here must match that format exactly.
+    """
     entities: list[dict] = []
     seen: set[str] = set()
 
+    # Maps a column name substring → graph node type.
+    # Keys ordered longest-first so more specific matches win.
     entity_column_map: dict[str, str] = {
-        "sales_order": "SalesOrder",
-        "delivery_document": "Delivery",
-        "delivery": "Delivery",
+        "billing_doc_number": "Invoice",
         "billing_document": "Invoice",
         "invoice": "Invoice",
+        "sales_order_id": "SalesOrder",
+        "sales_order": "SalesOrder",
+        "delivery_document": "Delivery",
+        "delivery_id": "Delivery",
+        "delivery": "Delivery",
         "accounting_document": "JournalEntry",
+        "journal_entry_id": "JournalEntry",
         "journal_entry": "JournalEntry",
         "payment_document": "Payment",
+        "payment_id": "Payment",
+        "customer_id": "Customer",
         "customer": "Customer",
-        "product": "Product",
-        "material": "Product",
         "business_partner": "Customer",
+        "material_id": "Product",
+        "material": "Product",
+        "product": "Product",
     }
 
     for row in data[:100]:
@@ -319,6 +336,16 @@ def chat(message: str) -> ChatResponse:
         # 6. Entity extraction for graph highlighting
         entities = _extract_entities(data)
 
+        # 7. Build summary / data citation
+        _RESULT_LIMIT = 25
+        row_count = len(data)
+        if row_count == 0:
+            summary = "No matching records found."
+        elif row_count >= _RESULT_LIMIT:
+            summary = f"Showing top {_RESULT_LIMIT} results — there may be more."
+        else:
+            summary = f"{row_count} record{'s' if row_count != 1 else ''} found."
+
         # Serialize data (convert non-serializable types)
         serialized_data = []
         for row in data[:100]:
@@ -337,6 +364,8 @@ def chat(message: str) -> ChatResponse:
             sql=sql,
             data=serialized_data,
             entities=entities,
+            row_count=row_count,
+            summary=summary,
         )
 
     except Exception as exc:

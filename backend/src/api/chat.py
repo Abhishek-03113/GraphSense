@@ -16,6 +16,8 @@ class ChatResponseModel(BaseModel):
     data: list[dict] | None = None
     entities: list[dict] = Field(default_factory=list)
     error: str | None = None
+    row_count: int = 0
+    summary: str = ""
 
 
 class TrainResponse(BaseModel):
@@ -35,6 +37,8 @@ async def handle_chat(request: ChatRequest):
         data=result.data,
         entities=result.entities,
         error=result.error,
+        row_count=result.row_count,
+        summary=result.summary,
     )
 
 

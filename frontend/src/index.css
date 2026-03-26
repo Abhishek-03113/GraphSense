@@ -753,3 +753,15 @@ body {
   background: var(--bg-deep);
   color: var(--text-muted);
 }
+
+.entity-chip-btn {
+  cursor: pointer;
+  border: none;
+  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+}
+
+.entity-chip-btn:hover {
+  background: #3730a3;
+  color: #e0e7ff;
+  box-shadow: 0 0 0 1.5px #6366f1;
+}

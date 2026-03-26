@@ -15,6 +15,7 @@ const CSS_CLASSES = {
   FOCUSED: 'focused',
   DIMMED: 'dimmed',
   SELECTED: 'selected',
+  CHAT_HIGHLIGHT: 'chat-highlight',
 } as const;
 
 const LAYOUT_OPTIONS = {
@@ -190,6 +191,24 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
             'z-index': 20,
           },
         },
+        // Chat-referenced node highlight (amber ring — separate from click/hover state)
+        {
+          selector: `node.${CSS_CLASSES.CHAT_HIGHLIGHT}`,
+          css: {
+            label: 'data(label)',
+            'font-family': "'Space Grotesk', system-ui, sans-serif",
+            'font-size': '10px',
+            'font-weight': 600,
+            color: '#fbbf24',
+            'text-valign': 'bottom',
+            'text-halign': 'center',
+            'text-margin-y': 6,
+            'background-opacity': 1,
+            'border-width': 2.5,
+            'border-color': '#f59e0b',
+            'z-index': 30,
+          },
+        },
       ] as cytoscape.StylesheetCSS[],
     [getNodeSize],
   );
@@ -251,6 +270,7 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
     const handleCanvasTap = (evt: EventObject) => {
       if (evt.target === cy) {
         clearSelection();
+        cy.elements().removeClass(CSS_CLASSES.CHAT_HIGHLIGHT);
         setSelectedNode(null);
       }
     };
@@ -264,24 +284,26 @@ export const GraphExplorer: React.FC<Props> = ({ data }) => {
     };
   }, [setSelectedNode, data]);
 
-  // ── Chat entity highlighting ─────────────────────────────
+  // ── Chat entity highlighting (amber ring, separate from click/hover) ──
   useEffect(() => {
     const cy = cyRef.current;
-    if (!cy || highlightedEntities.length === 0) return;
+    if (!cy) return;
+
+    // Always clear previous chat highlights first
+    cy.elements().removeClass(CSS_CLASSES.CHAT_HIGHLIGHT);
+    cy.elements().removeClass(CSS_CLASSES.DIMMED);
+
+    if (highlightedEntities.length === 0) return;
 
     // Find nodes matching highlighted entity IDs
     const matchedNodes = cy.nodes().filter((n) => highlightedEntities.includes(n.data('id')));
     if (matchedNodes.length === 0) return;
 
-    const hood = matchedNodes.closedNeighborhood();
-    cy.elements().removeClass(`${CSS_CLASSES.SELECTED} ${CSS_CLASSES.DIMMED}`);
-    hood.addClass(CSS_CLASSES.SELECTED);
-    cy.elements().not(hood).addClass(CSS_CLASSES.DIMMED);
+    matchedNodes.addClass(CSS_CLASSES.CHAT_HIGHLIGHT);
+    cy.elements().not(matchedNodes.closedNeighborhood()).addClass(CSS_CLASSES.DIMMED);
 
     // Fit view to highlighted nodes
-    if (matchedNodes.length > 0) {
-      cy.animate({ fit: { eles: matchedNodes, padding: 50 } }, { duration: 500 });
-    }
+    cy.animate({ fit: { eles: matchedNodes, padding: 60 } }, { duration: 500 });
   }, [highlightedEntities]);
 
   // ── Layout ────────────────────────────────────────────────

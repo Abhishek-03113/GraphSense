@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, X, ChevronDown, ChevronUp, Database, Loader2 } from 'lucide-react';
+import { Send, X, ChevronDown, ChevronUp, Database, Loader2, Sparkles } from 'lucide-react';
 import { api, type ChatApiResponse } from '../../services/api';
 import { useGraphStore } from '../../store/useGraphStore';
 
@@ -11,6 +11,8 @@ interface ChatMessage {
   data?: Record<string, unknown>[] | null;
   entities?: { id: string; type: string; value: string }[];
   error?: string | null;
+  rowCount?: number;
+  summary?: string;
   timestamp: number;
 }
 
@@ -50,6 +52,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ isOpen, onClose }) => {
     const trimmed = input.trim();
     if (!trimmed || isLoading) return;
 
+    // Clear stale highlights before new query
+    setHighlightedEntities([]);
+
     const userMsg: ChatMessage = {
       id: `user-${Date.now()}`,
       role: 'user',
@@ -72,6 +77,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ isOpen, onClose }) => {
         data: response.data,
         entities: response.entities,
         error: response.error,
+        rowCount: response.row_count,
+        summary: response.summary,
         timestamp: Date.now(),
       };
 
@@ -114,10 +121,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ isOpen, onClose }) => {
           <div key={msg.id} className={`chat-message chat-message-${msg.role}`}>
             <div className="chat-bubble">
               <div className="chat-content">{msg.content}</div>
+
+              {/* Data citation badge — shown when query returned results */}
+              {msg.role === 'assistant' && msg.summary && !msg.error && (
+                <DataCitation summary={msg.summary} rowCount={msg.rowCount ?? 0} />
+              )}
+
               {msg.sql && <SqlBlock sql={msg.sql} />}
               {msg.data && msg.data.length > 0 && <DataTable data={msg.data} />}
               {msg.entities && msg.entities.length > 0 && (
-                <EntityChips entities={msg.entities} />
+                <EntityChips entities={msg.entities} onHighlight={setHighlightedEntities} />
               )}
             </div>
           </div>
@@ -155,6 +168,29 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ isOpen, onClose }) => {
         </button>
       </form>
     </aside>
+  );
+};
+
+// ── Data citation badge ───────────────────────────────────────
+const DataCitation: React.FC<{ summary: string; rowCount: number }> = ({ summary, rowCount }) => {
+  const isEmpty = rowCount === 0;
+  return (
+    <div
+      className="data-citation"
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: '6px',
+        fontSize: '0.74rem',
+        color: isEmpty ? 'var(--text-muted)' : '#a78bfa',
+        marginTop: '6px',
+        marginBottom: '2px',
+        fontVariantNumeric: 'tabular-nums',
+      }}
+    >
+      <Sparkles size={11} style={{ flexShrink: 0 }} />
+      <span>{summary}</span>
+    </div>
   );
 };
 
@@ -228,15 +264,22 @@ const DataTable: React.FC<{ data: Record<string, unknown>[] }> = ({ data }) => {
 // ── Entity chips ──────────────────────────────────────────────
 const EntityChips: React.FC<{
   entities: { id: string; type: string; value: string }[];
-}> = ({ entities }) => {
+  onHighlight: (ids: string[]) => void;
+}> = ({ entities, onHighlight }) => {
   const unique = entities.slice(0, 8);
 
   return (
     <div className="entity-chips">
       {unique.map((e) => (
-        <span key={e.id} className="entity-chip" title={e.id}>
+        <button
+          key={e.id}
+          className="entity-chip entity-chip-btn"
+          title={`Click to highlight ${e.id} on graph`}
+          type="button"
+          onClick={() => onHighlight([e.id])}
+        >
           {e.type}: {e.value}
-        </span>
+        </button>
       ))}
       {entities.length > 8 && (
         <span className="entity-chip entity-chip-more">+{entities.length - 8} more</span>

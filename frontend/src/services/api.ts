@@ -8,6 +8,8 @@ export interface ChatApiResponse {
   data: Record<string, unknown>[] | null;
   entities: { id: string; type: string; value: string }[];
   error: string | null;
+  row_count: number;
+  summary: string;
 }
 
 export const api = {
