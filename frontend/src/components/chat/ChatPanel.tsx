@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, X, ChevronDown, ChevronUp, Database, Loader2, Sparkles } from 'lucide-react';
-import { api, type ChatApiResponse } from '../../services/api';
+import { Send, X, ChevronDown, ChevronUp, Database, Loader2, Sparkles, Layers } from 'lucide-react';
+import { api, type ChatApiResponse, type GraphNodeRef } from '../../services/api';
 import { useGraphStore } from '../../store/useGraphStore';
 
 interface ChatMessage {
@@ -10,6 +10,7 @@ interface ChatMessage {
   sql?: string | null;
   data?: Record<string, unknown>[] | null;
   entities?: { id: string; type: string; value: string }[];
+  graphNodes?: GraphNodeRef[];
   error?: string | null;
   rowCount?: number;
   summary?: string;
@@ -69,6 +70,12 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ isOpen, onClose }) => {
     try {
       const response: ChatApiResponse = await api.chat(trimmed);
 
+      // Prefer LLM-structured graph_nodes; fall back to heuristic entities
+      const graphNodes: GraphNodeRef[] =
+        response.graph_nodes && response.graph_nodes.length > 0
+          ? response.graph_nodes
+          : (response.entities ?? []).map((e) => ({ id: e.id, type: e.type, label: e.value }));
+
       const assistantMsg: ChatMessage = {
         id: `assistant-${Date.now()}`,
         role: 'assistant',
@@ -76,6 +83,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ isOpen, onClose }) => {
         sql: response.sql,
         data: response.data,
         entities: response.entities,
+        graphNodes,
         error: response.error,
         rowCount: response.row_count,
         summary: response.summary,
@@ -84,9 +92,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ isOpen, onClose }) => {
 
       setMessages((prev) => [...prev, assistantMsg]);
 
-      // Highlight referenced entities on the graph
-      if (response.entities && response.entities.length > 0) {
-        setHighlightedEntities(response.entities.map((e) => e.id));
+      // Highlight all extracted graph nodes automatically
+      if (graphNodes.length > 0) {
+        setHighlightedEntities(graphNodes.map((n) => n.id));
       }
     } catch (err) {
       const errorMsg: ChatMessage = {
@@ -129,8 +137,8 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({ isOpen, onClose }) => {
 
               {msg.sql && <SqlBlock sql={msg.sql} />}
               {msg.data && msg.data.length > 0 && <DataTable data={msg.data} />}
-              {msg.entities && msg.entities.length > 0 && (
-                <EntityChips entities={msg.entities} onHighlight={setHighlightedEntities} />
+              {msg.graphNodes && msg.graphNodes.length > 0 && (
+                <EntityChips nodes={msg.graphNodes} onHighlight={setHighlightedEntities} />
               )}
             </div>
           </div>
@@ -261,29 +269,90 @@ const DataTable: React.FC<{ data: Record<string, unknown>[] }> = ({ data }) => {
   );
 };
 
+// ── Entity type color map ─────────────────────────────────────
+const ENTITY_TYPE_COLORS: Record<string, { bg: string; text: string; dot: string }> = {
+  Invoice:      { bg: 'rgba(139,92,246,0.15)',  text: '#a78bfa', dot: '#8b5cf6' },
+  SalesOrder:   { bg: 'rgba(59,130,246,0.15)',  text: '#60a5fa', dot: '#3b82f6' },
+  Delivery:     { bg: 'rgba(16,185,129,0.15)',  text: '#34d399', dot: '#10b981' },
+  JournalEntry: { bg: 'rgba(245,158,11,0.15)',  text: '#fbbf24', dot: '#f59e0b' },
+  Payment:      { bg: 'rgba(236,72,153,0.15)',  text: '#f472b6', dot: '#ec4899' },
+  Customer:     { bg: 'rgba(14,165,233,0.15)',  text: '#38bdf8', dot: '#0ea5e9' },
+  Product:      { bg: 'rgba(168,85,247,0.15)',  text: '#c084fc', dot: '#a855f7' },
+};
+const DEFAULT_ENTITY_COLOR = { bg: 'rgba(100,116,139,0.15)', text: '#94a3b8', dot: '#64748b' };
+
 // ── Entity chips ──────────────────────────────────────────────
 const EntityChips: React.FC<{
-  entities: { id: string; type: string; value: string }[];
+  nodes: GraphNodeRef[];
   onHighlight: (ids: string[]) => void;
-}> = ({ entities, onHighlight }) => {
-  const unique = entities.slice(0, 8);
+}> = ({ nodes, onHighlight }) => {
+  const [showAll, setShowAll] = useState(false);
+  const VISIBLE_MAX = 8;
+  const visible = showAll ? nodes : nodes.slice(0, VISIBLE_MAX);
+  const allIds = nodes.map((n) => n.id);
+
+  // Group by type for the header summary
+  const typeCounts = nodes.reduce<Record<string, number>>((acc, n) => {
+    acc[n.type] = (acc[n.type] ?? 0) + 1;
+    return acc;
+  }, {});
 
   return (
-    <div className="entity-chips">
-      {unique.map((e) => (
+    <div className="entity-chips-wrapper">
+      {/* Header row */}
+      <div className="entity-chips-header">
+        <Layers size={11} style={{ flexShrink: 0, color: '#94a3b8' }} />
+        <span className="entity-chips-label">
+          {Object.entries(typeCounts)
+            .map(([type, count]) => `${count} ${type}${count > 1 ? 's' : ''}`)
+            .join(' · ')}
+        </span>
         <button
-          key={e.id}
-          className="entity-chip entity-chip-btn"
-          title={`Click to highlight ${e.id} on graph`}
+          className="entity-chip-highlight-all"
           type="button"
-          onClick={() => onHighlight([e.id])}
+          title="Highlight all entities on the graph"
+          onClick={() => onHighlight(allIds)}
         >
-          {e.type}: {e.value}
+          Highlight all
         </button>
-      ))}
-      {entities.length > 8 && (
-        <span className="entity-chip entity-chip-more">+{entities.length - 8} more</span>
-      )}
+      </div>
+
+      {/* Chips */}
+      <div className="entity-chips">
+        {visible.map((n) => {
+          const colors = ENTITY_TYPE_COLORS[n.type] ?? DEFAULT_ENTITY_COLOR;
+          return (
+            <button
+              key={n.id}
+              className="entity-chip entity-chip-btn"
+              title={`Highlight ${n.id} on graph`}
+              type="button"
+              onClick={() => onHighlight([n.id])}
+              style={{
+                background: colors.bg,
+                color: colors.text,
+                borderColor: colors.dot,
+              }}
+            >
+              <span
+                className="entity-chip-dot"
+                style={{ background: colors.dot }}
+              />
+              <span className="entity-chip-type">{n.type}</span>
+              <span className="entity-chip-value">{n.label}</span>
+            </button>
+          );
+        })}
+        {nodes.length > VISIBLE_MAX && (
+          <button
+            className="entity-chip entity-chip-more"
+            type="button"
+            onClick={() => setShowAll((s) => !s)}
+          >
+            {showAll ? 'Show less' : `+${nodes.length - VISIBLE_MAX} more`}
+          </button>
+        )}
+      </div>
     </div>
   );
 };

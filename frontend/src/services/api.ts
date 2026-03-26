@@ -2,11 +2,18 @@ import type { GraphData } from '../types/graph';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
+export interface GraphNodeRef {
+  id: string;    // "{type}:{value}", e.g. "Invoice:90000001"
+  type: string;  // e.g. "Invoice"
+  label: string; // e.g. "90000001"
+}
+
 export interface ChatApiResponse {
   answer: string;
   sql: string | null;
   data: Record<string, unknown>[] | null;
   entities: { id: string; type: string; value: string }[];
+  graph_nodes: GraphNodeRef[];
   error: string | null;
   row_count: number;
   summary: string;

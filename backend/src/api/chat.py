@@ -10,11 +10,18 @@ class ChatRequest(BaseModel):
     message: str = Field(..., min_length=1, max_length=2000)
 
 
+class GraphNodeRef(BaseModel):
+    id: str    # "{type}:{value}", e.g. "Invoice:90000001"
+    type: str  # e.g. "Invoice"
+    label: str # e.g. "90000001"
+
+
 class ChatResponseModel(BaseModel):
     answer: str
     sql: str | None = None
     data: list[dict] | None = None
     entities: list[dict] = Field(default_factory=list)
+    graph_nodes: list[GraphNodeRef] = Field(default_factory=list)
     error: str | None = None
     row_count: int = 0
     summary: str = ""
@@ -36,6 +43,7 @@ async def handle_chat(request: ChatRequest):
         sql=result.sql,
         data=result.data,
         entities=result.entities,
+        graph_nodes=[GraphNodeRef(**n) for n in result.graph_nodes],
         error=result.error,
         row_count=result.row_count,
         summary=result.summary,

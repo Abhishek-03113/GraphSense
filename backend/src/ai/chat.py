@@ -26,11 +26,20 @@ logger = structlog.get_logger(__name__)
 
 
 @dataclass(frozen=True)
+class GraphNodeRef:
+    """A reference to a graph node extracted from query results."""
+    id: str        # e.g. "Invoice:5001"
+    type: str      # e.g. "Invoice"
+    label: str     # e.g. "5001"
+
+
+@dataclass(frozen=True)
 class ChatResponse:
     answer: str
     sql: str | None = None
     data: list[dict] | None = None
     entities: list[dict] = field(default_factory=list)
+    graph_nodes: list[dict] = field(default_factory=list)
     error: str | None = None
     row_count: int = 0
     summary: str = ""
@@ -189,7 +198,7 @@ def _execute_sql(sql: str) -> tuple[list[dict], list[str]]:
 _SYNTHESIS_SYSTEM_PROMPT = """You are a helpful data analyst assistant for an SAP Order-to-Cash dataset.
 
 Given a user question, the SQL query that was executed, and the query results, provide a clear,
-concise natural language answer.
+concise natural language answer followed by a structured JSON block of graph entities.
 
 RULES:
 1. Answer based ONLY on the data provided. Do not make up information.
@@ -202,11 +211,46 @@ RULES:
 8. Do not include the SQL query in your response.
 9. Highlight key findings or patterns in the data.
 10. If you are showing top results from a larger set (the row count is at the LIMIT of 25), note: "Showing top 25 results — there may be more in the dataset."
+
+GRAPH ENTITY EXTRACTION (MANDATORY):
+After your natural language answer, you MUST append a JSON block in EXACTLY this format:
+
+```graph_nodes
+[
+  {"id": "Invoice:90000001", "type": "Invoice", "label": "90000001"},
+  {"id": "SalesOrder:10001", "type": "SalesOrder", "label": "10001"},
+  {"id": "Customer:CUST001", "type": "Customer", "label": "CUST001"}
+]
+```
+
+Entity type mapping (use EXACTLY these type names):
+- Billing/Invoice document numbers → type: "Invoice"
+- Sales order numbers → type: "SalesOrder"
+- Delivery document numbers → type: "Delivery"
+- Accounting/journal entry numbers → type: "JournalEntry"
+- Payment document numbers → type: "Payment"
+- Customer/business partner IDs → type: "Customer"
+- Material/product codes → type: "Product"
+
+The "id" field MUST be "{type}:{value}" (e.g. "Invoice:90000001").
+The "label" field is just the raw value (e.g. "90000001").
+Only include entities that appear in the actual query results.
+Include up to 25 entities maximum.
+If there are no entities, output an empty array: ```graph_nodes\n[]\n```
 """
 
 
-def _synthesize_response(question: str, sql: str, data: list[dict], columns: list[str]) -> str:
-    """Use Gemini to produce a natural language answer from query results."""
+def _synthesize_response(
+    question: str,
+    sql: str,
+    data: list[dict],
+    columns: list[str],
+) -> tuple[str, list[dict]]:
+    """Use Gemini to produce a natural language answer and extract structured graph nodes.
+
+    Returns (answer_text, graph_nodes) where graph_nodes is a list of
+    {"id": "Type:value", "type": "Type", "label": "value"} dicts.
+    """
     client = _get_gemini_client()
 
     # Truncate data for the prompt if too large
@@ -223,14 +267,45 @@ SQL EXECUTED:
 QUERY RESULTS ({len(data)} total rows, showing first {len(display_data)}):
 {df.to_string(index=False) if not df.empty else "(no results)"}
 
-Provide a natural language answer:"""
+Provide a natural language answer followed by the graph_nodes JSON block:"""
 
     response = client.models.generate_content(
         model=ai_settings.GEMINI_MODEL,
         contents=prompt,
     )
 
-    return response.text.strip() if response.text else "I was unable to generate a response."
+    raw = response.text.strip() if response.text else ""
+    return _parse_synthesis_response(raw)
+
+
+def _parse_synthesis_response(raw: str) -> tuple[str, list[dict]]:
+    """Split the LLM output into (answer_text, graph_nodes)."""
+    import json
+
+    graph_nodes: list[dict] = []
+
+    # Extract the ```graph_nodes ... ``` block
+    block_match = re.search(r"```graph_nodes\s*([\s\S]*?)```", raw, re.IGNORECASE)
+    if block_match:
+        json_str = block_match.group(1).strip()
+        try:
+            nodes = json.loads(json_str)
+            if isinstance(nodes, list):
+                # Validate each node has required fields
+                graph_nodes = [
+                    {"id": n["id"], "type": n["type"], "label": str(n.get("label", ""))}
+                    for n in nodes
+                    if isinstance(n, dict) and "id" in n and "type" in n
+                ]
+        except (json.JSONDecodeError, KeyError):
+            logger.warning("synthesis.graph_nodes_parse_failed", raw_block=json_str[:200])
+
+    # Strip the graph_nodes block from the answer
+    answer = re.sub(r"\n?```graph_nodes[\s\S]*?```\s*$", "", raw, flags=re.IGNORECASE).strip()
+    if not answer:
+        answer = "I was unable to generate a response."
+
+    return answer, graph_nodes
 
 
 # ---------------------------------------------------------------------------
@@ -329,11 +404,11 @@ def chat(message: str) -> ChatResponse:
                 error=f"sql_execution_error: {str(exc)[:200]}",
             )
 
-        # 5. Response synthesis
-        answer = _synthesize_response(message, sql, data, columns)
-        logger.info("chat.response_synthesized", answer_length=len(answer))
+        # 5. Response synthesis + structured graph node extraction
+        answer, graph_nodes = _synthesize_response(message, sql, data, columns)
+        logger.info("chat.response_synthesized", answer_length=len(answer), graph_nodes=len(graph_nodes))
 
-        # 6. Entity extraction for graph highlighting
+        # 6. Legacy heuristic entity extraction (kept for backwards compat)
         entities = _extract_entities(data)
 
         # 7. Build summary / data citation
@@ -364,6 +439,7 @@ def chat(message: str) -> ChatResponse:
             sql=sql,
             data=serialized_data,
             entities=entities,
+            graph_nodes=graph_nodes,
             row_count=row_count,
             summary=summary,
         )

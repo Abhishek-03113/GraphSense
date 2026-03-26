@@ -729,19 +729,55 @@ body {
 
 /* ── Entity chips ────────────────────────────────────────── */
 
+.entity-chips-wrapper {
+  margin-top: 0.6rem;
+}
+
+.entity-chips-header {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-bottom: 0.35rem;
+}
+
+.entity-chips-label {
+  font-size: 0.68rem;
+  color: var(--text-muted);
+  flex: 1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.entity-chip-highlight-all {
+  font-size: 0.65rem;
+  padding: 2px 7px;
+  background: rgba(99, 102, 241, 0.15);
+  color: #818cf8;
+  border: 1px solid rgba(99, 102, 241, 0.35);
+  border-radius: 100px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+
+.entity-chip-highlight-all:hover {
+  background: rgba(99, 102, 241, 0.3);
+  color: #e0e7ff;
+}
+
 .entity-chips {
   display: flex;
   flex-wrap: wrap;
   gap: 0.3rem;
-  margin-top: 0.5rem;
 }
 
 .entity-chip {
   display: inline-flex;
   align-items: center;
-  padding: 2px 8px;
-  background: var(--accent-soft);
-  color: var(--highlight);
+  gap: 4px;
+  padding: 2px 8px 2px 6px;
+  border: 1px solid transparent;
   border-radius: 100px;
   font-family: var(--font-mono);
   font-size: 0.6rem;
@@ -749,19 +785,38 @@ body {
   letter-spacing: 0.02em;
 }
 
+.entity-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.entity-chip-type {
+  opacity: 0.7;
+}
+
+.entity-chip-value {
+  font-weight: 600;
+}
+
 .entity-chip-more {
   background: var(--bg-deep);
   color: var(--text-muted);
+  border-color: transparent;
+  cursor: pointer;
+}
+
+.entity-chip-more:hover {
+  color: var(--text-primary);
 }
 
 .entity-chip-btn {
   cursor: pointer;
-  border: none;
-  transition: background 0.15s, color 0.15s, box-shadow 0.15s;
+  transition: filter 0.15s, box-shadow 0.15s;
 }
 
 .entity-chip-btn:hover {
-  background: #3730a3;
-  color: #e0e7ff;
-  box-shadow: 0 0 0 1.5px #6366f1;
+  filter: brightness(1.25);
+  box-shadow: 0 0 0 1.5px currentColor;
 }
