@@ -17,8 +17,9 @@ from google import genai
 from sqlalchemy import create_engine, text
 
 from .config import ai_settings
-from .embeddings import generate_embedding, query_similar
+from .embeddings import generate_embedding
 from .guardrails import check_guardrails
+from .retrieval import RetrievalConfig, retrieve_schema_context
 from .training import train_all
 
 logger = structlog.get_logger(__name__)
@@ -94,44 +95,20 @@ def _ensure_trained():
 # ---------------------------------------------------------------------------
 
 def _retrieve_context(question: str, n_results: int = 5) -> str:
-    """Retrieve relevant DDL, docs, SQL pairs, and data summaries from pgvector."""
+    """Retrieve relevant schema, relationships, data profiles, SQL pairs, and docs from pgvector."""
     _ensure_trained()
 
     engine = _get_sync_engine()
     question_embedding = generate_embedding(question)
 
-    parts: list[str] = []
-
-    # DDL schemas
-    ddl_results = query_similar(engine, question_embedding, category="ddl", n_results=n_results)
-    if ddl_results:
-        parts.append("=== RELEVANT TABLE SCHEMAS ===")
-        for r in ddl_results:
-            parts.append(r["content"])
-
-    # Documentation
-    doc_results = query_similar(engine, question_embedding, category="documentation", n_results=n_results)
-    if doc_results:
-        parts.append("\n=== DOMAIN DOCUMENTATION ===")
-        for r in doc_results:
-            parts.append(r["content"])
-
-    # SQL pairs
-    sql_results = query_similar(engine, question_embedding, category="sql_pair", n_results=n_results)
-    if sql_results:
-        parts.append("\n=== EXAMPLE SQL QUERIES ===")
-        for r in sql_results:
-            meta = r["metadata"]
-            parts.append(f"Question: {meta.get('question', '')}\nSQL:\n{meta.get('sql', '')}")
-
-    # Data summaries (from ingested data)
-    data_results = query_similar(engine, question_embedding, category="data_summary", n_results=3)
-    if data_results:
-        parts.append("\n=== DATASET CONTEXT (from actual data) ===")
-        for r in data_results:
-            parts.append(r["content"])
-
-    return "\n\n".join(parts)
+    config = RetrievalConfig(
+        schema_n=n_results,
+        relationships_n=4,
+        data_profile_n=3,
+        sql_pair_n=n_results,
+        documentation_n=n_results,
+    )
+    return retrieve_schema_context(engine, question_embedding, config)
 
 
 # ---------------------------------------------------------------------------
