@@ -1,26 +1,34 @@
 # Stage: builder — install deps and package the app
-FROM python:3.12-alpine AS builder
+FROM python:3.12-slim AS builder
 WORKDIR /app
 
-# Build deps needed to compile certain packages (psycopg2, asyncpg, etc.)
-RUN apk add --no-cache gcc musl-dev libpq-dev
+# Build deps for compiled packages (asyncpg, psycopg2, etc.)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    libpq-dev \
+    python3-dev \
+    && rm -rf /var/lib/apt/lists/*
 
-# Install uv for fast dependency resolution
+# Install uv
 RUN pip install --no-cache-dir uv
 
+# Install dependencies from pyproject.toml
 COPY backend/pyproject.toml backend/uv.lock ./
-RUN uv pip install --system --no-cache -r pyproject.toml
+RUN uv pip install --system --no-cache -e .
 
+# Copy app source
 COPY backend/ .
 
 # Stage: production
-FROM python:3.12-alpine AS production
+FROM python:3.12-slim AS production
 WORKDIR /app
 
 # Runtime-only system libraries
-RUN apk add --no-cache libpq && \
-    addgroup -g 1001 -S appgroup && \
-    adduser -S appuser -u 1001
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libpq5 \
+    && rm -rf /var/lib/apt/lists/* \
+    && groupadd -g 1001 appgroup \
+    && useradd -u 1001 -g appgroup -s /bin/sh appuser
 
 # Copy installed packages and app source from builder
 COPY --from=builder /usr/local/lib/python3.12/site-packages /usr/local/lib/python3.12/site-packages
@@ -35,5 +43,5 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1
 
 EXPOSE 8000
-HEALTHCHECK --interval=30s --timeout=5s CMD wget -qO- http://localhost:8000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s CMD python -c "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')" || exit 1
 CMD ["uvicorn", "src.main:app", "--host", "0.0.0.0", "--port", "8000"]
