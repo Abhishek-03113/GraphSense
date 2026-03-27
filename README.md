@@ -37,7 +37,7 @@ A graph-based data modeling and query system for SAP Order-to-Cash (O2C) data. U
 │           │               │            │            │           │
 │           ▼               ▼            ▼            ▼           │
 │  ┌──────────────┐  ┌──────────┐ ┌──────────┐ ┌──────────────┐  │
-│  │  Graph Repo   │  │ ChromaDB │ │  Gemini  │ │  PostgreSQL  │  │
+│  │  Graph Repo   │  │ pgvector │ │  Gemini  │ │  PostgreSQL  │  │
 │  │  (traversal)  │  │ (vectors)│ │  (LLM)   │ │  (read-only) │  │
 │  └──────┬───────┘  └──────────┘ └──────────┘ └──────────────┘  │
 │         ▼                                                       │
@@ -52,7 +52,7 @@ The system is split into three layers:
 
 1. **Data Layer** — PostgreSQL stores normalized SAP O2C entities. The graph repository derives nodes and edges from foreign-key relationships at query time using SQL `UNION ALL` queries — no separate graph database is needed.
 
-2. **AI Layer** — A five-stage text-to-SQL pipeline converts natural language questions into SQL, executes them against the database, and synthesizes answers using Google Gemini. ChromaDB provides RAG context (DDL schemas, domain docs, SQL examples).
+2. **AI Layer** — A five-stage text-to-SQL pipeline converts natural language questions into SQL, executes them against the database, and synthesizes answers using Google Gemini. pgvector provides RAG context (DDL schemas, domain docs, SQL examples) stored directly in PostgreSQL.
 
 3. **Presentation Layer** — React frontend renders an interactive Cytoscape.js knowledge graph alongside a chat panel. Entities mentioned in query results are highlighted on the graph in real time.
 
@@ -138,47 +138,50 @@ Six predefined flows are available for focused exploration:
 
 4. **One database simplifies deployment.** A single PostgreSQL instance serves both the graph API (relational traversal) and the chat pipeline (direct SQL execution). No graph-to-relational sync layer needed.
 
-5. **pgvector extension** is included in the Docker image for potential future embedding-based search directly in PostgreSQL, though the current RAG pipeline uses ChromaDB for vector storage.
+5. **pgvector extension** is used for all vector storage — embeddings for RAG context (DDL schemas, domain docs, SQL examples) live in the `rag_embeddings` table alongside relational data in the same PostgreSQL instance.
 
-### ChromaDB for RAG vectors
+### pgvector for RAG vectors
 
-ChromaDB stores embeddings for the RAG pipeline — DDL schemas, domain documentation, and SQL question-answer pairs. It was chosen for its:
+All embeddings are stored in the `rag_embeddings` table using the pgvector extension. This was chosen over ChromaDB because:
 
-- Zero-config persistent storage (file-based, no server needed)
-- Built-in cosine similarity search
-- Simple Python API (`upsert`, `query`)
-- Minimal footprint for a development/demo environment
+- **Single database** — no separate vector store service to run or back up
+- **Full ACID compliance** — embeddings are transactional alongside relational data
+- **Joins with relational data** — similarity search can be combined with SQL filters
+- **Single backup** — one `pg_dump` covers all data
 
-Three collections are maintained:
-- `ddl_schemas` — 17 table CREATE statements
-- `documentation` — 7 domain context documents
-- `sql_pairs` — 15 question-SQL examples for few-shot retrieval
+Four embedding categories are stored:
+
+| Category | Count | Content |
+|----------|-------|---------|
+| `schema` | 17 | Table `CREATE` statements (DDL) |
+| `documentation` | 7 | Domain context docs (FK maps, status codes) |
+| `sql_pair` | 15 | Question-SQL few-shot examples |
+| `data_profile` | per-table | Statistical summaries of ingested data |
+
+Similarity search uses cosine distance via the `<=>` operator:
+
+```sql
+SELECT content, 1 - (embedding <=> :query_vector::vector) AS similarity
+FROM rag_embeddings
+WHERE category = :category
+ORDER BY embedding <=> :query_vector::vector
+LIMIT :n;
+```
 
 ---
 
 ## LLM Prompting Strategy
 
-### Design lineage: Vanna-inspired, custom-built
+### Design: custom-built five-stage pipeline
 
-The RAG architecture is modeled after the [Vanna.ai](https://vanna.ai) open-source text-to-SQL framework. An early design (`docs/vanna_arch.md`) planned to use Vanna directly — calling `vn.train(ddl=...)`, `vn.generate_sql()`, and `vn.run_sql()`. The final implementation retains Vanna's three-collection training paradigm but replaces the framework with a hand-rolled pipeline for four reasons:
+The pipeline is hand-rolled rather than using a framework like Vanna.ai, for four reasons:
 
-| Vanna concept | Our equivalent | Why custom |
-|---|---|---|
-| `vn.train(ddl=...)` | `training.py` → ChromaDB `ddl_schemas` | Same approach, no change needed |
-| `vn.train(documentation=...)` | `training.py` → ChromaDB `documentation` | Same approach |
-| `vn.train(sql=..., question=...)` | `training.py` → ChromaDB `sql_pairs` | Same approach |
-| `vn.generate_sql()` | `_generate_sql()` → Gemini + custom system prompt | Custom prompt with SAP-specific rules (zero-padding, FK disambiguation) |
-| `vn.run_sql()` | `_execute_sql()` → psycopg2 read-only | Identical pattern |
-| `vn.ask()` end-to-end | 5-stage pipeline with interception points | **Key difference** — see below |
+1. **Structured output control** — We need a strict JSON payload (`{answer, sql, data, entities}`) with entity extraction for graph highlighting.
+2. **Pre-LLM guardrails** — `guardrails.py` rejects off-topic, injection, and mutation attempts before any LLM call, keeping latency near zero for rejected queries.
+3. **Entity extraction for graph integration** — After SQL execution, result columns are mapped to graph node types (`sales_order` → `SalesOrder`, etc.) and returned as highlightable entities.
+4. **Minimal dependencies** — Only `google-genai` + `psycopg2` + `pgvector` — no heavyweight framework transitive dependencies.
 
-**Why not use Vanna directly?**
-
-1. **Structured output control** — Vanna's `ask()` returns charts or plain text. We need a strict JSON payload (`{answer, sql, data, entities}`) with entity extraction for graph highlighting. Wrapping Vanna's internals would have meant fighting its output layer.
-2. **Pre-LLM guardrails** — Vanna has no built-in domain restriction. Our `guardrails.py` rejects off-topic, injection, and mutation attempts before any LLM call, keeping latency near zero for rejected queries.
-3. **Entity extraction for graph integration** — After SQL execution, we map result columns to graph node types (`sales_order` → `SalesOrder`, etc.) and return them as highlightable entities. This graph-chat integration has no Vanna equivalent.
-4. **Minimal dependency surface** — Vanna pulls in many transitive dependencies. The custom pipeline needs only `google-genai` + `chromadb`, reducing install size and version conflicts.
-
-The three-collection RAG design (DDL + docs + SQL pairs) is the core insight borrowed from Vanna — it ensures the LLM receives structural, semantic, and tactical context for every query.
+The three-source RAG design (DDL + docs + SQL pairs) ensures the LLM receives structural, semantic, and tactical context for every query.
 
 ### Model: Google Gemini 2.0 Flash
 
@@ -196,8 +199,8 @@ User question
        │ pass
        ▼
 ┌─────────────┐
-│ 2. RAG       │  Query ChromaDB for relevant DDL, docs, SQL examples
-│   Retrieval  │  (up to 5 results per collection, cosine similarity)
+│ 2. RAG       │  Query pgvector for relevant DDL, docs, SQL examples
+│   Retrieval  │  (cosine similarity on rag_embeddings table)
 └──────┬──────┘
        │ context
        ▼
@@ -256,11 +259,12 @@ Key design decisions in the prompt:
 
 ### RAG context assembly
 
-For each user question, the system retrieves from ChromaDB:
+For each user question, the system retrieves from the `rag_embeddings` pgvector table:
 
 1. **DDL schemas** (up to 5) — the most relevant table definitions, so the LLM knows exact column names and types
 2. **Domain docs** (up to 5) — business context like "delivery status 'C' = completed" and FK relationship mappings
 3. **SQL examples** (up to 5) — few-shot examples of similar questions with verified SQL answers
+4. **Data profiles** (up to 3) — per-table statistical summaries derived from ingested data
 
 This three-source RAG approach ensures the LLM has:
 - **Structural knowledge** (DDL) — what tables/columns exist
@@ -368,7 +372,7 @@ Even after the LLM generates SQL, a regex check rejects any mutation statements 
 | Database | PostgreSQL 16 + pgvector | Relational data + graph traversal |
 | Migrations | Alembic | Schema versioning |
 | LLM | Google Gemini 2.0 Flash | SQL generation + response synthesis |
-| Vector store | ChromaDB | RAG embeddings for DDL, docs, SQL pairs |
+| Vector store | pgvector (PostgreSQL extension) | RAG embeddings for DDL, docs, SQL pairs, data profiles |
 | Logging | structlog | Structured backend logging |
 | Validation | Pydantic (backend), Zod (frontend) | Request/response schemas |
 
@@ -443,9 +447,19 @@ DATABASE_URL=postgresql://postgres:postgres@localhost:5432/dodgeai
 
 **3.4 Run database migrations:**
 
+Migrations create all 17 SAP O2C tables plus the `rag_embeddings` pgvector table:
+
 ```bash
 python migrate.py apply
 ```
+
+To check which migrations have been applied:
+
+```bash
+python migrate.py status
+```
+
+> **Note:** Migrations must be applied before starting the server or ingesting data. If you re-create the database container, run `migrate.py apply` again.
 
 **3.5 Start the backend server:**
 
@@ -477,7 +491,9 @@ The frontend will be available at `http://localhost:5173`.
 
 **5.1 Place your data files:**
 
-Put your JSONL data files in the `backend/data/sap-o2c-data/` directory.
+Put your JSONL data files in the `data/sap-o2c-data/` directory (at the project root, mounted into the backend).
+
+Expected files match the 17 SAP O2C entity types (e.g. `sales_order_headers.jsonl`, `billing_document_items.jsonl`, etc.).
 
 **5.2 Trigger data ingestion:**
 
@@ -485,17 +501,23 @@ Put your JSONL data files in the `backend/data/sap-o2c-data/` directory.
 curl -X POST http://localhost:8000/api/ingest
 ```
 
-Or open in your browser: `http://localhost:8000/api/ingest` (POST request required)
+Ingestion runs as a background task. It parses JSONL files and populates all 17 tables. Check the backend logs to confirm completion.
+
+> **Note:** Run ingestion before training the RAG pipeline — data profiles (statistical summaries per table) are generated from the ingested rows and embedded into pgvector during training.
 
 ---
 
 ### Step 6: Train the RAG Pipeline
 
-The chat pipeline auto-trains on the first query, but you can pre-train it manually:
+Training embeds DDL schemas, domain docs, SQL question-answer pairs, and data profiles into the `rag_embeddings` pgvector table using Gemini `text-embedding-004`.
 
 ```bash
 curl -X POST http://localhost:8000/api/chat/train
 ```
+
+> **Run this once after ingestion.** The pipeline will not auto-train — the `rag_embeddings` table must be populated before the chat endpoint can generate accurate SQL.
+
+To re-train after schema or data changes, call the same endpoint again. Existing embeddings are replaced.
 
 ---
 
@@ -527,8 +549,12 @@ source .venv/bin/activate
 pip install -e .
 cp .env.example .env
 # Edit .env with your GEMINI_API_KEY
-python migrate.py apply
+python migrate.py apply          # Create all 17 tables + rag_embeddings
 uvicorn src.main:app --reload --host 0.0.0.0 --port 8000 &
+
+# Ingest data, then train the RAG pipeline (requires server running)
+curl -X POST http://localhost:8000/api/ingest   # Load JSONL data into tables
+curl -X POST http://localhost:8000/api/chat/train  # Embed DDL, docs, SQL pairs into pgvector
 
 # Frontend (new terminal)
 cd frontend
@@ -557,7 +583,7 @@ docker-compose logs postgres
 which python  # Should point to backend/.venv/bin/python
 
 # Check if dependencies are installed
-pip list | grep -E "(fastapi|chromadb|google-genai)"
+pip list | grep -E "(fastapi|psycopg2|google-genai)"
 ```
 
 **Frontend build issues:**
@@ -636,9 +662,9 @@ DodgeAI/
 │   │   ├── ai/                    # LLM chat pipeline
 │   │   │   ├── chat.py            # 5-stage text-to-SQL pipeline
 │   │   │   ├── guardrails.py      # Multi-layer query validation
-│   │   │   ├── training.py        # RAG training data (DDL, docs, SQL pairs)
-│   │   │   ├── embeddings.py      # ChromaDB vector store setup
-│   │   │   └── config.py          # AI settings (Gemini key, model, ChromaDB path)
+│   │   │   ├── training.py        # RAG training data (DDL, docs, SQL pairs, data profiles)
+│   │   │   ├── embeddings.py      # pgvector embedding store (rag_embeddings table)
+│   │   │   └── config.py          # AI settings (Gemini key, model, embedding dimensions)
 │   │   ├── api/                   # FastAPI routers
 │   │   │   ├── graph.py           # Graph traversal endpoints
 │   │   │   ├── chat.py            # Chat endpoint
