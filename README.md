@@ -1,4 +1,4 @@
-# DodgeAI
+# GraphSense
 
 A graph-based data modeling and query system for SAP Order-to-Cash (O2C) data. Users explore interconnected business entities through an interactive graph visualization and query the dataset using natural language, powered by an LLM-backed text-to-SQL pipeline.
 
