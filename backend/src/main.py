@@ -5,7 +5,7 @@ from src.api.ingest import router as ingest_router
 from src.api.chat import router as chat_router
 
 app = FastAPI(
-    title="DodgeAI",
+    title="GraphSense",
     description="Graph-Based Data Modeling and Query System",
     version="0.1.0",
 )

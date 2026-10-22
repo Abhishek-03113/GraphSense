@@ -2,8 +2,8 @@ from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 from src.db.session import get_db_session
-from src.domain.graph_models import GraphSummaryResponse, GraphSubgraphResponse, GraphEntityResponse, FlowListResponse, FlowDefinition
-from src.domain.flow_definitions import FLOW_DEFINITIONS
+from src.domain.graph_models import GraphSummaryResponse, GraphSubgraphResponse, GraphEntityResponse, FlowListResponse, GraphSchemaResponse
+from src.domain.graph_registry import get_dataset
 from src.repositories.graph_repository import GraphRepository
 from src.utils.logger import get_logger
 
@@ -41,10 +41,23 @@ async def get_graph_subgraph(
         logger.error("API /subgraph — FAILED: %s", e)
         raise HTTPException(status_code=500, detail=str(e))
 
+@router.get("/schema", response_model=GraphSchemaResponse)
+async def get_graph_schema():
+    """Describes the active dataset: domain, node types, edge types and flows.
+
+    Counts are not included; join with /summary. Needs no database access.
+    """
+    dataset = get_dataset()
+    logger.info(
+        "API /schema — dataset=%s node_types=%d edge_types=%d flows=%d",
+        dataset.id, len(dataset.node_types), len(dataset.edge_types), len(dataset.flows),
+    )
+    return dataset.to_schema_response()
+
 @router.get("/flows", response_model=FlowListResponse)
 async def list_flows():
-    """Returns the available predefined O2C flow definitions."""
-    flows = [FlowDefinition(**defn) for defn in FLOW_DEFINITIONS.values()]
+    """Returns the predefined flow definitions of the active dataset."""
+    flows = list(get_dataset().flows)
     logger.info("API /flows — returning %d flow definitions", len(flows))
     return FlowListResponse(flows=flows)
 
@@ -54,9 +67,9 @@ async def get_flow(
     limit: int = Query(50, ge=1, le=200, description="Max nodes per edge bucket"),
     db: AsyncSession = Depends(get_db_session)
 ):
-    """Returns a sampled subgraph for a predefined O2C flow."""
+    """Returns a sampled subgraph for a predefined flow of the active dataset."""
     logger.info("API /flow — flow_id=%s limit=%d", flow_id, limit)
-    if flow_id not in FLOW_DEFINITIONS:
+    if get_dataset().get_flow(flow_id) is None:
         logger.warning("API /flow — unknown flow_id=%s", flow_id)
         raise HTTPException(status_code=404, detail=f"Unknown flow: {flow_id}")
     repo = GraphRepository(db)
@@ -75,7 +88,7 @@ async def trace_document(
     depth: int = Query(4, ge=1, le=5, description="Traversal depth"),
     db: AsyncSession = Depends(get_db_session)
 ):
-    """Traces the full O2C lifecycle for a given document."""
+    """Traces the full lifecycle (all connected entities) for a given document."""
     logger.info("API /trace — doc_type=%s doc_id=%s depth=%d", doc_type, doc_id, depth)
     repo = GraphRepository(db)
     try:
