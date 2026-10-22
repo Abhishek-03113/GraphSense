@@ -1,0 +1,80 @@
+.page {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  min-height: 0;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--gs-space-3) var(--gs-space-4);
+  min-height: var(--gs-header-height);
+  padding: var(--gs-space-3) var(--gs-space-6);
+  background: var(--gs-surface-1);
+  border-bottom: 1px solid var(--gs-separator);
+}
+
+.titles {
+  min-width: 0;
+  flex: 1 1 160px;
+}
+
+.title {
+  font-size: var(--gs-fs-title-2);
+  line-height: var(--gs-lh-title-2);
+  font-weight: var(--gs-weight-semibold);
+  letter-spacing: -0.01em;
+}
+
+.subtitle {
+  margin-top: var(--gs-space-half);
+  color: var(--gs-color-label-secondary);
+  font-size: var(--gs-fs-body);
+  line-height: var(--gs-lh-body);
+}
+
+.actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gs-space-2);
+}
+
+.body {
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.contained {
+  width: 100%;
+  max-width: var(--gs-content-max);
+  margin: 0 auto;
+  padding: var(--gs-space-6);
+}
+
+.flush {
+  position: relative;
+  display: flex;
+  overflow: hidden;
+}
+
+@media (max-width: 640px) {
+  .header {
+    padding: var(--gs-space-3) var(--gs-space-4);
+  }
+  /* Canvas pages give the space to the canvas: the title is enough. */
+  .headerFlush .subtitle {
+    display: none;
+  }
+  .contained {
+    padding: var(--gs-space-4);
+  }
+  .title {
+    font-size: var(--gs-fs-title-3);
+    line-height: var(--gs-lh-title-3);
+  }
+}
