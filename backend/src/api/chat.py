@@ -2,6 +2,7 @@
 
 from pydantic import BaseModel, Field
 from fastapi import APIRouter
+from fastapi.concurrency import run_in_threadpool
 
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
@@ -37,7 +38,8 @@ async def handle_chat(request: ChatRequest):
     """Process a natural language question about the O2C dataset."""
     from src.ai.chat import chat
 
-    result = chat(request.message)
+    # The pipeline is synchronous (LLM and database calls); keep it off the event loop.
+    result = await run_in_threadpool(chat, request.message)
     return ChatResponseModel(
         answer=result.answer,
         sql=result.sql,
@@ -55,5 +57,5 @@ async def train_model():
     """Trigger (re-)training of the RAG pipeline with DDL, docs, and SQL pairs."""
     from src.ai.training import train_all
 
-    counts = train_all()
+    counts = await run_in_threadpool(train_all)
     return TrainResponse(status="ok", counts=counts)

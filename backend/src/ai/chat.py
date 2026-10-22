@@ -17,6 +17,7 @@ from google import genai
 from sqlalchemy import create_engine, text
 
 from src.domain.graph_registry import get_dataset
+from src.utils.serialization import json_value
 
 from .config import ai_settings
 from .embeddings import generate_embedding
@@ -25,6 +26,12 @@ from .retrieval import RetrievalConfig, retrieve_schema_context
 from .training import train_all
 
 logger = structlog.get_logger(__name__)
+
+
+NOT_CONFIGURED_MESSAGE = (
+    "Questions can't be answered yet because the language model isn't set up on this server. "
+    "Add a Gemini API key (GEMINI_API_KEY) to the backend configuration and restart it."
+)
 
 
 @dataclass(frozen=True)
@@ -357,6 +364,10 @@ def chat(message: str) -> ChatResponse:
         logger.info("chat.rejected", reason=rejection[:80])
         return ChatResponse(answer=rejection, error="guardrail")
 
+    if not ai_settings.GEMINI_API_KEY:
+        logger.warning("chat.not_configured", reason="GEMINI_API_KEY is not set")
+        return ChatResponse(answer=NOT_CONFIGURED_MESSAGE, error="not_configured")
+
     try:
         # 2. RAG retrieval
         context = _retrieve_context(message)
@@ -403,18 +414,8 @@ def chat(message: str) -> ChatResponse:
         else:
             summary = f"{row_count} record{'s' if row_count != 1 else ''} found."
 
-        # Serialize data (convert non-serializable types)
-        serialized_data = []
-        for row in data[:100]:
-            serialized_row = {}
-            for k, v in row.items():
-                if v is None:
-                    serialized_row[k] = None
-                elif isinstance(v, (int, float, str, bool)):
-                    serialized_row[k] = v
-                else:
-                    serialized_row[k] = str(v)
-            serialized_data.append(serialized_row)
+        # Serialize data (decimals as numbers, dates as ISO strings)
+        serialized_data = [{k: json_value(v) for k, v in row.items()} for row in data[:100]]
 
         return ChatResponse(
             answer=answer,
@@ -427,8 +428,9 @@ def chat(message: str) -> ChatResponse:
         )
 
     except Exception as exc:
-        logger.exception("chat.unexpected_error")
+        # The details stay in the log; clients get a stable code, not internals.
+        logger.exception("chat.unexpected_error", error=str(exc)[:300])
         return ChatResponse(
             answer="An unexpected error occurred while processing your question. Please try again.",
-            error=str(exc)[:300],
+            error="internal_error",
         )
