@@ -1,0 +1,38 @@
+.stage {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+  height: 100%;
+  overflow: hidden;
+}
+
+.banner {
+  position: absolute;
+  z-index: 6;
+  top: calc(var(--gs-space-3) + var(--gs-control-md) + var(--gs-space-3) + var(--gs-space-1));
+  left: var(--gs-space-3);
+  display: flex;
+  align-items: center;
+  gap: var(--gs-space-2);
+  max-width: calc(100% - var(--gs-space-6));
+  padding: var(--gs-space-1) var(--gs-space-1) var(--gs-space-1) var(--gs-space-3);
+  border-radius: var(--gs-radius-full);
+  background: var(--gs-warning-soft);
+  background-color: color-mix(in srgb, var(--gs-warning-soft) 100%, var(--gs-surface-1));
+  box-shadow: var(--gs-shadow-sm), inset 0 0 0 1px var(--gs-highlight);
+  font-size: var(--gs-fs-small);
+}
+
+.bannerText {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+@media (max-width: 760px) {
+  .banner {
+    top: auto;
+    bottom: calc(var(--gs-space-3) + var(--gs-control-md) + var(--gs-space-2));
+  }
+}

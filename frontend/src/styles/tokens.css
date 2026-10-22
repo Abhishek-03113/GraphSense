@@ -1,0 +1,204 @@
+/*
+ * GraphSense design tokens.
+ *
+ * Every colour, size, radius and duration used in the product comes from here.
+ * Components reference these custom properties only; nothing is hard-coded.
+ * Light is the default; dark applies through prefers-color-scheme.
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* ── Typography ─────────────────────────────────────────── */
+  --gs-font-sans: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Inter, Roboto, "Helvetica Neue", Arial, sans-serif;
+  --gs-font-mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, "Liberation Mono", monospace;
+
+  --gs-fs-caption: 12px;
+  --gs-lh-caption: 16px;
+  --gs-fs-small: 13px;
+  --gs-lh-small: 18px;
+  --gs-fs-body: 14px;
+  --gs-lh-body: 20px;
+  --gs-fs-headline: 15px;
+  --gs-lh-headline: 22px;
+  --gs-fs-title-3: 17px;
+  --gs-lh-title-3: 24px;
+  --gs-fs-title-2: 20px;
+  --gs-lh-title-2: 28px;
+  --gs-fs-title-1: 26px;
+  --gs-lh-title-1: 32px;
+  --gs-fs-display: 32px;
+  --gs-lh-display: 38px;
+
+  --gs-weight-regular: 400;
+  --gs-weight-medium: 500;
+  --gs-weight-semibold: 600;
+
+  /* ── Spacing (4px grid; step N = N × 4px) ───────────────── */
+  --gs-space-half: 2px;
+  --gs-space-1: 4px;
+  --gs-space-2: 8px;
+  --gs-space-3: 12px;
+  --gs-space-4: 16px;
+  --gs-space-5: 20px;
+  --gs-space-6: 24px;
+  --gs-space-8: 32px;
+  --gs-space-10: 40px;
+  --gs-space-12: 48px;
+  --gs-space-16: 64px;
+
+  /* ── Radius ─────────────────────────────────────────────── */
+  --gs-radius-xs: 4px;
+  --gs-radius-sm: 6px;
+  --gs-radius-md: 10px;
+  --gs-radius-lg: 14px;
+  --gs-radius-xl: 20px;
+  --gs-radius-full: 999px;
+
+  /* ── Control and layout sizes ───────────────────────────── */
+  --gs-control-sm: 28px;
+  --gs-control-md: 32px;
+  --gs-control-lg: 40px;
+  --gs-hit-min: 28px;
+  --gs-sidebar-width: 236px;
+  --gs-sidebar-rail: 60px;
+  --gs-header-height: 64px;
+  --gs-sheet-width: 408px;
+  --gs-panel-width: 288px;
+  --gs-content-max: 1120px;
+
+  /* ── Motion ─────────────────────────────────────────────── */
+  --gs-duration-fast: 120ms;
+  --gs-duration-base: 200ms;
+  --gs-duration-slow: 320ms;
+  --gs-ease: cubic-bezier(0.2, 0, 0, 1);
+
+  /* ── Layers ─────────────────────────────────────────────── */
+  --gs-z-sticky: 10;
+  --gs-z-sheet: 30;
+  --gs-z-overlay: 50;
+  --gs-z-tooltip: 70;
+
+  /* ── Colour: text ───────────────────────────────────────── */
+  --gs-color-label: #111113;
+  --gs-color-label-secondary: #5c5c63; /* 6.6:1 on white; safe for small text */
+  --gs-color-placeholder: #707078; /* 4.9:1 on white */
+  --gs-color-label-tertiary: #8a8a93; /* decorative only, never for content */
+  --gs-color-on-accent: #ffffff;
+
+  /* ── Colour: surfaces ───────────────────────────────────── */
+  --gs-surface-0: #f5f5f8; /* app background */
+  --gs-surface-1: #ffffff; /* cards, panels, canvas */
+  --gs-surface-2: #f0f0f5; /* inset areas, hover fill */
+  --gs-surface-3: #e5e5ec; /* pressed fill, tracks */
+  --gs-surface-overlay: rgb(17 17 19 / 0.4);
+
+  /* ── Colour: lines ──────────────────────────────────────── */
+  --gs-separator: rgb(60 60 67 / 0.16); /* hairlines, decorative */
+  --gs-border-strong: #8a8a93; /* control outlines, 3.4:1 on white */
+
+  /* ── Colour: brand accent (primary actions + selection) ─── */
+  --gs-accent: #5856d6;
+  --gs-accent-hover: #4b49c4;
+  --gs-accent-pressed: #4240b0;
+  --gs-accent-text: #4846c4; /* 7.1:1 on white */
+  --gs-accent-soft: rgb(88 86 214 / 0.1);
+  --gs-accent-soft-strong: rgb(88 86 214 / 0.18);
+  --gs-focus-ring: #5856d6;
+
+  /* ── Colour: status (always paired with an icon and words) ─ */
+  --gs-success-text: #1e7a3c;
+  --gs-success-soft: rgb(52 199 89 / 0.16);
+  --gs-warning-text: #8a5a00;
+  --gs-warning-soft: rgb(255 149 0 / 0.16);
+  --gs-danger-text: #c4271c;
+  --gs-danger-soft: rgb(255 59 48 / 0.12);
+  --gs-info-text: #4846c4;
+  --gs-info-soft: rgb(88 86 214 / 0.1);
+  --gs-highlight: #ff9500;
+
+  /* ── Colour: record-type palette (graph + badges) ───────── */
+  --gs-hue-red: #ff3b30;
+  --gs-hue-orange: #ff9500;
+  --gs-hue-yellow: #ffcc00;
+  --gs-hue-green: #34c759;
+  --gs-hue-mint: #00c7be;
+  --gs-hue-teal: #30b0c7;
+  --gs-hue-cyan: #32ade6;
+  --gs-hue-blue: #007aff;
+  --gs-hue-indigo: #5856d6;
+  --gs-hue-purple: #af52de;
+  --gs-hue-pink: #ff2d55;
+  --gs-hue-brown: #a2845e;
+  --gs-hue-gray: #8e8e93;
+
+  /* ── Elevation ──────────────────────────────────────────── */
+  --gs-shadow-sm: 0 1px 2px rgb(17 17 19 / 0.06), 0 0 0 1px rgb(17 17 19 / 0.04);
+  --gs-shadow-md: 0 4px 16px rgb(17 17 19 / 0.1), 0 0 0 1px rgb(17 17 19 / 0.05);
+  --gs-shadow-lg: 0 16px 48px rgb(17 17 19 / 0.18), 0 0 0 1px rgb(17 17 19 / 0.06);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --gs-color-label: #f4f4f6;
+    --gs-color-label-secondary: #a3a3ad; /* 7.2:1 on surface-1 */
+    --gs-color-placeholder: #8a8a94;
+    --gs-color-label-tertiary: #6a6a72;
+    --gs-color-on-accent: #ffffff;
+
+    --gs-surface-0: #0c0c0f;
+    --gs-surface-1: #17171b;
+    --gs-surface-2: #1f1f24;
+    --gs-surface-3: #2a2a30;
+    --gs-surface-overlay: rgb(0 0 0 / 0.6);
+
+    --gs-separator: rgb(235 235 245 / 0.12);
+    --gs-border-strong: #70707b;
+
+    --gs-accent: #5e5ce6;
+    --gs-accent-hover: #6e6cf0;
+    --gs-accent-pressed: #504ed6;
+    --gs-accent-text: #a5a3ff;
+    --gs-accent-soft: rgb(94 92 230 / 0.2);
+    --gs-accent-soft-strong: rgb(94 92 230 / 0.32);
+    --gs-focus-ring: #a5a3ff;
+
+    --gs-success-text: #5cd97e;
+    --gs-success-soft: rgb(48 209 88 / 0.18);
+    --gs-warning-text: #ffc247;
+    --gs-warning-soft: rgb(255 159 10 / 0.2);
+    --gs-danger-text: #ff6b61;
+    --gs-danger-soft: rgb(255 69 58 / 0.18);
+    --gs-info-text: #a5a3ff;
+    --gs-info-soft: rgb(94 92 230 / 0.2);
+    --gs-highlight: #ff9f0a;
+
+    --gs-hue-red: #ff453a;
+    --gs-hue-orange: #ff9f0a;
+    --gs-hue-yellow: #ffd60a;
+    --gs-hue-green: #30d158;
+    --gs-hue-mint: #66d4cf;
+    --gs-hue-teal: #40c8e0;
+    --gs-hue-cyan: #64d2ff;
+    --gs-hue-blue: #0a84ff;
+    --gs-hue-indigo: #5e5ce6;
+    --gs-hue-purple: #bf5af2;
+    --gs-hue-pink: #ff375f;
+    --gs-hue-brown: #ac8e68;
+    --gs-hue-gray: #8e8e93;
+
+    --gs-shadow-sm: 0 1px 2px rgb(0 0 0 / 0.4), 0 0 0 1px rgb(255 255 255 / 0.05);
+    --gs-shadow-md: 0 6px 20px rgb(0 0 0 / 0.5), 0 0 0 1px rgb(255 255 255 / 0.07);
+    --gs-shadow-lg: 0 20px 56px rgb(0 0 0 / 0.65), 0 0 0 1px rgb(255 255 255 / 0.08);
+  }
+}
+
+/* Larger hit targets on touch and narrow screens. */
+@media (pointer: coarse), (max-width: 640px) {
+  :root {
+    --gs-control-sm: 36px;
+    --gs-control-md: 40px;
+    --gs-control-lg: 44px;
+    --gs-hit-min: 40px;
+  }
+}

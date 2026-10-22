@@ -1,0 +1,129 @@
+.scroll {
+  overflow: auto;
+  border-radius: var(--gs-radius-md);
+  box-shadow: inset 0 0 0 1px var(--gs-separator);
+  background: var(--gs-surface-1);
+  min-width: 0;
+}
+
+.table {
+  width: 100%;
+  font-size: var(--gs-fs-small);
+  line-height: var(--gs-lh-small);
+}
+
+.table caption {
+  text-align: left;
+}
+
+.table th,
+.table td {
+  padding: var(--gs-space-2) var(--gs-space-3);
+  text-align: left;
+  vertical-align: middle;
+  border-bottom: 1px solid var(--gs-separator);
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table tbody tr:last-child td {
+  border-bottom: 0;
+}
+
+.table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--gs-surface-2);
+  color: var(--gs-color-label-secondary);
+  font-weight: var(--gs-weight-semibold);
+  padding: 0;
+}
+
+.headButton {
+  display: flex;
+  align-items: center;
+  gap: var(--gs-space-1);
+  width: 100%;
+  min-height: var(--gs-control-md);
+  padding: 0 var(--gs-space-3);
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-weight: inherit;
+  text-align: inherit;
+}
+
+.headButton:hover {
+  color: var(--gs-color-label);
+}
+
+.headStatic {
+  display: flex;
+  align-items: center;
+  min-height: var(--gs-control-md);
+  padding: 0 var(--gs-space-3);
+}
+
+.right {
+  text-align: right !important;
+}
+
+.right .headButton,
+.right .headStatic {
+  justify-content: flex-end;
+}
+
+.stickyRight {
+  position: sticky;
+  right: 0;
+  background: var(--gs-surface-1);
+  box-shadow: inset 1px 0 0 var(--gs-separator);
+}
+
+.table thead th.stickyRight {
+  z-index: 2;
+  background: var(--gs-surface-2);
+}
+
+.sortIcon {
+  flex: none;
+  color: var(--gs-accent-text);
+}
+
+.mono {
+  font-family: var(--gs-font-mono);
+  font-size: var(--gs-fs-small);
+}
+
+.numeric {
+  font-variant-numeric: tabular-nums;
+}
+
+.clickable {
+  cursor: pointer;
+}
+
+.clickable:hover td {
+  background: var(--gs-surface-2);
+}
+
+.selected td {
+  background: var(--gs-accent-soft);
+}
+
+/* The accent wash is translucent: lay it over the surface so scrolled cells do not show through. */
+.selected td.stickyRight {
+  background: linear-gradient(var(--gs-accent-soft), var(--gs-accent-soft)), var(--gs-surface-1);
+}
+
+.clickable:hover td.stickyRight {
+  background: var(--gs-surface-2);
+}
+
+.clickable:focus-visible {
+  outline-offset: -2px;
+}

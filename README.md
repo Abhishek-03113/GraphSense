@@ -23,8 +23,8 @@ A graph-based data modeling and query system for SAP Order-to-Cash (O2C) data. U
 ┌─────────────────────────────────────────────────────────────────┐
 │                        React Frontend                           │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
-│  │  Knowledge Graph  │  │  Chat Panel      │  │  Inspector   │  │
-│  │  (Cytoscape.js)   │  │  (NL queries)    │  │  (metadata)  │  │
+│  │  Explore / Flows  │  │  Ask             │  │  Record      │  │
+│  │  (Cytoscape.js)   │  │  (NL queries)    │  │  details     │  │
 │  └────────┬─────────┘  └────────┬─────────┘  └──────────────┘  │
 └───────────┼─────────────────────┼──────────────────────────────┘
             │ REST                │ REST
@@ -54,7 +54,7 @@ The system is split into three layers:
 
 2. **AI Layer** — A five-stage text-to-SQL pipeline converts natural language questions into SQL, executes them against the database, and synthesizes answers using Google Gemini. pgvector provides RAG context (DDL schemas, domain docs, SQL examples) stored directly in PostgreSQL.
 
-3. **Presentation Layer** — React frontend renders an interactive Cytoscape.js knowledge graph alongside a chat panel. Entities mentioned in query results are highlighted on the graph in real time.
+3. **Presentation Layer** — The React frontend (GraphSense) is organised around six screens: Overview, Explore (interactive Cytoscape.js graph), Ask (conversational analyst), Flows, Trace and Records. Records mentioned in an answer can be opened in Explore and highlighted on the graph. Record types, labels, colours and flows come from the backend's schema endpoint, so the UI does not hard-code any dataset.
 
 ---
 
@@ -374,7 +374,8 @@ Even after the LLM generates SQL, a regex check rejects any mutation statements 
 | Layer | Technology | Purpose |
 |-------|-----------|---------|
 | Frontend | React 19, TypeScript | UI framework |
-| Graph rendering | Cytoscape.js + cose-bilkent | Force-directed graph layout |
+| Graph rendering | Cytoscape.js + cose-bilkent + dagre | Cluster and left-to-right layered layouts |
+| Routing | React Router | Deep-linkable pages (`/explore`, `/trace?type=&id=`, ...) |
 | State management | Zustand + TanStack React Query | Client + server state |
 | Backend | FastAPI (Python 3.12) | REST API server |
 | Database | PostgreSQL 16 + pgvector | Relational data + graph traversal |
@@ -491,7 +492,7 @@ npm install
 npm run dev
 ```
 
-The frontend will be available at `http://localhost:5173`.
+The frontend will be available at `http://localhost:5173`. It calls the backend at `http://localhost:8000/api`; set `VITE_API_BASE_URL` to use a different address.
 
 ---
 
@@ -536,9 +537,11 @@ Open your browser and navigate to:
 **http://localhost:5173**
 
 You should see:
-- **Knowledge Graph** — Interactive Cytoscape.js visualization of SAP O2C entities
-- **Chat Panel** — Natural language query interface for asking questions about your data
-- **Inspector Panel** — Metadata and entity details
+- **Overview** — Dataset summary, record counts, relationship totals and shortcuts (with a "Load data" button if the dataset is empty)
+- **Explore** — Interactive graph of records and relationships, with filters, search and a details panel
+- **Ask** — Natural language query interface; answers include the rows, the query and the records involved
+- **Flows**, **Trace**, **Records** — Follow a business flow, trace one record from start to finish, or browse records by type
+- Press `Ctrl K` (`⌘K` on Mac) anywhere to jump to a page, record type, flow or record ID
 
 ---
 
@@ -699,18 +702,18 @@ DodgeAI/
 │   └── pyproject.toml
 ├── frontend/
 │   ├── src/
+│   │   ├── app/                   # Router, providers, shell (sidebar, page frame)
+│   │   ├── features/              # overview, explore, ask, flows, trace, records, inspector
 │   │   ├── components/
-│   │   │   ├── graph/             # GraphExplorer, InspectorPanel
-│   │   │   ├── knowledge/         # KnowledgeGraph (main unified view)
-│   │   │   ├── chat/              # ChatPanel (slide-out NL query interface)
-│   │   │   ├── flows/             # FlowSelector, FlowExplorer
-│   │   │   ├── trace/             # DocumentTracer
-│   │   │   └── ui/                # Dashboard, EntitySelector
-│   │   ├── store/                 # Zustand state (graph selection, chat, highlights)
-│   │   ├── services/              # API client
-│   │   ├── types/                 # TypeScript + Zod schemas
-│   │   ├── constants/             # Node type colors, defaults
-│   │   └── App.tsx                # Root component
+│   │   │   ├── ui/                # Design-system components (Button, Table, Sheet, CommandPalette, ...)
+│   │   │   └── graph/             # GraphCanvas (Cytoscape), toolbar, legend, layouts
+│   │   ├── lib/
+│   │   │   ├── api/               # Fetch client, Zod schemas, TanStack Query hooks
+│   │   │   ├── schema/            # useSchema(): record types, labels, colours, flows
+│   │   │   └── format/            # humanize + value formatting
+│   │   ├── store/                 # Zustand: workspace (sidebar, palette, highlights), ask
+│   │   └── styles/                # Design tokens (light + dark) and base styles
+│   ├── e2e/                       # Mocked-API fixtures + screenshot script
 │   └── package.json
 ├── docker-compose.yml             # PostgreSQL 16 + pgvector
 └── README.md

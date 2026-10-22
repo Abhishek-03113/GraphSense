@@ -1,0 +1,130 @@
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gs-space-2);
+  min-height: var(--gs-control-md);
+  padding: 0 var(--gs-space-3);
+  border: 1px solid transparent;
+  border-radius: var(--gs-radius-sm);
+  font-size: var(--gs-fs-body);
+  line-height: var(--gs-lh-body);
+  font-weight: var(--gs-weight-medium);
+  white-space: nowrap;
+  text-decoration: none;
+  transition:
+    background-color var(--gs-duration-fast) var(--gs-ease),
+    border-color var(--gs-duration-fast) var(--gs-ease),
+    color var(--gs-duration-fast) var(--gs-ease);
+}
+
+.button:disabled,
+.button[aria-disabled='true'] {
+  opacity: 0.5;
+  pointer-events: none;
+}
+
+.sm {
+  min-height: var(--gs-control-sm);
+  padding: 0 var(--gs-space-2);
+  font-size: var(--gs-fs-small);
+}
+
+.lg {
+  min-height: var(--gs-control-lg);
+  padding: 0 var(--gs-space-5);
+}
+
+.primary {
+  background: var(--gs-accent);
+  color: var(--gs-color-on-accent);
+}
+.primary:hover {
+  background: var(--gs-accent-hover);
+}
+.primary:active {
+  background: var(--gs-accent-pressed);
+}
+
+.secondary {
+  background: var(--gs-surface-1);
+  color: var(--gs-color-label);
+  border-color: var(--gs-border-strong);
+}
+.secondary:hover {
+  background: var(--gs-surface-2);
+}
+.secondary:active {
+  background: var(--gs-surface-3);
+}
+
+.ghost {
+  background: transparent;
+  color: var(--gs-color-label);
+}
+.ghost:hover {
+  background: var(--gs-surface-2);
+}
+.ghost:active {
+  background: var(--gs-surface-3);
+}
+
+.accentGhost {
+  background: transparent;
+  color: var(--gs-accent-text);
+}
+.accentGhost:hover {
+  background: var(--gs-accent-soft);
+}
+
+.danger {
+  background: transparent;
+  color: var(--gs-danger-text);
+  border-color: var(--gs-danger-text);
+}
+.danger:hover {
+  background: var(--gs-danger-soft);
+}
+
+.block {
+  width: 100%;
+}
+
+.spinner {
+  width: 14px;
+  height: 14px;
+  border-radius: var(--gs-radius-full);
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spinner {
+    animation: none;
+    border-right-color: currentColor;
+    opacity: 0.6;
+  }
+}
+
+/* Icon-only */
+.icon {
+  width: var(--gs-control-md);
+  min-height: var(--gs-control-md);
+  padding: 0;
+  border-radius: var(--gs-radius-sm);
+}
+.icon.sm {
+  width: var(--gs-control-sm);
+  min-height: var(--gs-control-sm);
+}
+.icon.lg {
+  width: var(--gs-control-lg);
+  min-height: var(--gs-control-lg);
+}

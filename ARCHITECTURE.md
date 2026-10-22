@@ -21,8 +21,8 @@ This document provides a detailed explanation of the architectural decisions, da
 ┌─────────────────────────────────────────────────────────────────┐
 │                        React Frontend                           │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
-│  │  Knowledge Graph  │  │  Chat Panel      │  │  Inspector   │  │
-│  │  (Cytoscape.js)   │  │  (NL queries)    │  │  (metadata)  │  │
+│  │  Explore / Flows  │  │  Ask             │  │  Inspector   │  │
+│  │  / Trace (graph)  │  │  (NL queries)    │  │  (metadata)  │  │
 │  └────────┬─────────┘  └────────┬─────────┘  └──────────────┘  │
 └───────────┼─────────────────────┼──────────────────────────────┘
             │ REST                │ REST
@@ -48,7 +48,7 @@ This document provides a detailed explanation of the architectural decisions, da
 
 The system follows a **three-tier architecture**:
 
-1. **Presentation Layer** — React frontend with Cytoscape.js graph visualization and chat interface
+1. **Presentation Layer** — React frontend (Overview, Explore, Ask, Flows, Trace, Records) with Cytoscape.js graph visualization and a conversational query interface
 2. **Application Layer** — FastAPI backend with graph traversal and text-to-SQL pipelines
 3. **Data Layer** — PostgreSQL 16 with pgvector for both relational data and vector embeddings
 

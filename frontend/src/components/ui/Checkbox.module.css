@@ -1,0 +1,66 @@
+.row {
+  display: flex;
+  align-items: center;
+  gap: var(--gs-space-2);
+  min-height: var(--gs-hit-min);
+  padding: 0 var(--gs-space-2);
+  border-radius: var(--gs-radius-sm);
+  cursor: pointer;
+  user-select: none;
+}
+
+.row:hover {
+  background: var(--gs-surface-2);
+}
+
+.native {
+  position: absolute;
+  opacity: 0;
+  width: 1px;
+  height: 1px;
+}
+
+.box {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  border-radius: var(--gs-radius-xs);
+  border: 1.5px solid var(--gs-border-strong);
+  background: var(--gs-surface-1);
+  color: var(--gs-color-on-accent);
+  transition: background-color var(--gs-duration-fast) var(--gs-ease);
+}
+
+.native:checked + .box {
+  background: var(--gs-accent);
+  border-color: var(--gs-accent);
+}
+
+.native:focus-visible + .box {
+  outline: 2px solid var(--gs-focus-ring);
+  outline-offset: 2px;
+}
+
+.content {
+  display: flex;
+  align-items: center;
+  gap: var(--gs-space-2);
+  min-width: 0;
+  flex: 1;
+}
+
+.text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.trailing {
+  margin-left: auto;
+  color: var(--gs-color-label-secondary);
+  font-size: var(--gs-fs-small);
+  font-variant-numeric: tabular-nums;
+}
