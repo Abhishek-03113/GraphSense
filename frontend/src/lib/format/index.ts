@@ -60,6 +60,57 @@ const NUMERIC = /^-?\d+(?:\.\d+)?$/;
 const AMOUNT_KEY = /(^|_|(?<=[a-z]))(amount|price|cost|value|total|net|gross|tax|balance|quantity|qty|weight|volume|rate|discount)(_|$|(?=[A-Z]))/i;
 const IDENTIFIER_KEY = /(^|_|(?<=[a-z]))(id|ids|number|no|document|code|reference|key)(_|$|(?=[A-Z]))/i;
 
+const MONEY_KEY = /(^|_|(?<=[a-z]))(amount|price|cost|net|tax|balance|revenue|value)(_|$|(?=[A-Z]))/i;
+const NOT_MONEY_KEY = /(^|_|(?<=[a-z]))(weight|quantity|qty|volume|rate|unit|units|count|number|percent|percentage)(_|$|(?=[A-Z]))/i;
+const CURRENCY_CODE = /^[A-Z]{3}$/;
+
+/** Keys that hold an amount of money ("total_net_amount", "price"), as opposed to a quantity or weight. */
+export function isMoneyKey(key: string): boolean {
+  return MONEY_KEY.test(key) && !NOT_MONEY_KEY.test(key);
+}
+
+/**
+ * The currency an amount is in, taken from a neighbouring value of the same record or row:
+ * "amount_in_company_code_currency" uses "company_code_currency", anything else the record's
+ * "transaction_currency" or "currency". Undefined when the record names none.
+ */
+export function currencyFor(key: string, siblings: Record<string, unknown> | undefined): string | undefined {
+  if (!siblings) return undefined;
+  const valid = (candidate: string | undefined): string | undefined => {
+    const value = candidate === undefined ? undefined : siblings[candidate];
+    return typeof value === 'string' && CURRENCY_CODE.test(value.trim()) ? value.trim() : undefined;
+  };
+  const named = /_in_(.+_currency)$/.exec(key)?.[1];
+  const direct = valid(named);
+  if (direct) return direct;
+  for (const candidate of ['transaction_currency', 'currency', 'document_currency']) {
+    const found = valid(candidate);
+    if (found) return found;
+  }
+  const only = Object.keys(siblings).filter((name) => /(^|_)currency$/.test(name) && !/company_code/.test(name) && valid(name));
+  return only.length === 1 ? valid(only[0]) : undefined;
+}
+
+const moneyFormat = new Intl.NumberFormat(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const currencyFormats = new Map<string, Intl.NumberFormat | null>();
+
+/** An amount with two decimals, with its currency when known ("$1,234.50"). */
+export function formatMoney(value: number, currency?: string): string {
+  if (currency) {
+    let format = currencyFormats.get(currency);
+    if (format === undefined) {
+      try {
+        format = new Intl.NumberFormat(undefined, { style: 'currency', currency });
+      } catch {
+        format = null; // not a currency code this browser knows
+      }
+      currencyFormats.set(currency, format);
+    }
+    return format ? format.format(value) : `${moneyFormat.format(value)} ${currency}`;
+  }
+  return moneyFormat.format(value);
+}
+
 export type ValueKind = 'text' | 'date' | 'number' | 'identifier' | 'boolean' | 'empty';
 
 export interface FormattedValue {
@@ -71,7 +122,12 @@ export interface FormattedValue {
   mono: boolean;
 }
 
-export function formatValue(key: string, value: unknown): FormattedValue {
+export interface FormatOptions {
+  /** Currency code for amounts in this value's record or row. */
+  currency?: string;
+}
+
+export function formatValue(key: string, value: unknown, options: FormatOptions = {}): FormattedValue {
   if (value === null || value === undefined || value === '') {
     return { text: '—', kind: 'empty', numeric: false, mono: false };
   }
@@ -103,6 +159,9 @@ export function formatValue(key: string, value: unknown): FormattedValue {
     const identifierKey = IDENTIFIER_KEY.test(key) && !amountKey;
     if (identifierKey || (wholeText && !amountKey)) {
       return { text: raw, kind: 'identifier', numeric: false, mono: true };
+    }
+    if (isMoneyKey(key)) {
+      return { text: formatMoney(asNumber, options.currency), kind: 'number', numeric: true, mono: false };
     }
     return { text: numberFormat.format(asNumber), kind: 'number', numeric: true, mono: false };
   }

@@ -56,6 +56,16 @@ export function neighboursOf(graph: GraphData, recordId: string): Neighbour[] {
   return out;
 }
 
+/**
+ * A human name for a record, when the server has one. Records without a natural name come back labelled
+ * "<Type> <id>", which says nothing the id does not, so that counts as no name.
+ */
+export function naturalLabel(type: string, value: string, label: string | null | undefined): string | null {
+  const text = label?.trim();
+  if (!text || text === value || text === `${type} ${value}`) return null;
+  return text;
+}
+
 /** The part of a record id after the type, e.g. "Type:123" → "123". */
 export function recordValue(node: Pick<GraphNode, 'id' | 'type'>): string {
   const prefix = `${node.type}:`;

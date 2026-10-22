@@ -8,8 +8,8 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { TypeBadge, TypeDot } from '../../components/ui/TypeBadge';
 import { useSubgraph } from '../../lib/api/queries';
 import type { GraphNode } from '../../lib/api/schemas';
-import { formatValue, humanize, lowerFirst, parseRecordId, pluralize } from '../../lib/format';
-import { neighboursOf, recordValue, type Neighbour } from '../../lib/graph';
+import { currencyFor, formatValue, humanize, lowerFirst, parseRecordId, pluralize } from '../../lib/format';
+import { naturalLabel, neighboursOf, recordValue, type Neighbour } from '../../lib/graph';
 import { useSchema } from '../../lib/schema';
 import styles from './RecordInspector.module.css';
 
@@ -36,11 +36,11 @@ interface Group {
 
 const INITIAL_VISIBLE = 5;
 
-function PropertyList({ entries }: { entries: [string, unknown][] }) {
+function PropertyList({ entries, siblings }: { entries: [string, unknown][]; siblings: Record<string, unknown> }) {
   return (
     <dl className={styles.facts}>
       {entries.map(([key, value]) => {
-        const formatted = formatValue(key, value);
+        const formatted = formatValue(key, value, { currency: currencyFor(key, siblings) });
         return (
           <Fragment key={key}>
             <dt>{humanize(key)}</dt>
@@ -84,17 +84,27 @@ function RelationshipGroup({ group, ownType, onOpen }: { group: Group; ownType: 
         )}
       </p>
       <ul className={styles.neighbours}>
-        {visible.map(({ node }) => (
-          <li key={node.id}>
-            <button type="button" className={styles.neighbour} onClick={() => onOpen(node.id)}>
-              <TypeDot type={node.type} />
-              <span className={styles.neighbourLabel}>
-                <span className={styles.neighbourId}>{recordValue(node)}</span>
-              </span>
-              <span className={styles.neighbourType}>{typeLabel(node.type)}</span>
-            </button>
-          </li>
-        ))}
+        {visible.map(({ node }) => {
+          const value = recordValue(node);
+          const name = naturalLabel(node.type, value, node.label);
+          return (
+            <li key={node.id}>
+              <button type="button" className={styles.neighbour} onClick={() => onOpen(node.id)}>
+                <TypeDot type={node.type} />
+                <span className={styles.neighbourLabel}>
+                  {name ? (
+                    <>
+                      {name} <span className={styles.neighbourId}>{value}</span>
+                    </>
+                  ) : (
+                    <span className={styles.neighbourId}>{value}</span>
+                  )}
+                </span>
+                <span className={styles.neighbourType}>{typeLabel(node.type)}</span>
+              </button>
+            </li>
+          );
+        })}
       </ul>
       {count > INITIAL_VISIBLE && (
         <div>
@@ -115,11 +125,13 @@ export function RecordInspector({ recordId, node, onClose, onOpenRecord, onAsk, 
   const subgraph = useSubgraph(type, value, 1);
   const [copied, setCopied] = useState(false);
 
-  const properties = useMemo(() => {
-    const fromNode = node?.properties ?? {};
-    if (Object.keys(fromNode).length > 0) return fromNode;
-    return subgraph.data?.nodes.find((candidate) => candidate.id === recordId)?.properties ?? {};
+  // The caller's copy may be a bare reference without details; the neighbourhood query carries them.
+  const record = useMemo(() => {
+    const loaded = subgraph.data?.nodes.find((candidate) => candidate.id === recordId);
+    return node && Object.keys(node.properties).length > 0 ? node : (loaded ?? node);
   }, [node, subgraph.data, recordId]);
+  const properties = useMemo(() => record?.properties ?? {}, [record]);
+  const name = naturalLabel(type, value, record?.label);
 
   const { primaryEntries, otherEntries } = useMemo(() => {
     const entries = Object.entries(properties);
@@ -152,7 +164,7 @@ export function RecordInspector({ recordId, node, onClose, onOpenRecord, onAsk, 
     }
   };
 
-  const title = `${meta.label} ${value}`;
+  const title = name ?? `${meta.label} ${value}`;
 
   return (
     <Sheet
@@ -195,7 +207,7 @@ export function RecordInspector({ recordId, node, onClose, onOpenRecord, onAsk, 
         {primaryEntries.length > 0 && (
           <section className={styles.section} aria-label="Key details">
             <h3 className={styles.sectionTitle}>Key details</h3>
-            <PropertyList entries={primaryEntries} />
+            <PropertyList entries={primaryEntries} siblings={properties} />
           </section>
         )}
 
@@ -204,16 +216,16 @@ export function RecordInspector({ recordId, node, onClose, onOpenRecord, onAsk, 
             {primaryEntries.length === 0 ? (
               <>
                 <h3 className={styles.sectionTitle}>Details</h3>
-                <PropertyList entries={otherEntries.slice(0, 8)} />
+                <PropertyList entries={otherEntries.slice(0, 8)} siblings={properties} />
                 {otherEntries.length > 8 && (
                   <Disclosure label="Show all details" meta={`${otherEntries.length} ${pluralize(otherEntries.length, 'field')}`}>
-                    <PropertyList entries={otherEntries.slice(8)} />
+                    <PropertyList entries={otherEntries.slice(8)} siblings={properties} />
                   </Disclosure>
                 )}
               </>
             ) : (
               <Disclosure label="More details" meta={`${otherEntries.length} ${pluralize(otherEntries.length, 'field')}`}>
-                <PropertyList entries={otherEntries} />
+                <PropertyList entries={otherEntries} siblings={properties} />
               </Disclosure>
             )}
           </section>
