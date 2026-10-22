@@ -1,11 +1,11 @@
-import { AlertTriangle, Download, Info, Network, RotateCw, ServerOff, SearchX } from 'lucide-react';
+import { AlertTriangle, Download, Info, KeyRound, Network, RotateCw, ServerOff, SearchX } from 'lucide-react';
 import { useEffect, useMemo, useState } from 'react';
 import { Button, IconButton } from '../../components/ui/Button';
 import { Disclosure } from '../../components/ui/Disclosure';
 import { DataTable, type Column } from '../../components/ui/Table';
 import { TypeDot } from '../../components/ui/TypeBadge';
 import { Skeleton } from '../../components/ui/Skeleton';
-import { downloadText, formatInteger, formatValue, humanize, pluralize, toCsv } from '../../lib/format';
+import { currencyFor, downloadText, formatInteger, formatValue, humanize, pluralize, toCsv } from '../../lib/format';
 import { recordValue } from '../../lib/graph';
 import { useSchema } from '../../lib/schema';
 import { useAsk, type RecordRef, type Turn } from '../../store/ask';
@@ -68,14 +68,14 @@ function ResultTable({ rows, rowCount }: { rows: Record<string, unknown>[]; rowC
   const columns = useMemo<Column<Record<string, unknown>>[]>(() => {
     const keys = Object.keys(rows[0] ?? {});
     return keys.map((key) => {
-      const sample = rows.slice(0, 25).map((row) => formatValue(key, row[key])).filter((f) => f.kind !== 'empty');
+      const sample = rows.slice(0, 25).map((row) => formatValue(key, row[key], { currency: currencyFor(key, row) })).filter((f) => f.kind !== 'empty');
       const numeric = sample.length > 0 && sample.every((f) => f.numeric);
       const mono = sample.length > 0 && sample.every((f) => f.mono);
       return {
         key,
         header: humanize(key),
         value: (row) => row[key],
-        render: (row) => formatValue(key, row[key]).text,
+        render: (row) => formatValue(key, row[key], { currency: currencyFor(key, row) }).text,
         sortable: true,
         align: numeric ? 'right' : 'left',
         numeric,
@@ -173,6 +173,13 @@ function ErrorReply({ turn, suggestions, onPick }: { turn: Turn; suggestions: st
     return (
       <Notice icon={<Info size={18} />} title="That’s outside what I can help with" actions={tryThese.length > 0 ? tryThese : undefined}>
         {answer || 'I can answer questions about the data in this workspace: its records, how they connect and what they add up to.'}
+      </Notice>
+    );
+  }
+  if (code === 'not_configured') {
+    return (
+      <Notice tone="warn" icon={<KeyRound size={18} />} title="Ask isn’t set up on this server yet">
+        {answer || 'Answering questions needs a language model key, which the server does not have. Ask whoever runs this server to add one.'}
       </Notice>
     );
   }
