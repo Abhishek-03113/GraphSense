@@ -1,0 +1,156 @@
+/* Global reset, typography and accessibility primitives. */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  height: 100%;
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--gs-surface-0);
+  color: var(--gs-color-label);
+  font-family: var(--gs-font-sans);
+  font-size: var(--gs-fs-body);
+  line-height: var(--gs-lh-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+#root {
+  height: 100%;
+}
+
+h1,
+h2,
+h3,
+h4,
+p,
+dl,
+dd,
+ul,
+ol,
+figure {
+  margin: 0;
+}
+
+ul,
+ol {
+  padding: 0;
+  list-style: none;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+}
+
+button:disabled {
+  cursor: not-allowed;
+}
+
+a {
+  color: var(--gs-accent-text);
+  text-underline-offset: 2px;
+}
+
+code,
+kbd,
+pre,
+samp {
+  font-family: var(--gs-font-mono);
+}
+
+img,
+svg {
+  display: block;
+  max-width: 100%;
+}
+
+table {
+  border-collapse: collapse;
+}
+
+::placeholder {
+  color: var(--gs-color-placeholder);
+  opacity: 1;
+}
+
+::selection {
+  background: var(--gs-accent-soft-strong);
+}
+
+/* Focus: always visible for keyboard users, never for pointer clicks. */
+:focus {
+  outline: none;
+}
+
+:focus-visible {
+  outline: 2px solid var(--gs-focus-ring);
+  outline-offset: 2px;
+  border-radius: var(--gs-radius-xs);
+}
+
+/* Visually hidden but available to assistive tech. */
+.gs-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+.gs-skip-link {
+  position: fixed;
+  top: var(--gs-space-2);
+  left: var(--gs-space-2);
+  z-index: var(--gs-z-tooltip);
+  padding: var(--gs-space-2) var(--gs-space-4);
+  background: var(--gs-surface-1);
+  color: var(--gs-accent-text);
+  border-radius: var(--gs-radius-sm);
+  box-shadow: var(--gs-shadow-md);
+  transform: translateY(-200%);
+}
+
+.gs-skip-link:focus {
+  transform: none;
+}
+
+/* Quiet scrollbars */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--gs-border-strong) transparent;
+}
+
+/* Every animation has a reduced-motion answer: remove it. */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+input[type="search"]::-webkit-search-cancel-button { display: none; }

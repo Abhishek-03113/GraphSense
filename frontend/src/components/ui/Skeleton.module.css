@@ -1,0 +1,24 @@
+.skeleton {
+  display: block;
+  background: linear-gradient(90deg, var(--gs-surface-2) 0%, var(--gs-surface-3) 50%, var(--gs-surface-2) 100%);
+  background-size: 200% 100%;
+  border-radius: var(--gs-radius-sm);
+  animation: shimmer 1.4s var(--gs-ease) infinite;
+}
+
+@keyframes shimmer {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+/* Reduced motion: a still block communicates loading just as well. */
+@media (prefers-reduced-motion: reduce) {
+  .skeleton {
+    animation: none;
+    background: var(--gs-surface-2);
+  }
+}

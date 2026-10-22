@@ -1,0 +1,107 @@
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gs-space-1);
+  min-width: 0;
+}
+
+.label {
+  font-size: var(--gs-fs-small);
+  line-height: var(--gs-lh-small);
+  font-weight: var(--gs-weight-medium);
+  color: var(--gs-color-label);
+}
+
+.hint {
+  font-size: var(--gs-fs-caption);
+  line-height: var(--gs-lh-caption);
+  color: var(--gs-color-label-secondary);
+}
+
+.control {
+  position: relative;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.input,
+.select {
+  width: 100%;
+  min-height: var(--gs-control-md);
+  padding: 0 var(--gs-space-3);
+  border: 1px solid var(--gs-border-strong);
+  border-radius: var(--gs-radius-sm);
+  background: var(--gs-surface-1);
+  color: var(--gs-color-label);
+  font-size: var(--gs-fs-body);
+  line-height: var(--gs-lh-body);
+  transition: border-color var(--gs-duration-fast) var(--gs-ease), box-shadow var(--gs-duration-fast) var(--gs-ease);
+}
+
+.input:hover,
+.select:hover {
+  border-color: var(--gs-color-label-secondary);
+}
+
+.input:focus-visible,
+.select:focus-visible {
+  outline: none;
+  border-color: var(--gs-focus-ring);
+  box-shadow: 0 0 0 3px var(--gs-accent-soft-strong);
+}
+
+.input:disabled,
+.select:disabled {
+  opacity: 0.55;
+}
+
+.withIcon {
+  padding-left: calc(var(--gs-space-3) + 22px);
+}
+
+.leading {
+  position: absolute;
+  left: var(--gs-space-3);
+  display: grid;
+  place-items: center;
+  color: var(--gs-color-label-secondary);
+  pointer-events: none;
+}
+
+.trailing {
+  position: absolute;
+  right: var(--gs-space-1);
+  display: flex;
+  align-items: center;
+}
+
+.select {
+  appearance: none;
+  padding-right: calc(var(--gs-space-3) + 22px);
+  cursor: pointer;
+}
+
+.chevron {
+  position: absolute;
+  right: var(--gs-space-3);
+  color: var(--gs-color-label-secondary);
+  pointer-events: none;
+}
+
+.sm .input,
+.sm .select {
+  min-height: var(--gs-control-sm);
+  font-size: var(--gs-fs-small);
+}
+
+.mono {
+  font-family: var(--gs-font-mono);
+  font-size: var(--gs-fs-small);
+}
+
+/* Native option lists follow the surface colours. */
+.select option {
+  background: var(--gs-surface-1);
+  color: var(--gs-color-label);
+}
