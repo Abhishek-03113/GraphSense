@@ -26,6 +26,12 @@ from src.domain.graph_models import (
     SchemaNodeType,
 )
 
+# Records of these categories are shared reference data (one customer or product
+# is linked to a great many documents).  Graph traversal reaches them but does
+# not expand through them, otherwise a trace of one invoice would pull in every
+# other order of the same customer or product.
+TERMINAL_CATEGORIES = frozenset({"party", "master"})
+
 _KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 _TABLE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$")
 _COLUMN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
@@ -276,6 +282,11 @@ class GraphDataset(_Frozen):
     @property
     def node_keys(self) -> list[str]:
         return [n.key for n in self.node_types]
+
+    @property
+    def terminal_node_keys(self) -> list[str]:
+        """Types a traversal reaches but does not expand through (see ``TERMINAL_CATEGORIES``)."""
+        return [n.key for n in self.node_types if n.category in TERMINAL_CATEGORIES]
 
     def get_node_type(self, key: str) -> NodeTypeDef | None:
         for n in self.node_types:

@@ -93,6 +93,18 @@ class GraphSqlBuilder:
             selects.extend(self.edge_select(e) for e in edges)
         return selects, unknown
 
+    def traversal_expand_filter(self) -> str:
+        """Extra WHERE terms for the traversal step: do not expand through terminal types.
+
+        The root is always expanded, so tracing from a customer still works.
+        Empty when the dataset has no terminal types.
+        """
+        keys = self.dataset.terminal_node_keys
+        if not keys:
+            return ""
+        listed = ", ".join(f"'{k}'" for k in keys)
+        return f"AND (t.depth = 0 OR t.type NOT IN ({listed}))"
+
     # ------------------------------------------------------------------
     # Nodes
     # ------------------------------------------------------------------

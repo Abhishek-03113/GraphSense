@@ -184,6 +184,9 @@ class GraphRepository:
 
         The traversal uses a bidirectional view of the edge set so the user can
         navigate in either direction (e.g. from an Invoice back to its SalesOrder).
+        Shared reference records (customers, products, addresses) are included
+        but not expanded through, so a trace follows the document chain instead
+        of fanning out to everything else that customer or product touches.
         """
         edges_union = self._get_edges_union_query()
         subgraph_query = f"""
@@ -214,6 +217,7 @@ class GraphRepository:
             JOIN traversal t ON be.source_id = t.id AND be.source_type = t.type
             WHERE t.depth < :depth
               AND NOT (be.target_id || ':' || be.target_type = ANY(t.path))
+              {self.sql.traversal_expand_filter()}
         )
         -- Return only edges where both endpoints were reached by the traversal
         SELECT DISTINCT
