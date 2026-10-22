@@ -125,7 +125,7 @@ for (const scheme of ['light', 'dark']) {
     await page.waitForSelector('text=What’s in your data');
     await shot(page, name('overview'));
 
-    await open(page, `/explore?focus=${encodeURIComponent('Customer:1001')}`);
+    await open(page, `/explore?focus=${encodeURIComponent(`Customer:${SAMPLE_IDS.customer}`)}`);
     await settleGraph(page);
     await page.waitForSelector('text=Relationships');
     await page.waitForTimeout(400);
@@ -236,7 +236,7 @@ for (const scheme of ['light', 'dark']) {
     await settleGraph(page);
     await shot(page, name('explore'));
 
-    await open(page, `/explore?focus=${encodeURIComponent('Customer:1001')}`);
+    await open(page, `/explore?focus=${encodeURIComponent(`Customer:${SAMPLE_IDS.customer}`)}`);
     await settleGraph(page);
     await page.waitForSelector('text=Relationships');
     await page.waitForTimeout(400);

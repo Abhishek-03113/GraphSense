@@ -24,6 +24,8 @@ dist-ssr
 *.sw?
 .vercel
 
-# Screenshot output from e2e/screens.mjs
+# Screenshot output from e2e/screens.mjs and e2e/live.mjs
 e2e/screens
+e2e/screens-live
+e2e/.gs-live-dist
 e2e/.gs-e2e-dist

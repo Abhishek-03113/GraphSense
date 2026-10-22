@@ -8,7 +8,9 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "e2e:screens": "node e2e/screens.mjs"
+    "e2e:screens": "node e2e/screens.mjs",
+    "e2e:live": "node e2e/live.mjs",
+    "e2e:check-schema": "node e2e/check-schema.mjs"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.95.2",

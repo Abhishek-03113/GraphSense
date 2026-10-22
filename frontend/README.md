@@ -20,6 +20,8 @@ The app talks to the backend at `http://localhost:8000/api`. Point it elsewhere 
 VITE_API_BASE_URL=https://graphsense.example.com/api npm run build
 ```
 
+The value is compiled into the bundle, so set it when building. For the Docker image: `docker build --build-arg VITE_API_BASE_URL=https://graphsense.example.com/api .`. The backend allows any origin by default (CORS); restrict `allow_origins` in `backend/src/main.py` for production.
+
 ## What is in the app
 
 | Route | Page | What it does |
@@ -58,7 +60,7 @@ src/
     format/       humanize, number/date/identifier formatting, CSV
   store/          Zustand stores: workspace (sidebar, palette, highlights) and ask (conversation)
   styles/         tokens.css (design tokens), base.css (reset and accessibility primitives)
-e2e/              Mocked-API fixtures and the screenshot script (not part of the bundle)
+e2e/              Mocked-API fixtures, screenshot scripts (mocked and live) and a schema drift check (not part of the bundle)
 ```
 
 ## The UI knows nothing about your data
@@ -68,7 +70,7 @@ No record type, relationship or property name appears in the components. Everyth
 - **Labels**: `label` and `plural` for each record type, `label` for each relationship ("placed", "contains").
 - **Colour**: the schema's `accent` slot (`blue`, `indigo`, ...) maps to a design token. A type without one gets a stable colour from a hash of its key, assigned so that types in one dataset do not share a colour where avoidable.
 - **Primary types**: `is_primary` decides which types get overview tiles and appear first in trace pickers.
-- **Details**: `display_properties` decides which properties the details panel shows first.
+- **Details**: `display_properties` decides which properties the details panel shows first. The values come from `properties` on each graph node, and Records adds the display properties to every row of `GET /api/graph/entities/{type}`. A record with a natural name (`label` other than "<Type> <id>") is titled with it. Amounts show two decimals, with the currency of the same record when it has one. Without properties the panel says so and still lists relationships.
 - **Flows**: flow definitions come with the schema; the order of `node_types` is treated as process order.
 
 Responses are validated with Zod, and every field except `key` is optional. If the endpoint is missing (older server) or a type is not described, the app degrades instead of failing: record types come from `GET /api/graph/summary`, flows from `GET /api/graph/flows`, labels from humanising the key (`SalesOrderItem` becomes "Sales order item"), and colours from the hash. The sidebar and Overview report the dataset as "Your dataset" in that case.
@@ -101,3 +103,12 @@ PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm run e2e:screens -- ./e2e/screens
 ```
 
 It saves PNGs to the directory you pass (default `e2e/screens`, which is git-ignored) and reports any browser console errors. Set `SKIP_BUILD=1` to reuse the last build.
+
+Two more scripts keep the mocked fixtures honest:
+
+```bash
+npm run e2e:check-schema                    # compares the SCHEMA fixture with GET /api/graph/schema of a running backend
+PLAYWRIGHT_BROWSERS_PATH=/opt/pw-browsers npm run e2e:live -- ./e2e/screens-live   # screenshots against the real backend
+```
+
+`e2e:live` expects a backend with data (see `backend/scripts/seed_demo_data.py`), builds the app against `GS_API` (default `http://localhost:8000/api`) and mocks only the chat endpoint for the populated Ask screenshot. The un-mocked Ask screenshot shows what a server without a model key says.
