@@ -52,28 +52,24 @@ Database models represent SAP O2C entities (BillingDocumentHeader, BillingDocume
 
 ### Frontend Structure (`/frontend`)
 
-- **`src/App.tsx`** - Main app component managing view states (`dashboard | selector | graph | flows | trace | knowledge-graph`)
-- **`src/services/api.ts`** - API client for backend communication
-- **`src/components/graph/`** - Shared graph visualization components
-  - `GraphExplorer.tsx` - Cytoscape-based interactive graph renderer (reused by all graph views)
-  - `InspectorPanel.tsx` - Selected node details panel
-- **`src/components/ui/`** - UI components
-  - `Dashboard.tsx` - Summary view with entity cards and explore feature cards
-  - `EntitySelector.tsx` - Entity listing and selection interface
-- **`src/components/flows/`** - O2C flow exploration
-  - `FlowSelector.tsx` - Grid of predefined flow cards (fetched from `/api/graph/flows`)
-  - `FlowExplorer.tsx` - Orchestrates flow selection and graph rendering
-- **`src/components/trace/`** - Document lifecycle tracing
-  - `DocumentTracer.tsx` - Document type + ID input form, renders full O2C trace in GraphExplorer
-- **`src/components/knowledge/`** - Obsidian-style knowledge graph
-  - `KnowledgeGraph.tsx` - Full entity graph with client-side search filtering
-  - `KnowledgeGraphControls.tsx` - Right-side panel: type filter, node limit slider, search, refresh
-- **`src/components/chat/`** - Conversational query interface
-  - `ChatPanel.tsx` - Slide-out chat panel with message history, SQL display, data tables, entity chips
-- **`src/store/`** - Zustand store for client-side state (includes `typeFilter`, `nodeLimit`, `searchQuery`, `isChatOpen`, `highlightedEntities`)
-- **`src/types/`** - TypeScript type definitions (includes `FlowDefinition`, `FlowListResponse` Zod schemas)
+React 19 + TypeScript + Vite, React Router for real URLs, TanStack Query for server state, Zustand for client state, Cytoscape for graphs, Zod for response validation. Styling is CSS Modules on top of design tokens (`src/styles/tokens.css`, `--gs-*` custom properties, light and dark). Full docs: `frontend/README.md`.
 
-Data flow: Dashboard → (EntitySelector → GraphExplorer) | FlowExplorer | DocumentTracer | KnowledgeGraph. All graph views share GraphExplorer as the rendering layer. State managed by Zustand, async data fetched via TanStack React Query.
+- **`src/app/`** - `App.tsx` (providers + routes, pages lazy-loaded), `Shell.tsx` (sidebar, page frame, command palette host), `Sidebar.tsx`, `Page.tsx` (header with title, subtitle, actions), `nav.ts`, `useCommandItems.tsx`
+- **`src/features/`** - one folder per screen:
+  - `overview/` (`/`), `explore/` (`/explore`, graph + filters), `ask/` (`/ask` and the Explore side panel), `flows/` (`/flows`, `/flows/:flowId`), `trace/` (`/trace?type=&id=`), `records/` (`/records/:type?`)
+  - `inspector/` - `RecordInspector`, the details panel shared by Explore, Flows, Trace and Records
+  - `onboarding/` - first-run "Load data" state (`POST /api/ingest`)
+- **`src/components/ui/`** - Button, IconButton, Card, Badge, TypeBadge, Input/Select, SegmentedControl, Checkbox, Slider, Table, Sheet, Tooltip, EmptyState/ErrorState, Skeleton, Kbd, Combobox, Disclosure, CommandPalette
+- **`src/components/graph/`** - `GraphCanvas` (the only Cytoscape wrapper; used by Explore, Flows and Trace), `CanvasToolbar`, `Legend`, `layouts.ts`, `graphStyle.ts`, `useThemeColors.ts`
+- **`src/lib/api/`** - `client.ts` (fetch + `VITE_API_BASE_URL`), `schemas.ts` (Zod), `queries.ts` (TanStack Query hooks)
+- **`src/lib/schema/`** - `useSchema()` and helpers (`getTypeMeta`, `colorForType`, `typeLabel`, `edgeLabel`); built from `GET /api/graph/schema`, with a fallback derived from `/summary` and `/flows`
+- **`src/lib/format/`** - `humanize`, value/number/date formatting, CSV
+- **`src/store/`** - `workspace.ts` (sidebar, palette, highlighted records), `ask.ts` (conversation state)
+- **`e2e/`** - mocked-API fixtures and the Playwright screenshot script (not bundled)
+
+The UI contains no dataset-specific type names. Record type labels, colours, primary types, display properties, relationship labels and flows all come from the schema endpoint. When adding UI, read these from `useSchema()` rather than naming a type.
+
+Data flow: `SchemaProvider` loads schema + summary once; pages fetch their own data through the hooks in `lib/api/queries.ts`; `GraphCanvas` renders any `{nodes, edges}` payload; `RecordInspector` fetches a record's neighbourhood via `/graph/subgraph`.
 
 ## Development
 
@@ -124,7 +120,7 @@ cd frontend
 npm run dev
 ```
 
-The frontend connects to the backend at `http://localhost:8000` (configured in `src/services/api.ts`). CORS is enabled for `http://localhost:5173`.
+The frontend connects to the backend at `http://localhost:8000/api` (override with `VITE_API_BASE_URL`; see `src/lib/api/client.ts`). CORS is enabled for `http://localhost:5173`.
 
 ### Testing & Linting
 
@@ -136,6 +132,7 @@ The frontend connects to the backend at `http://localhost:8000` (configured in `
 ```bash
 npm run lint                   # ESLint check
 npm run build                  # TypeScript + Vite build
+npm run e2e:screens -- ./e2e/screens   # Playwright screenshots against mocked API routes (see frontend/README.md)
 ```
 
 ## Key Concepts
@@ -194,14 +191,14 @@ The graph API traverses these relationships to build subgraphs for visualization
 4. Run migrations: `python migrate.py apply`
 
 **Updating frontend visualization:**
-- Graph components use Cytoscape (rendered via `react-cytoscapejs`)
-- Modify layout/styling in `GraphExplorer.tsx`
-- Node/edge data comes from `GraphSubgraphResponse` from backend
-- All graph views (entity, flow, trace, knowledge graph) share `GraphExplorer` — feed it a `GraphData` object
+- Graph rendering lives in `src/components/graph/GraphCanvas.tsx` (Cytoscape, no wrapper library); node/edge styling is in `graphStyle.ts`, layouts in `layouts.ts`
+- Colours come from design tokens, resolved at runtime by `useThemeColors.ts` so the canvas follows light/dark
+- Node/edge data is a `GraphData` (`lib/api/schemas.ts`); feed it to `GraphCanvas` and the Explore, Flow and Trace screens all work the same way
+- Never hard-code a record type name or colour: use `useSchema()` (`colorForType`, `typeLabel`, `edgeLabel`)
 
 **Adding a new O2C flow:**
 1. Add an entry to `backend/src/domain/flow_definitions.py` (`FLOW_DEFINITIONS` dict)
-2. The `/api/graph/flows` endpoint and `FlowSelector` frontend component pick it up automatically
+2. The `/api/graph/flows` endpoint and the Flows page (`src/features/flows/`) pick it up automatically. List `node_types` in process order: the UI uses that order for steps and layout
 
 ## Important Notes
 
