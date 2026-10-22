@@ -484,8 +484,9 @@ class GraphRepository:
             return GraphSubgraphResponse(nodes=[], edges=[])
 
         edge_queries = self._get_individual_edge_queries()
-        included_edge_types = set(flow["edge_types"])
-        node_types = set(flow["node_types"])
+        # Ordered de-duplication (not set()) so the generated SQL is deterministic.
+        included_edge_types = list(dict.fromkeys(flow["edge_types"]))
+        node_types = list(dict.fromkeys(flow["node_types"]))
 
         logger.debug(
             "get_flow | flow_id=%s node_types=%s edge_types=%s",
@@ -604,14 +605,15 @@ class GraphRepository:
         endpoints present and cross-document links (FULFILLS, BILLS_FOR,
         GENERATES, CLEARS) are always represented.
         """
-        all_node_types = {
-            "Customer", "SalesOrder", "SalesOrderItem",
+        # Ordered lists (not sets) so the generated SQL is deterministic.
+        all_node_types = [
+            "SalesOrder", "SalesOrderItem",
             "Delivery", "DeliveryItem",
             "Invoice", "InvoiceItem",
             "JournalEntry", "Payment",
-            "Product", "Address",
-        }
-        active_types = set(type_filter) if type_filter else all_node_types
+            "Product", "Customer", "Address",
+        ]
+        active_types = list(dict.fromkeys(type_filter)) if type_filter else all_node_types
 
         edge_queries = self._get_individual_edge_queries()
 
