@@ -77,6 +77,18 @@
   justify-content: flex-end;
 }
 
+.stickyRight {
+  position: sticky;
+  right: 0;
+  background: var(--gs-surface-1);
+  box-shadow: inset 1px 0 0 var(--gs-separator);
+}
+
+.table thead th.stickyRight {
+  z-index: 2;
+  background: var(--gs-surface-2);
+}
+
 .sortIcon {
   flex: none;
   color: var(--gs-accent-text);
@@ -101,6 +113,15 @@
 
 .selected td {
   background: var(--gs-accent-soft);
+}
+
+/* The accent wash is translucent: lay it over the surface so scrolled cells do not show through. */
+.selected td.stickyRight {
+  background: linear-gradient(var(--gs-accent-soft), var(--gs-accent-soft)), var(--gs-surface-1);
+}
+
+.clickable:hover td.stickyRight {
+  background: var(--gs-surface-2);
 }
 
 .clickable:focus-visible {

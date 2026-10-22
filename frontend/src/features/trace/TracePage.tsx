@@ -15,6 +15,7 @@ import { Skeleton } from '../../components/ui/Skeleton';
 import { TypeDot } from '../../components/ui/TypeBadge';
 import { useEntities, useTraceGraph } from '../../lib/api/queries';
 import { makeRecordId, pluralize } from '../../lib/format';
+import { naturalLabel } from '../../lib/graph';
 import { useMediaQuery } from '../../lib/hooks';
 import { orderTypesByFlow, useSchema } from '../../lib/schema';
 import { RecordInspector } from '../inspector/RecordInspector';
@@ -51,10 +52,13 @@ export default function TracePage() {
     const needle = id.trim().toLowerCase();
     const all = entities.data?.entities ?? [];
     return all
-      .map((entity) => ({ value: String(entity.id ?? ''), hint: typeof entity.label === 'string' && entity.label !== String(entity.id) ? entity.label : undefined }))
-      .filter((option) => option.value && option.value.toLowerCase().includes(needle))
+      .map((entity) => {
+        const value = String(entity.id ?? '');
+        return { value, hint: naturalLabel(type, value, typeof entity.label === 'string' ? entity.label : null) ?? undefined };
+      })
+      .filter((option) => option.value && (option.value.toLowerCase().includes(needle) || (option.hint ?? '').toLowerCase().includes(needle)))
       .slice(0, 20);
-  }, [entities.data, id]);
+  }, [entities.data, id, type]);
 
   const canvasRef = useRef<GraphCanvasHandle>(null);
   const [layout, setLayout] = useState<LayoutName>('leftToRight');

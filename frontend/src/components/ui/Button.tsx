@@ -84,3 +84,23 @@ export const IconButton = forwardRef<HTMLButtonElement, IconButtonProps>(functio
     </Tooltip>
   );
 });
+
+export interface IconLinkButtonProps extends Omit<LinkProps, 'className' | 'aria-label'> {
+  /** Required: icon-only links need an accessible name. It also becomes the tooltip. */
+  label: string;
+  icon: ReactNode;
+  variant?: Variant;
+  size?: Size;
+  tooltipSide?: 'top' | 'bottom' | 'right' | 'left';
+}
+
+/** A link that looks like an icon button. */
+export function IconLinkButton({ label, icon, variant = 'ghost', size = 'md', tooltipSide, ...rest }: IconLinkButtonProps) {
+  return (
+    <Tooltip content={label} side={tooltipSide}>
+      <Link aria-label={label} className={classes(variant, size, false, styles.icon)} {...rest}>
+        {icon}
+      </Link>
+    </Tooltip>
+  );
+}

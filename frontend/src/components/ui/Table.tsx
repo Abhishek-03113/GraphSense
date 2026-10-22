@@ -13,6 +13,8 @@ export interface Column<T> {
   align?: 'left' | 'right';
   mono?: boolean;
   numeric?: boolean;
+  /** Keep this column in view at the right edge while wide tables scroll. */
+  sticky?: 'right';
 }
 
 interface DataTableProps<T> {
@@ -71,7 +73,12 @@ export function DataTable<T>({
               const active = sort?.key === column.key;
               const ariaSort = active ? (sort.direction === 'asc' ? 'ascending' : 'descending') : column.sortable ? 'none' : undefined;
               return (
-                <th key={column.key} scope="col" aria-sort={ariaSort} className={column.align === 'right' ? styles.right : undefined}>
+                <th
+                  key={column.key}
+                  scope="col"
+                  aria-sort={ariaSort}
+                  className={[column.align === 'right' ? styles.right : '', column.sticky === 'right' ? styles.stickyRight : ''].filter(Boolean).join(' ') || undefined}
+                >
                   {column.sortable ? (
                     <button type="button" className={styles.headButton} onClick={() => toggle(column.key)}>
                       {column.header}
@@ -110,6 +117,7 @@ export function DataTable<T>({
                       key={column.key}
                       className={[
                         column.align === 'right' ? styles.right : '',
+                        column.sticky === 'right' ? styles.stickyRight : '',
                         column.mono ? styles.mono : '',
                         column.numeric ? styles.numeric : '',
                       ]

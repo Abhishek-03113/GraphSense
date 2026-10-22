@@ -2,14 +2,15 @@ import { Network, Route, Rows3 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { Navigate, NavLink, useNavigate, useParams } from 'react-router-dom';
 import { Page } from '../../app/Page';
-import { LinkButton } from '../../components/ui/Button';
+import { IconLinkButton } from '../../components/ui/Button';
 import { EmptyState, ErrorState } from '../../components/ui/EmptyState';
 import { SearchInput, Select } from '../../components/ui/Field';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { DataTable, type Column } from '../../components/ui/Table';
 import { TypeDot } from '../../components/ui/TypeBadge';
 import { useEntities } from '../../lib/api/queries';
-import { formatCompact, formatInteger, humanize, makeRecordId, pluralize } from '../../lib/format';
+import { currencyFor, formatCompact, formatInteger, formatValue, humanize, makeRecordId, pluralize } from '../../lib/format';
+import { naturalLabel } from '../../lib/graph';
 import { useSchema } from '../../lib/schema';
 import { RecordInspector } from '../inspector/RecordInspector';
 import { LoadDataEmpty } from '../onboarding/LoadDataEmpty';
@@ -17,9 +18,12 @@ import styles from './Records.module.css';
 
 interface Row {
   id: string;
-  label: string;
+  /** A human name for the record, when the server has one. */
+  name: string | null;
   extra: Record<string, unknown>;
 }
+
+const isBlank = (value: unknown) => value === null || value === undefined || value === '';
 
 const LIMITS = [25, 50, 100];
 
@@ -35,40 +39,69 @@ export default function RecordsPage() {
   const entities = useEntities(type, limit);
   const meta = type ? getTypeMeta(type) : null;
 
+  const allRows = useMemo<Row[]>(
+    () =>
+      (entities.data?.entities ?? [])
+        .map((entity) => {
+          const { id, label, ...extra } = entity;
+          const value = String(id ?? '');
+          return { id: value, name: naturalLabel(type ?? '', value, typeof label === 'string' ? label : null), extra };
+        })
+        .filter((row) => row.id),
+    [entities.data, type],
+  );
+
   const rows = useMemo<Row[]>(() => {
     const needle = query.trim().toLowerCase();
-    return (entities.data?.entities ?? [])
-      .map((entity) => {
-        const { id, label, ...extra } = entity;
-        return { id: String(id ?? ''), label: typeof label === 'string' ? label : '', extra };
-      })
-      .filter((row) => row.id)
-      .filter((row) => !needle || row.id.toLowerCase().includes(needle) || row.label.toLowerCase().includes(needle));
-  }, [entities.data, query]);
+    if (!needle) return allRows;
+    return allRows.filter((row) =>
+      [row.id, row.name, ...Object.values(row.extra)].some((part) => !isBlank(part) && typeof part !== 'object' && String(part).toLowerCase().includes(needle)),
+    );
+  }, [allRows, query]);
+
+  const hasNames = allRows.some((row) => row.name);
 
   const columns = useMemo<Column<Row>[]>(() => {
-    const extraKeys = [...new Set(rows.flatMap((row) => Object.keys(row.extra)))];
+    // Columns that have a value in at least one row, in the order the server listed them.
+    const extraKeys = [...new Set(allRows.flatMap((row) => Object.keys(row.extra)))].filter((key) => allRows.some((row) => !isBlank(row.extra[key])));
+    // A separate name column only when no listed column already carries the same text.
+    const nameRepeated = extraKeys.some((key) => allRows.every((row) => !row.name || row.extra[key] === row.name));
+    const cell = (key: string, row: Row) => formatValue(key, row.extra[key], { currency: currencyFor(key, row.extra) });
     return [
       { key: 'id', header: 'ID', value: (row) => row.id, mono: true, sortable: true },
-      ...extraKeys.map<Column<Row>>((key) => ({ key, header: humanize(key), value: (row) => row.extra[key], render: (row) => String(row.extra[key] ?? '—'), sortable: true })),
+      ...(hasNames && !nameRepeated
+        ? [{ key: '_name', header: 'Name', value: (row: Row) => row.name ?? '', render: (row: Row) => row.name ?? '—', sortable: true } satisfies Column<Row>]
+        : []),
+      ...extraKeys.map<Column<Row>>((key) => {
+        const shown = allRows.slice(0, 25).map((row) => cell(key, row)).filter((formatted) => formatted.kind !== 'empty');
+        const numeric = shown.length > 0 && shown.every((formatted) => formatted.numeric);
+        const mono = shown.length > 0 && shown.every((formatted) => formatted.mono);
+        return {
+          key,
+          header: humanize(key),
+          value: (row) => row.extra[key],
+          render: (row) => cell(key, row).text,
+          sortable: true,
+          align: numeric ? 'right' : 'left',
+          numeric,
+          mono,
+        };
+      }),
       {
         key: 'actions',
-        header: 'Open in',
+        header: 'Open',
         value: () => '',
         align: 'right',
+        sticky: 'right',
         render: (row) => (
           <span className={styles.rowActions} onClick={(event) => event.stopPropagation()}>
-            <LinkButton size="sm" variant="ghost" icon={<Route size={14} />} to={`/trace?type=${encodeURIComponent(type ?? '')}&id=${encodeURIComponent(row.id)}`}>
-              Trace
-            </LinkButton>
-            <LinkButton size="sm" variant="ghost" icon={<Network size={14} />} to={`/explore?focus=${encodeURIComponent(makeRecordId(type ?? '', row.id))}`}>
-              Explore
-            </LinkButton>
+            <IconLinkButton size="sm" label="Trace lifecycle" icon={<Route size={16} />} to={`/trace?type=${encodeURIComponent(type ?? '')}&id=${encodeURIComponent(row.id)}`} />
+            <IconLinkButton size="sm" label="Show in Explore" icon={<Network size={16} />} to={`/explore?focus=${encodeURIComponent(makeRecordId(type ?? '', row.id))}`} />
           </span>
         ),
       },
     ];
-  }, [rows, type]);
+  }, [allRows, hasNames, type]);
 
   if (isEmpty) {
     return (
@@ -133,7 +166,7 @@ export default function RecordsPage() {
               </div>
               <div className={styles.tools}>
                 <div className={styles.search}>
-                  <SearchInput label="Filter by ID" hideLabel placeholder="Filter by ID…" value={query} mono onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery('')} />
+                  <SearchInput label="Filter records" hideLabel placeholder="Filter this sample…" value={query} onChange={(event) => setQuery(event.target.value)} onClear={() => setQuery('')} />
                 </div>
                 <Select label="Sample size" hideLabel value={limit} onChange={(event) => setLimit(Number(event.target.value))}>
                   {LIMITS.map((n) => (
@@ -154,7 +187,7 @@ export default function RecordsPage() {
             <EmptyState
               icon={<Rows3 size={22} />}
               title={query ? 'No records match that filter' : `No ${meta ? meta.plural.toLowerCase() : 'records'} yet`}
-              description={query ? 'Try a shorter ID, or clear the filter. The table only filters the sample shown here. Use search to look up any record by its ID.' : 'There are no records of this type in the loaded data.'}
+              description={query ? 'Try a shorter search, or clear the filter. The table only filters the sample shown here. Use search to look up any record by its ID.' : 'There are no records of this type in the loaded data.'}
             />
           )}
           {entities.isSuccess && rows.length > 0 && meta && (
