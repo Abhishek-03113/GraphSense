@@ -16,6 +16,8 @@ import structlog
 from google import genai
 from sqlalchemy import create_engine, text
 
+from src.domain.graph_registry import get_dataset
+
 from .config import ai_settings
 from .embeddings import generate_embedding
 from .guardrails import check_guardrails
@@ -321,36 +323,16 @@ def _extract_entities(data: list[dict]) -> list[dict]:
     entities: list[dict] = []
     seen: set[str] = set()
 
-    # Maps a column name substring → graph node type.
-    # Keys ordered longest-first so more specific matches win.
-    entity_column_map: dict[str, str] = {
-        "billing_doc_number": "Invoice",
-        "billing_document": "Invoice",
-        "invoice": "Invoice",
-        "sales_order_id": "SalesOrder",
-        "sales_order": "SalesOrder",
-        "delivery_document": "Delivery",
-        "delivery_id": "Delivery",
-        "delivery": "Delivery",
-        "accounting_document": "JournalEntry",
-        "journal_entry_id": "JournalEntry",
-        "journal_entry": "JournalEntry",
-        "payment_document": "Payment",
-        "payment_id": "Payment",
-        "customer_id": "Customer",
-        "customer": "Customer",
-        "business_partner": "Customer",
-        "material_id": "Product",
-        "material": "Product",
-        "product": "Product",
-    }
+    # Ordered (column name substring, graph node type) pairs from the active
+    # dataset; first match wins, so more specific substrings come first.
+    entity_column_hints = get_dataset().entity_column_hints
 
     for row in data[:100]:
         for col, val in row.items():
             if val is None:
                 continue
             col_lower = col.lower()
-            for key, node_type in entity_column_map.items():
+            for key, node_type in entity_column_hints:
                 if key in col_lower:
                     entity_key = f"{node_type}:{val}"
                     if entity_key not in seen:
