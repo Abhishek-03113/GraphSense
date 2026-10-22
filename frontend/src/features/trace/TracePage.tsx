@@ -201,7 +201,7 @@ export default function TracePage() {
                 label={`Lifecycle of ${startMeta?.label ?? 'record'} ${urlId}: ${records} records.`}
               />
               <CanvasToolbar canvas={canvasRef} layout={layout} onLayout={setLayout} />
-              <Legend types={legendTypes} note={false} />
+              {connected && <Legend types={legendTypes} note={false} />}
               {trace.isPending && <CanvasLoading message="Tracing…" />}
               {trace.isError && (
                 <CanvasMessage>

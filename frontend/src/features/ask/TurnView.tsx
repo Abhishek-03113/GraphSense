@@ -139,23 +139,23 @@ function RecordChips({ records, onOpen }: { records: RecordRef[]; onOpen: (focus
           </Button>
         )}
       </div>
-      <div className={styles.chips} role="list">
+      <ul className={styles.chips} aria-label="Records mentioned">
         {shown.map((record) => (
-          <button
-            key={record.id}
-            type="button"
-            role="listitem"
-            className={styles.chip}
-            onClick={() => onOpen(record, records)}
-            aria-label={`Open ${typeLabel(record.type)} ${recordValue({ id: record.id, type: record.type })} in Explore`}
-          >
-            <TypeDot type={record.type} />
-            <span>{typeLabel(record.type)}</span>
-            <span className={styles.chipId}>{recordValue({ id: record.id, type: record.type })}</span>
-          </button>
+          <li key={record.id}>
+            <button
+              type="button"
+              className={styles.chip}
+              onClick={() => onOpen(record, records)}
+              aria-label={`Open ${typeLabel(record.type)} ${recordValue({ id: record.id, type: record.type })} in Explore`}
+            >
+              <TypeDot type={record.type} />
+              <span>{typeLabel(record.type)}</span>
+              <span className={styles.chipId}>{recordValue({ id: record.id, type: record.type })}</span>
+            </button>
+          </li>
         ))}
-        {records.length > shown.length && <span className={styles.muted}>+{records.length - shown.length} more</span>}
-      </div>
+        {records.length > shown.length && <li className={styles.muted}>+{records.length - shown.length} more</li>}
+      </ul>
     </div>
   );
 }

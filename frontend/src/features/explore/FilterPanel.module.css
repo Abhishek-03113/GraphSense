@@ -68,6 +68,7 @@
 
 .result {
   display: flex;
+  width: 100%;
   align-items: center;
   gap: var(--gs-space-2);
   min-height: var(--gs-control-md);

@@ -75,24 +75,26 @@ export function FilterPanel({
           onClear={() => onSearch('')}
         />
         {query && (
-          <div className={styles.results} role="list" aria-label="Matching records" aria-live="polite">
-            {matches.map((node) => (
-              <button
-                key={node.id}
-                type="button"
-                role="listitem"
-                className={[styles.result, node.id === selectedId ? styles.resultActive : ''].filter(Boolean).join(' ')}
-                onClick={() => onPick(node.id)}
-              >
-                <TypeDot type={node.type} />
-                <span className={styles.resultId}>{recordValue(node)}</span>
-                <span className={styles.resultType}>{typeLabel(node.type)}</span>
-              </button>
-            ))}
+          <div aria-live="polite">
+            {matches.length > 0 && (
+              <ul className={styles.results} aria-label="Matching records">
+                {matches.map((node) => (
+                  <li key={node.id}>
+                    <button
+                      type="button"
+                      className={[styles.result, node.id === selectedId ? styles.resultActive : ''].filter(Boolean).join(' ')}
+                      onClick={() => onPick(node.id)}
+                    >
+                      <TypeDot type={node.type} />
+                      <span className={styles.resultId}>{recordValue(node)}</span>
+                      <span className={styles.resultType}>{typeLabel(node.type)}</span>
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
             {matches.length === 0 && (
-              <p className={styles.hint} role="listitem">
-                No records in view match “{search}”. To look up any record by ID, open search with the shortcut.
-              </p>
+              <p className={styles.hint}>No records in view match “{search}”. To look up any record by ID, open search with the shortcut.</p>
             )}
           </div>
         )}
