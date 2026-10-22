@@ -13,7 +13,6 @@ construction because the repository interpolates them into SQL text.
 from __future__ import annotations
 
 import re
-from typing import Dict, List, Optional, Tuple
 
 from pydantic import BaseModel, ConfigDict, field_validator, model_validator
 
@@ -51,16 +50,16 @@ class NodeTypeDef(_Frozen):
     plural: str
     description: str
     category: NodeCategory = "other"
-    accent: Optional[AccentName] = None
-    icon: Optional[str] = None
+    accent: AccentName | None = None
+    icon: str | None = None
     is_primary: bool = False
-    display_properties: Tuple[str, ...] = ()
+    display_properties: tuple[str, ...] = ()
 
     # --- query mapping (used by the repository) ---------------------------
     table: str
     # One column for a plain id, or two (document, item) for a composite id
     # rendered as ``doc-item`` with the item number zero-stripped.
-    id_columns: Tuple[str, ...]
+    id_columns: tuple[str, ...]
     # Count distinct ids rather than rows (multi-row-per-document tables).
     count_distinct: bool = False
 
@@ -76,14 +75,14 @@ class NodeTypeDef(_Frozen):
 
     @field_validator("id_columns", "display_properties")
     @classmethod
-    def _valid_columns(cls, v: Tuple[str, ...]) -> Tuple[str, ...]:
+    def _valid_columns(cls, v: tuple[str, ...]) -> tuple[str, ...]:
         for col in v:
             _check(_COLUMN, col, "column name")
         return v
 
     @field_validator("id_columns")
     @classmethod
-    def _id_arity(cls, v: Tuple[str, ...]) -> Tuple[str, ...]:
+    def _id_arity(cls, v: tuple[str, ...]) -> tuple[str, ...]:
         if len(v) not in (1, 2):
             raise ValueError("id_columns must have one (plain) or two (composite) columns")
         return v
@@ -108,10 +107,10 @@ class EdgeTypeDef(_Frozen):
     table: str
     alias: str
     # One column for a plain id, or two (document, item) for a composite id.
-    source_columns: Tuple[str, ...]
-    target_columns: Tuple[str, ...]
+    source_columns: tuple[str, ...]
+    target_columns: tuple[str, ...]
     # Rows where any of these columns is NULL are skipped.
-    not_null: Tuple[str, ...] = ()
+    not_null: tuple[str, ...] = ()
     distinct: bool = False
 
     @field_validator("key", "source", "target")
@@ -131,14 +130,14 @@ class EdgeTypeDef(_Frozen):
 
     @field_validator("source_columns", "target_columns", "not_null")
     @classmethod
-    def _valid_columns(cls, v: Tuple[str, ...]) -> Tuple[str, ...]:
+    def _valid_columns(cls, v: tuple[str, ...]) -> tuple[str, ...]:
         for col in v:
             _check(_COLUMN, col, "column name")
         return v
 
     @field_validator("source_columns", "target_columns")
     @classmethod
-    def _id_arity(cls, v: Tuple[str, ...]) -> Tuple[str, ...]:
+    def _id_arity(cls, v: tuple[str, ...]) -> tuple[str, ...]:
         if len(v) not in (1, 2):
             raise ValueError("endpoint columns must have one (plain) or two (composite) columns")
         return v
@@ -150,12 +149,12 @@ class GraphDataset(_Frozen):
     id: str
     name: str
     description: str
-    node_types: Tuple[NodeTypeDef, ...]
-    edge_types: Tuple[EdgeTypeDef, ...]
-    flows: Tuple[FlowDefinition, ...] = ()
+    node_types: tuple[NodeTypeDef, ...]
+    edge_types: tuple[EdgeTypeDef, ...]
+    flows: tuple[FlowDefinition, ...] = ()
     # Ordered (column-name substring, node type key) pairs used to recognise
     # entity references in tabular query results.  First match wins.
-    entity_column_hints: Tuple[Tuple[str, str], ...] = ()
+    entity_column_hints: tuple[tuple[str, str], ...] = ()
 
     @field_validator("id")
     @classmethod
@@ -163,7 +162,7 @@ class GraphDataset(_Frozen):
         return _check(re.compile(r"^[a-z][a-z0-9_]*$"), v, "dataset id")
 
     @model_validator(mode="after")
-    def _consistent(self) -> "GraphDataset":
+    def _consistent(self) -> GraphDataset:
         node_keys = [n.key for n in self.node_types]
         if len(set(node_keys)) != len(node_keys):
             raise ValueError("duplicate node type keys")
@@ -173,7 +172,7 @@ class GraphDataset(_Frozen):
         for e in self.edge_types:
             if e.source not in known or e.target not in known:
                 raise ValueError(
-                    f"edge {e.key}: source/target {e.source}->{e.target} is not a registered node type"
+                    f"edge {e.key}: {e.source}->{e.target} is not between registered node types"
                 )
             ident = (e.key, e.source, e.target)
             if ident in seen_edges:
@@ -203,26 +202,26 @@ class GraphDataset(_Frozen):
     # ------------------------------------------------------------------
 
     @property
-    def node_keys(self) -> List[str]:
+    def node_keys(self) -> list[str]:
         return [n.key for n in self.node_types]
 
-    def get_node_type(self, key: str) -> Optional[NodeTypeDef]:
+    def get_node_type(self, key: str) -> NodeTypeDef | None:
         for n in self.node_types:
             if n.key == key:
                 return n
         return None
 
-    def edge_types_for(self, key: str) -> List[EdgeTypeDef]:
+    def edge_types_for(self, key: str) -> list[EdgeTypeDef]:
         """All edge definitions that emit ``key`` as their type, in definition order."""
         return [e for e in self.edge_types if e.key == key]
 
-    def get_flow(self, flow_id: str) -> Optional[FlowDefinition]:
+    def get_flow(self, flow_id: str) -> FlowDefinition | None:
         for f in self.flows:
             if f.id == flow_id:
                 return f
         return None
 
-    def flows_by_id(self) -> Dict[str, FlowDefinition]:
+    def flows_by_id(self) -> dict[str, FlowDefinition]:
         return {f.id: f for f in self.flows}
 
     # ------------------------------------------------------------------

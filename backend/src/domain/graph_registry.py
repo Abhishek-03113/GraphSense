@@ -11,7 +11,6 @@ import importlib
 import pkgutil
 import re
 from functools import lru_cache
-from typing import List, Optional
 
 from src.domain import datasets as _datasets_pkg
 from src.domain.config import graph_settings
@@ -24,7 +23,7 @@ class UnknownDatasetError(ValueError):
     """Raised when GRAPH_DATASET does not name a loadable dataset module."""
 
 
-def available_datasets() -> List[str]:
+def available_datasets() -> list[str]:
     """Dataset ids that can be selected via ``GRAPH_DATASET``."""
     return sorted(m.name for m in pkgutil.iter_modules(_datasets_pkg.__path__))
 
@@ -51,6 +50,6 @@ def _active() -> GraphDataset:
     return load_dataset(graph_settings.GRAPH_DATASET)
 
 
-def get_dataset(name: Optional[str] = None) -> GraphDataset:
+def get_dataset(name: str | None = None) -> GraphDataset:
     """The active dataset, or the named one when ``name`` is given."""
     return load_dataset(name) if name else _active()

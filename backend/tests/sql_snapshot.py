@@ -23,7 +23,7 @@ from typing import Any
 # The repository imports modules that read DATABASE_DSN at import time.
 os.environ.setdefault("DATABASE_DSN", "postgresql+asyncpg://u:p@localhost:5432/unused")
 
-from src.repositories.graph_repository import GraphRepository  # noqa: E402
+from src.repositories.graph_repository import GraphRepository
 
 FLOW_IDS = [
     "sales",

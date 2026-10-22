@@ -7,7 +7,7 @@ references match regardless of zero-padding differences.
 
 from __future__ import annotations
 
-from typing import Dict, List, Sequence, Tuple
+from collections.abc import Sequence
 
 from src.domain.graph_schema import EdgeTypeDef, GraphDataset, NodeTypeDef
 
@@ -58,7 +58,8 @@ class GraphSqlBuilder:
         distinct = "DISTINCT " if edge.distinct else ""
         where = ""
         if edge.not_null:
-            where = "\nWHERE " + " AND ".join(f"{edge.alias}.{c} IS NOT NULL" for c in edge.not_null)
+            checks = " AND ".join(f"{edge.alias}.{c} IS NOT NULL" for c in edge.not_null)
+            where = f"\nWHERE {checks}"
         return (
             f"SELECT {distinct}\n"
             f"    {source}::text AS source_id,\n"
@@ -69,7 +70,7 @@ class GraphSqlBuilder:
             f"FROM {edge.table} {edge.alias}{where}"
         )
 
-    def edge_selects(self) -> Dict[str, str]:
+    def edge_selects(self) -> dict[str, str]:
         """edge id -> SELECT, in dataset definition order."""
         return {edge_id(e): self.edge_select(e) for e in self.dataset.edge_types}
 
@@ -77,7 +78,7 @@ class GraphSqlBuilder:
         """Every edge definition combined with UNION ALL."""
         return "\n\nUNION ALL\n\n".join(self.edge_selects().values())
 
-    def edge_selects_for_keys(self, keys: Sequence[str]) -> Tuple[List[str], List[str]]:
+    def edge_selects_for_keys(self, keys: Sequence[str]) -> tuple[list[str], list[str]]:
         """SELECTs for the given edge type keys (in the order given).
 
         Returns ``(selects, unknown_keys)``; a key shared by several
