@@ -23,3 +23,7 @@ dist-ssr
 *.sln
 *.sw?
 .vercel
+
+# Screenshot output from e2e/screens.mjs
+e2e/screens
+e2e/.gs-e2e-dist
