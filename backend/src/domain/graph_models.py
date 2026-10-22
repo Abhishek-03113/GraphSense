@@ -36,7 +36,8 @@ class GraphSubgraphResponse(BaseModel):
 
 class GraphEntityResponse(BaseModel):
     type: str
-    entities: List[Dict[str, str]]  # List of {"id": "...", "label": "..."}
+    # Each entity is {"id": "...", "label": "...", <display property>: value, ...}.
+    entities: List[Dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------

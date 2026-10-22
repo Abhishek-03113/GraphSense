@@ -149,8 +149,8 @@ npm run build                  # TypeScript + Vite build
 
 - `GET /api/graph/schema` - Describes the active dataset (no DB access): `domain`, `node_types` (key, label, plural, description, category, accent, icon, is_primary, display_properties), `edge_types` (key, label, source, target, description), `flows`. Counts are not included; join with `/summary`
 - `GET /api/graph/summary` - Returns node/edge counts by entity type
-- `GET /api/graph/subgraph?root_type=SalesOrder&root_id=123&depth=2` - Returns nodes and edges reachable from a root entity (depth 1–5)
-- `GET /api/graph/entities/{node_type}?limit=50` - Returns sample entity IDs of a given type
+- `GET /api/graph/subgraph?root_type=SalesOrder&root_id=123&depth=2` - Returns nodes and edges reachable from a root entity (depth 1–5). Every graph endpoint (subgraph, flow, trace, full) fills `Node.properties` (display and other scalar columns of the record, NULLs omitted, dates as ISO strings, decimals as numbers) and, where the type declares a natural name, `Node.label`; `id` is never affected. Details are fetched with one batched query per node type
+- `GET /api/graph/entities/{node_type}?limit=50` - Returns a sample of records of a type: `{id, label}` plus the type's `display_properties` as extra keys (`null` when a record has no value)
 - `GET /api/graph/flows` - Lists all predefined O2C flow definitions (id, label, description, node/edge types)
 - `GET /api/graph/flow?flow_id=full_o2c&limit=50` - Returns a sampled subgraph for a named flow (`sales`, `fulfillment`, `billing`, `financial`, `full_o2c`)
 - `GET /api/graph/trace?doc_type=Invoice&doc_id=X&depth=4` - Traces the full O2C lifecycle for a document (reuses subgraph traversal at depth 4)
@@ -158,7 +158,7 @@ npm run build                  # TypeScript + Vite build
 
 ### Conversational Query (Chat) API
 
-- `POST /api/chat` - Accepts `{ message }`, returns `{ answer, sql, data, entities, error }`
+- `POST /api/chat` - Accepts `{ message }`, returns `{ answer, sql, data, entities, graph_nodes, error, row_count, summary }`. `error` is `null` or a stable code: `guardrail`, `sql_generation_failed`, `sql_execution_error: <detail>`, `not_configured` (no `GEMINI_API_KEY`) or `internal_error` (details are logged, not returned)
 - `POST /api/chat/train` - Triggers (re-)training of the RAG pipeline
 
 **Pipeline**: Guardrails → pgvector RAG retrieval (DDL + docs + SQL pairs + data summaries) → Gemini SQL generation → PostgreSQL execution → Gemini response synthesis
@@ -216,7 +216,7 @@ The graph API traverses these relationships to build subgraphs for visualization
 
 **Adding a new dataset:**
 1. Create `backend/src/domain/datasets/<name>.py` exposing `DATASET = GraphDataset(id="<name>", ...)` (the id must equal the module name)
-2. Per node type: presentation metadata (`label`, `plural`, `description`, `category`, `accent`, `icon`, `is_primary`, `display_properties`) plus the query mapping (`table`, `id_columns`, `count_distinct`). Per edge type: `key`, `label` (verb phrase), `source`, `target`, `description`, plus `table`, `alias`, `source_columns`, `target_columns`, `not_null`, `distinct`. Two `*_columns` entries mean a composite `doc-item` id with the item number zero-stripped
+2. Per node type: presentation metadata (`label`, `plural`, `description`, `category`, `accent`, `icon`, `is_primary`, `display_properties`) plus the query mapping (`table`, `id_columns`, `count_distinct`) and record details (`property_columns` for extra scalar columns, `label_column` or `label_lookup` for a natural name; all validated identifiers, values bound as parameters). Per edge type: `key`, `label` (verb phrase), `source`, `target`, `description`, plus `table`, `alias`, `source_columns`, `target_columns`, `not_null`, `distinct`. Two `*_columns` entries mean a composite `doc-item` id with the item number zero-stripped
 3. Add `flows` and optional `entity_column_hints`, then set `GRAPH_DATASET=<name>`
 4. Still dataset-specific and not driven by the registry: RAG training data (`src/ai/training.py`), guardrail keywords/messages (`src/ai/guardrails.py`), the synthesis prompt's entity mapping (`src/ai/chat.py`), ingestion (`src/ingestion/`) and the ORM models
 

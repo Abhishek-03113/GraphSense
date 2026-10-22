@@ -222,6 +222,14 @@
     "root_id": "90000001",
     "root_type": "Invoice"
    }
+  ],
+  [
+   "SELECT DISTINCT ON (_gs_id) t.billing_document::text AS _gs_id,t.billing_document_date,t.total_net_amount,t.transaction_currency,t.billing_document_is_cancelled,t.accounting_document,t.billing_document_type,t.sold_to_party,t.company_code,t.fiscal_year,t.creation_date,t.cancelled_billing_document,t.last_change_datetime FROM billing_document_headers t WHERE t.billing_document = ANY(CAST(:ids AS text[])) ORDER BY _gs_id,t.billing_document_date,t.total_net_amount,t.transaction_currency,t.billing_document_is_cancelled,t.accounting_document,t.billing_document_type,t.sold_to_party,t.company_code,t.fiscal_year,t.creation_date,t.cancelled_billing_document,t.last_change_datetime",
+   {
+    "ids": [
+     "90000001"
+    ]
+   }
   ]
  ],
  "summary": [

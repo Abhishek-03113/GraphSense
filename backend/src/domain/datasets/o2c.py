@@ -49,7 +49,7 @@ EDA-validated join paths (data/sap-o2c-data):
 """
 
 from src.domain.graph_models import FlowDefinition
-from src.domain.graph_schema import EdgeTypeDef, GraphDataset, NodeTypeDef
+from src.domain.graph_schema import EdgeTypeDef, GraphDataset, LabelLookup, NodeTypeDef
 
 # ---------------------------------------------------------------------------
 # Node types
@@ -76,6 +76,19 @@ NODE_TYPES = (
         ),
         table="sales_order_headers",
         id_columns=("sales_order",),
+        property_columns=(
+            "sales_order_type",
+            "sales_organization",
+            "distribution_channel",
+            "organization_division",
+            "requested_delivery_date",
+            "pricing_date",
+            "customer_payment_terms",
+            "incoterms_classification",
+            "incoterms_location1",
+            "created_by_user",
+            "last_change_datetime",
+        ),
     ),
     NodeTypeDef(
         key="SalesOrderItem",
@@ -94,6 +107,13 @@ NODE_TYPES = (
         ),
         table="sales_order_items",
         id_columns=("sales_order", "sales_order_item"),
+        property_columns=(
+            "sales_order_item_category",
+            "material_group",
+            "production_plant",
+            "storage_location",
+            "sales_document_rjcn_reason",
+        ),
     ),
     NodeTypeDef(
         key="Delivery",
@@ -112,6 +132,11 @@ NODE_TYPES = (
         ),
         table="outbound_delivery_headers",
         id_columns=("delivery_document",),
+        property_columns=(
+            "actual_goods_movement_date",
+            "hdr_general_incompletion_status",
+            "last_change_date",
+        ),
     ),
     NodeTypeDef(
         key="DeliveryItem",
@@ -129,6 +154,7 @@ NODE_TYPES = (
         ),
         table="outbound_delivery_items",
         id_columns=("delivery_document", "delivery_document_item"),
+        property_columns=("batch", "reference_sd_document", "reference_sd_document_item"),
     ),
     NodeTypeDef(
         key="Invoice",
@@ -148,6 +174,15 @@ NODE_TYPES = (
         ),
         table="billing_document_headers",
         id_columns=("billing_document",),
+        property_columns=(
+            "billing_document_type",
+            "sold_to_party",
+            "company_code",
+            "fiscal_year",
+            "creation_date",
+            "cancelled_billing_document",
+            "last_change_datetime",
+        ),
     ),
     NodeTypeDef(
         key="InvoiceItem",
@@ -166,6 +201,7 @@ NODE_TYPES = (
         ),
         table="billing_document_items",
         id_columns=("billing_document", "billing_document_item"),
+        property_columns=("reference_sd_document", "reference_sd_document_item"),
     ),
     NodeTypeDef(
         key="JournalEntry",
@@ -185,6 +221,19 @@ NODE_TYPES = (
         ),
         table="journal_entry_items_accounts_receivable",
         id_columns=("accounting_document",),
+        property_columns=(
+            "company_code",
+            "fiscal_year",
+            "accounting_document_type",
+            "document_date",
+            "customer",
+            "reference_document",
+            "profit_center",
+            "financial_account_type",
+            "clearing_accounting_document",
+            "amount_in_company_code_currency",
+            "company_code_currency",
+        ),
         # One row per line item: count unique documents, not rows.
         count_distinct=True,
     ),
@@ -206,6 +255,17 @@ NODE_TYPES = (
         ),
         table="payments_accounts_receivable",
         id_columns=("accounting_document",),
+        property_columns=(
+            "company_code",
+            "fiscal_year",
+            "document_date",
+            "gl_account",
+            "clearing_accounting_document",
+            "financial_account_type",
+            "profit_center",
+            "amount_in_company_code_currency",
+            "company_code_currency",
+        ),
         count_distinct=True,
     ),
     NodeTypeDef(
@@ -217,9 +277,31 @@ NODE_TYPES = (
         accent="teal",
         icon="box",
         is_primary=True,
-        display_properties=("product_type", "product_group", "base_unit", "gross_weight"),
+        display_properties=(
+            "product_description",
+            "product_type",
+            "product_group",
+            "base_unit",
+            "gross_weight",
+        ),
         table="products",
         id_columns=("product",),
+        property_columns=(
+            "net_weight",
+            "weight_unit",
+            "division",
+            "industry_sector",
+            "creation_date",
+            "product_old_id",
+            "is_marked_for_deletion",
+        ),
+        # The name lives in a separate descriptions table (English rows).
+        label_lookup=LabelLookup(
+            table="product_descriptions",
+            match_column="product",
+            label_column="product_description",
+            filters=(("language", "EN"),),
+        ),
     ),
     NodeTypeDef(
         key="Customer",
@@ -238,6 +320,16 @@ NODE_TYPES = (
         ),
         table="business_partners",
         id_columns=("business_partner",),
+        property_columns=(
+            "customer",
+            "business_partner_name",
+            "organization_bp_name1",
+            "business_partner_grouping",
+            "form_of_address",
+            "last_change_date",
+            "is_marked_for_archiving",
+        ),
+        label_column="business_partner_full_name",
     ),
     NodeTypeDef(
         key="Address",
@@ -250,6 +342,12 @@ NODE_TYPES = (
         display_properties=("street_name", "city_name", "postal_code", "country"),
         table="business_partner_addresses",
         id_columns=("business_partner", "address_id"),
+        property_columns=(
+            "region",
+            "validity_start_date",
+            "validity_end_date",
+            "address_time_zone",
+        ),
     ),
 )
 

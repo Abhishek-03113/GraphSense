@@ -78,12 +78,29 @@ class _EmptyResult:
     def scalar(self) -> int:
         return 0
 
+    def mappings(self) -> "_EmptyResult":
+        return self
+
+    def all(self) -> list:
+        return []
+
+
+class _Savepoint:
+    async def __aenter__(self) -> "_Savepoint":
+        return self
+
+    async def __aexit__(self, *exc: Any) -> bool:
+        return False
+
 
 class RecordingSession:
     """Stands in for ``AsyncSession``: records SQL, returns empty results."""
 
     def __init__(self) -> None:
         self.statements: list[list[Any]] = []
+
+    def begin_nested(self) -> _Savepoint:
+        return _Savepoint()
 
     async def execute(self, statement: Any, params: dict | None = None) -> _EmptyResult:
         self.statements.append([canon(str(statement)), dict(params or {})])

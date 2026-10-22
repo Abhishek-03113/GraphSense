@@ -93,7 +93,15 @@ def test_o2c_node_columns_exist_in_models():
     for n in ds.node_types:
         cols = _columns(n.table)
         assert set(n.id_columns) <= cols, n.key
-        assert set(n.display_properties) <= cols, n.key
+        assert set(n.detail_columns) <= cols, n.key
+        assert set(n.display_properties) <= set(n.detail_keys), n.key
+        if n.label_column:
+            assert n.label_column in cols, n.key
+        if n.label_lookup:
+            lk = n.label_lookup
+            lookup_cols = _columns(lk.table)
+            assert {lk.match_column, lk.label_column} <= lookup_cols, n.key
+            assert {c for c, _ in lk.filters} <= lookup_cols, n.key
 
 
 def test_o2c_edge_columns_exist_in_models():

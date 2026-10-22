@@ -41,6 +41,39 @@ class _Frozen(BaseModel):
     model_config = ConfigDict(frozen=True)
 
 
+class LabelLookup(_Frozen):
+    """A natural name that lives in another table (e.g. a product description).
+
+    The lookup row is the one in ``table`` whose ``match_column`` equals the
+    node's id column and that satisfies every ``(column, value)`` in
+    ``filters`` (values are bound as parameters, never interpolated).  The name
+    is used as the node label and is also exposed as a property keyed by
+    ``label_column``.
+    """
+
+    table: str
+    match_column: str
+    label_column: str
+    filters: tuple[tuple[str, str], ...] = ()
+
+    @field_validator("table")
+    @classmethod
+    def _valid_table(cls, v: str) -> str:
+        return _check(_TABLE, v, "lookup table name")
+
+    @field_validator("match_column", "label_column")
+    @classmethod
+    def _valid_column(cls, v: str) -> str:
+        return _check(_COLUMN, v, "lookup column name")
+
+    @field_validator("filters")
+    @classmethod
+    def _valid_filters(cls, v: tuple[tuple[str, str], ...]) -> tuple[tuple[str, str], ...]:
+        for column, _ in v:
+            _check(_COLUMN, column, "lookup filter column")
+        return v
+
+
 class NodeTypeDef(_Frozen):
     """One kind of entity in the graph, backed by one table."""
 
@@ -63,6 +96,15 @@ class NodeTypeDef(_Frozen):
     # Count distinct ids rather than rows (multi-row-per-document tables).
     count_distinct: bool = False
 
+    # --- record details (served on Node.properties / entity listings) -----
+    # Columns exposed as properties in addition to ``display_properties``.
+    property_columns: tuple[str, ...] = ()
+    # Column of ``table`` holding a natural name for the record (e.g. a
+    # customer's full name).  Becomes ``Node.label``; ``id`` is unaffected.
+    label_column: str | None = None
+    # Alternative to ``label_column`` when the name lives in another table.
+    label_lookup: LabelLookup | None = None
+
     @field_validator("key")
     @classmethod
     def _valid_key(cls, v: str) -> str:
@@ -73,12 +115,17 @@ class NodeTypeDef(_Frozen):
     def _valid_table(cls, v: str) -> str:
         return _check(_TABLE, v, "table name")
 
-    @field_validator("id_columns", "display_properties")
+    @field_validator("id_columns", "display_properties", "property_columns")
     @classmethod
     def _valid_columns(cls, v: tuple[str, ...]) -> tuple[str, ...]:
         for col in v:
             _check(_COLUMN, col, "column name")
         return v
+
+    @field_validator("label_column")
+    @classmethod
+    def _valid_label_column(cls, v: str | None) -> str | None:
+        return v if v is None else _check(_COLUMN, v, "label column name")
 
     @field_validator("id_columns")
     @classmethod
@@ -86,6 +133,31 @@ class NodeTypeDef(_Frozen):
         if len(v) not in (1, 2):
             raise ValueError("id_columns must have one (plain) or two (composite) columns")
         return v
+
+    @model_validator(mode="after")
+    def _label_source(self) -> NodeTypeDef:
+        if self.label_column and self.label_lookup:
+            raise ValueError("use either label_column or label_lookup, not both")
+        if self.label_lookup and len(self.id_columns) != 1:
+            raise ValueError("label_lookup needs a plain (single column) id")
+        return self
+
+    @property
+    def detail_columns(self) -> tuple[str, ...]:
+        """Columns of ``table`` exposed as properties, in display order, without duplicates.
+
+        ``display_properties`` that are produced by ``label_lookup`` rather than
+        by the table itself are excluded (see ``detail_keys``).
+        """
+        derived = self.label_lookup.label_column if self.label_lookup else None
+        cols = (*self.display_properties, *self.property_columns)
+        return tuple(c for c in dict.fromkeys(cols) if c != derived)
+
+    @property
+    def detail_keys(self) -> tuple[str, ...]:
+        """Every property key a record of this type can carry."""
+        derived = (self.label_lookup.label_column,) if self.label_lookup else ()
+        return tuple(dict.fromkeys((*self.display_properties, *self.property_columns, *derived)))
 
 
 class EdgeTypeDef(_Frozen):

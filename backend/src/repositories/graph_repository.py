@@ -1,12 +1,13 @@
-from typing import Dict, Iterable, List, Optional, Tuple
+from typing import Any, Dict, Iterable, List, Optional, Tuple
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import text
 from src.domain.graph_models import Node, Edge, GraphSummaryResponse, GraphSubgraphResponse, GraphEntityResponse
 from src.domain.graph_registry import get_dataset
-from src.domain.graph_schema import GraphDataset
+from src.domain.graph_schema import GraphDataset, NodeTypeDef
 from src.repositories import graph_sql
 from src.repositories.graph_sql import GraphSqlBuilder
 from src.utils.logger import get_logger
+from src.utils.serialization import json_value
 
 logger = get_logger(__name__)
 
@@ -81,6 +82,60 @@ class GraphRepository:
                 target=t_node_id,
                 type=e_type,
             ))
+
+    # ------------------------------------------------------------------
+    # Record details (properties and natural labels)
+    # ------------------------------------------------------------------
+
+    async def _fetch_details(
+        self, node_def: NodeTypeDef, node_ids: List[str]
+    ) -> Dict[str, Tuple[Optional[str], Dict[str, Any]]]:
+        """``id -> (label, properties)`` for many records of one type, in one query.
+
+        Records that have no row (dangling references) are simply absent.  A
+        failure here must not take the whole graph response down, so it is
+        logged and treated as "no details"; the savepoint keeps the request's
+        transaction usable afterwards.
+        """
+        if not node_ids:
+            return {}
+        sql, params = self.sql.details_query(node_def, node_ids)
+        try:
+            async with self.db.begin_nested():
+                rows = (await self.db.execute(text(sql), params)).mappings().all()
+        except Exception as exc:
+            logger.error("details | node_type=%s ids=%d — query FAILED: %s", node_def.key, len(node_ids), exc)
+            return {}
+
+        derived_key = node_def.label_lookup.label_column if node_def.label_lookup else None
+        details: Dict[str, Tuple[Optional[str], Dict[str, Any]]] = {}
+        for row in rows:
+            properties = {
+                col: json_value(row[col]) for col in node_def.detail_columns if row[col] is not None
+            }
+            name = row[self.sql.DETAIL_LABEL] if self.sql.DETAIL_LABEL in row else None
+            label = str(name).strip() if name is not None and str(name).strip() else None
+            if derived_key and label:
+                properties[derived_key] = label
+            details[row[self.sql.DETAIL_ID]] = (label, properties)
+        return details
+
+    async def _attach_details(self, nodes_map: Dict) -> None:
+        """Fill ``label`` and ``properties`` on the collected nodes, one query per node type."""
+        ids_by_type: Dict[str, List[str]] = {}
+        for node_type, node_id in nodes_map:
+            ids_by_type.setdefault(node_type, []).append(node_id)
+
+        for node_type, ids in ids_by_type.items():
+            node_def = self.dataset.get_node_type(node_type)
+            if node_def is None:
+                continue
+            details = await self._fetch_details(node_def, ids)
+            for node_id, (label, properties) in details.items():
+                node = nodes_map[(node_type, node_id)]
+                if label:
+                    node.label = label
+                node.properties = properties
 
     # ------------------------------------------------------------------
     # Public API methods
@@ -201,6 +256,7 @@ class GraphRepository:
         )
 
         self._add_edges(rows, nodes_map, edges)
+        await self._attach_details(nodes_map)
 
         logger.info(
             "get_subgraph | root=%s:%s depth=%d → nodes=%d edges=%d",
@@ -312,6 +368,7 @@ class GraphRepository:
         nodes_map: Dict = {}
         edges: List[Edge] = []
         self._add_edges(result, nodes_map, edges)
+        await self._attach_details(nodes_map)
 
         logger.info(
             "get_flow | flow_id=%s limit=%d → nodes=%d edges=%d",
@@ -378,6 +435,7 @@ class GraphRepository:
         nodes_map: Dict = {}
         edges: List[Edge] = []
         self._add_edges(rows, nodes_map, edges)
+        await self._attach_details(nodes_map)
 
         logger.info(
             "get_full_graph | node_limit=%d type_filter=%s → nodes=%d edges=%d",
@@ -386,13 +444,28 @@ class GraphRepository:
         return GraphSubgraphResponse(nodes=list(nodes_map.values()), edges=edges)
 
     async def get_entities(self, node_type: str, limit: int = 50) -> GraphEntityResponse:
-        """Returns a sample of entity IDs and labels for the given node type."""
+        """Returns a sample of records for the given node type.
+
+        Each entity is ``{id, label, <display property>: value, ...}``: ``id`` and
+        ``label`` as before, plus the type's display properties (``None`` when
+        a record has no value, so every row carries the same keys).
+        """
         node = self.dataset.get_node_type(node_type)
         if node is None:
             return GraphEntityResponse(type=node_type, entities=[])
 
         result = await self.db.execute(text(self.sql.entities_query(node)), {"limit": limit})
+        ids = [row[0] for row in result]
+        details = await self._fetch_details(node, ids)
 
-        entities = [{"id": row[0], "label": f"{node_type} {row[0]}"} for row in result]
+        reserved = {"id", "label"}
+        entities: List[Dict[str, Any]] = []
+        for entity_id in ids:
+            label, properties = details.get(entity_id, (None, {}))
+            entity: Dict[str, Any] = {"id": entity_id, "label": label or f"{node_type} {entity_id}"}
+            for key in node.display_properties:
+                if key not in reserved:
+                    entity[key] = properties.get(key)
+            entities.append(entity)
         logger.info("get_entities | node_type=%s limit=%d → returned=%d", node_type, limit, len(entities))
         return GraphEntityResponse(type=node_type, entities=entities)

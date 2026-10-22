@@ -98,12 +98,13 @@ class GraphSqlBuilder:
     # ------------------------------------------------------------------
 
     @staticmethod
-    def id_expression(node: NodeTypeDef) -> str:
-        """Unqualified SQL expression for a node's id within its own table."""
+    def id_expression(node: NodeTypeDef, alias: str | None = None) -> str:
+        """SQL expression for a node's id within its own table (qualified by ``alias`` if given)."""
+        prefix = f"{alias}." if alias else ""
         if len(node.id_columns) == 1:
-            return node.id_columns[0]
+            return f"{prefix}{node.id_columns[0]}"
         doc, item = node.id_columns
-        return f"{doc} || '-' || {norm(item)}"
+        return f"{prefix}{doc} || '-' || {norm(prefix + item)}"
 
     @staticmethod
     def count_query(node: NodeTypeDef) -> str:
@@ -116,3 +117,61 @@ class GraphSqlBuilder:
 
     def entities_query(self, node: NodeTypeDef) -> str:
         return f"SELECT DISTINCT {self.id_expression(node)}::text FROM {node.table} LIMIT :limit"
+
+
+    # ------------------------------------------------------------------
+    # Record details
+    # ------------------------------------------------------------------
+
+    # Output names of the id and label columns in the details query.
+    DETAIL_ID = "_gs_id"
+    DETAIL_LABEL = "_gs_label"
+
+    @staticmethod
+    def split_id(node: NodeTypeDef, node_id: str) -> str | None:
+        """The document part of a composite ``doc-item`` id (None for plain ids)."""
+        if len(node.id_columns) == 1:
+            return None
+        return node_id.rsplit("-", 1)[0]
+
+    def details_query(self, node: NodeTypeDef, node_ids: Sequence[str]) -> tuple[str, dict]:
+        """One statement fetching properties and label for many records of a type.
+
+        Every identifier comes from the validated dataset definition; ids and
+        lookup filter values travel as bound parameters.  Tables may hold
+        several rows per id (e.g. journal line items), so one row per id is
+        kept, chosen deterministically.
+        """
+        alias = "t"
+        id_expr = self.id_expression(node, alias)
+        select = [f"{id_expr}::text AS {self.DETAIL_ID}"]
+        select += [f"{alias}.{col}" for col in node.detail_columns]
+
+        params: dict = {"ids": list(node_ids)}
+        if node.label_column:
+            select.append(f"{alias}.{node.label_column} AS {self.DETAIL_LABEL}")
+        elif node.label_lookup:
+            lk = node.label_lookup
+            conds = [f"l.{lk.match_column} = {alias}.{node.id_columns[0]}"]
+            for index, (column, value) in enumerate(lk.filters):
+                conds.append(f"l.{column} = :lf{index}")
+                params[f"lf{index}"] = value
+            select.append(
+                f"(SELECT l.{lk.label_column} FROM {lk.table} l WHERE {' AND '.join(conds)} "
+                f"LIMIT 1) AS {self.DETAIL_LABEL}"
+            )
+
+        where = f"{id_expr} = ANY(CAST(:ids AS text[]))"
+        if len(node.id_columns) == 2:
+            # Narrow on the indexed document column first; the exact id check follows.
+            where = f"{alias}.{node.id_columns[0]} = ANY(CAST(:docs AS text[])) AND {where}"
+            params["docs"] = sorted({self.split_id(node, i) or "" for i in node_ids})
+
+        order = [self.DETAIL_ID] + [f"{alias}.{col}" for col in node.detail_columns]
+        return (
+            f"SELECT DISTINCT ON ({self.DETAIL_ID})\n    "
+            + ",\n    ".join(select)
+            + f"\nFROM {node.table} {alias}\nWHERE {where}\nORDER BY "
+            + ", ".join(order),
+            params,
+        )
