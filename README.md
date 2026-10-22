@@ -68,6 +68,14 @@ SAP O2C data is inherently relational — orders reference customers, deliveries
 - **Reduces operational complexity** — one database to manage, not two
 - **Leverages PostgreSQL's mature query optimizer** for traversals via CTEs
 
+### Schema-driven graph model
+
+Node types, edge types and flows are not hard-coded in the repository. They are declared as data in a **dataset definition** (`backend/src/domain/datasets/o2c.py`) built from `NodeTypeDef`, `EdgeTypeDef` and `GraphDataset` (`backend/src/domain/graph_schema.py`). `GraphSqlBuilder` generates every query (counts, edge UNIONs, flows, subgraph traversal, entity listings) from that definition, and `GET /api/graph/schema` publishes it to clients. The active dataset is selected with `GRAPH_DATASET` (default `o2c`).
+
+To plug in a new dataset, add `backend/src/domain/datasets/<name>.py` that exposes `DATASET = GraphDataset(id="<name>", ...)` and set `GRAPH_DATASET=<name>`; no repository SQL changes are needed. Each node type declares its presentation (`label`, `plural`, `description`, `category`, `accent`, `icon`, `is_primary`, `display_properties`) and its table mapping (`table`, `id_columns`); each edge type declares `key`, `label`, `source`, `target`, `description` and the join mapping (`table`, `alias`, `source_columns`, `target_columns`, `not_null`). Definitions are validated when the module loads, and the test suite checks that flows and edges reference only registered types.
+
+The sections below describe the bundled O2C dataset.
+
 ### Node types (11)
 
 | Category | Types |
@@ -611,10 +619,11 @@ curl http://localhost:8000/health
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
+| `GET` | `/api/graph/schema` | Active dataset: domain, node types, edge types, flows (no counts) |
 | `GET` | `/api/graph/summary` | Node/edge counts by type |
 | `GET` | `/api/graph/subgraph?root_type=X&root_id=Y&depth=2` | Subgraph from a root entity |
 | `GET` | `/api/graph/entities/{node_type}?limit=50` | List entity IDs of a type |
-| `GET` | `/api/graph/flows` | List predefined O2C flow definitions |
+| `GET` | `/api/graph/flows` | List the dataset's predefined flow definitions |
 | `GET` | `/api/graph/flow?flow_id=full_o2c&limit=50` | Sampled subgraph for a flow |
 | `GET` | `/api/graph/trace?doc_type=Invoice&doc_id=X&depth=4` | Document lifecycle trace |
 | `GET` | `/api/graph/full?node_limit=20&type_filter=Customer,Invoice` | Sampled knowledge graph |
@@ -673,11 +682,15 @@ DodgeAI/
 │   │   │   ├── models.py          # SQLAlchemy ORM models (17 tables)
 │   │   │   ├── session.py         # Async session management
 │   │   │   └── engine.py          # Engine configuration
-│   │   ├── domain/                # Response schemas
-│   │   │   ├── graph_models.py    # Pydantic models
-│   │   │   └── flow_definitions.py # Predefined O2C flows
+│   │   ├── domain/                # Response schemas and graph model
+│   │   │   ├── graph_models.py    # Pydantic response models
+│   │   │   ├── graph_schema.py    # NodeTypeDef / EdgeTypeDef / GraphDataset
+│   │   │   ├── graph_registry.py  # Active dataset selection (GRAPH_DATASET)
+│   │   │   └── datasets/
+│   │   │       └── o2c.py         # SAP O2C node types, edge types, flows
 │   │   ├── repositories/          # Data access
-│   │   │   └── graph_repository.py # Graph traversal queries
+│   │   │   ├── graph_repository.py # Runs graph queries for the active dataset
+│   │   │   └── graph_sql.py       # SQL generated from the dataset definition
 │   │   ├── ingestion/             # Data loading
 │   │   │   └── jsonl_loader.py    # JSONL parser
 │   │   └── main.py               # FastAPI app initialization

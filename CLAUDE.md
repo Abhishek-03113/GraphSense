@@ -29,18 +29,22 @@ The backend follows a layered architecture:
   - `migration_runner.py` - Custom Alembic migration wrapper
 
 - **`src/repositories/`** - Data access layer
-  - `graph_repository.py` - Queries for graph traversal and entity lookups
+  - `graph_repository.py` - Runs graph queries (summary, subgraph, flow, full graph, entities) for the active dataset and shapes the results
+  - `graph_sql.py` - `GraphSqlBuilder`: generates all node/edge SQL from the dataset definition; owns the zero-padding helpers `norm()` / `composite()`
 
 - **`src/domain/`** - Response schemas and domain models
   - `graph_models.py` - Pydantic models for API responses (`Node`, `Edge`, `GraphSubgraphResponse`, `FlowDefinition`, `FlowListResponse`, etc.)
-  - `flow_definitions.py` - `FLOW_DEFINITIONS` constant: predefined O2C flow metadata (node types, edge types per flow)
+  - `graph_schema.py` - Declarative graph model: `NodeTypeDef`, `EdgeTypeDef`, `GraphDataset` (validated on construction: edge endpoints, flows and entity hints must reference registered types)
+  - `graph_registry.py` - `get_dataset()` selects the active dataset via `GRAPH_DATASET` (default `o2c`)
+  - `config.py` - `GraphSettings` (`GRAPH_DATASET`)
+  - `datasets/` - One module per dataset exposing a `DATASET`; `o2c.py` is the SAP Order-to-Cash definition (node types, edge types, flows, entity column hints)
 
 - **`src/ai/`** - LLM-powered chat pipeline (text-to-SQL RAG)
   - `config.py` - AI settings (Gemini API key, model, embedding model)
   - `embeddings.py` - pgvector embedding store using Gemini text-embedding-004 (DDL, docs, SQL pairs, data summaries)
   - `training.py` - Training data: 17 DDL schemas, 7 domain docs, 15 SQL question-answer pairs
   - `guardrails.py` - Domain restriction: rejects off-topic queries, SQL injection, prompt injection
-  - `chat.py` - Full pipeline: guardrails → RAG retrieval → SQL generation → execution → synthesis
+  - `chat.py` - Full pipeline: guardrails → RAG retrieval → SQL generation → execution → synthesis (entity-column hints for graph highlighting come from the dataset registry)
 
 - **`src/ingestion/`** - Data loading utilities
   - `jsonl_loader.py` - JSONL file parsing and database insertion
@@ -130,7 +134,8 @@ The frontend connects to the backend at `http://localhost:8000` (configured in `
 
 **Backend:**
 - pytest configured in `pyproject.toml` with asyncio mode
-- Run: `pytest` (from `/backend`)
+- Install test deps: `uv pip install -e ".[dev]"`; run `pytest` from `/backend` (no database needed)
+- `tests/test_graph_sql_equivalence.py` compares the generated graph SQL to a baseline (`tests/fixtures/graph_sql_baseline.json`); regenerate it only for an intentional graph-model change: `python -m tests.sql_snapshot tests/fixtures/graph_sql_baseline.json`
 
 **Frontend:**
 ```bash
@@ -142,6 +147,7 @@ npm run build                  # TypeScript + Vite build
 
 ### Graph API Endpoints
 
+- `GET /api/graph/schema` - Describes the active dataset (no DB access): `domain`, `node_types` (key, label, plural, description, category, accent, icon, is_primary, display_properties), `edge_types` (key, label, source, target, description), `flows`. Counts are not included; join with `/summary`
 - `GET /api/graph/summary` - Returns node/edge counts by entity type
 - `GET /api/graph/subgraph?root_type=SalesOrder&root_id=123&depth=2` - Returns nodes and edges reachable from a root entity (depth 1–5)
 - `GET /api/graph/entities/{node_type}?limit=50` - Returns sample entity IDs of a given type
@@ -183,7 +189,7 @@ The graph API traverses these relationships to build subgraphs for visualization
 
 **Adding a new API endpoint:**
 1. Create handler in `src/api/` (or add to existing router file)
-2. Add repository method in `src/repositories/graph_repository.py` if querying data
+2. Add repository method in `src/repositories/graph_repository.py` if querying data (generate per-type SQL from the dataset via `GraphSqlBuilder`, never hand-write it per node/edge type)
 3. Define response schema in `src/domain/graph_models.py`
 4. Register router in `src/main.py` if new file
 
@@ -199,9 +205,20 @@ The graph API traverses these relationships to build subgraphs for visualization
 - Node/edge data comes from `GraphSubgraphResponse` from backend
 - All graph views (entity, flow, trace, knowledge graph) share `GraphExplorer` — feed it a `GraphData` object
 
-**Adding a new O2C flow:**
-1. Add an entry to `backend/src/domain/flow_definitions.py` (`FLOW_DEFINITIONS` dict)
-2. The `/api/graph/flows` endpoint and `FlowSelector` frontend component pick it up automatically
+**Adding a new flow:**
+1. Add a `FlowDefinition` to `FLOWS` in the dataset module (`backend/src/domain/datasets/o2c.py` for O2C); node and edge types must already be registered
+2. `/api/graph/flows`, `/api/graph/flow` and `/api/graph/schema` pick it up automatically (and so does `FlowSelector` on the frontend)
+
+**Adding a node or edge type:**
+1. Add a `NodeTypeDef` / `EdgeTypeDef` to the dataset module. Edge order is the order of the UNION ALL blocks; node order is the order of keys in `/api/graph/summary`
+2. `GraphDataset` validation and `pytest` fail if an edge endpoint or flow references an unregistered type or a column is missing from `src/db/models.py`
+3. No repository SQL changes are needed
+
+**Adding a new dataset:**
+1. Create `backend/src/domain/datasets/<name>.py` exposing `DATASET = GraphDataset(id="<name>", ...)` (the id must equal the module name)
+2. Per node type: presentation metadata (`label`, `plural`, `description`, `category`, `accent`, `icon`, `is_primary`, `display_properties`) plus the query mapping (`table`, `id_columns`, `count_distinct`). Per edge type: `key`, `label` (verb phrase), `source`, `target`, `description`, plus `table`, `alias`, `source_columns`, `target_columns`, `not_null`, `distinct`. Two `*_columns` entries mean a composite `doc-item` id with the item number zero-stripped
+3. Add `flows` and optional `entity_column_hints`, then set `GRAPH_DATASET=<name>`
+4. Still dataset-specific and not driven by the registry: RAG training data (`src/ai/training.py`), guardrail keywords/messages (`src/ai/guardrails.py`), the synthesis prompt's entity mapping (`src/ai/chat.py`), ingestion (`src/ingestion/`) and the ORM models
 
 ## Important Notes
 
