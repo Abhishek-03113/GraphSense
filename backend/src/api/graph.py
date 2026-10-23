@@ -11,6 +11,11 @@ logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
 
+# Failures are not caught here: the application-level handler logs the
+# exception with the request id and answers with the generic error envelope,
+# so no database text can leak into a response (see src/api/errors.py).
+
+
 @router.get("/summary", response_model=GraphSummaryResponse)
 async def get_graph_summary(db: AsyncSession = Depends(get_db_session)):
     """Returns an overview of the dataset sizes (node and edge counts)."""
@@ -33,13 +38,9 @@ async def get_graph_subgraph(
     """Returns nodes and edges reachable from the root in graph form."""
     logger.info("API /subgraph — root_type=%s root_id=%s depth=%d", root_type, root_id, depth)
     repo = GraphRepository(db)
-    try:
-        result = await repo.get_subgraph(root_type, root_id, depth)
-        logger.info("API /subgraph — returning nodes=%d edges=%d", len(result.nodes), len(result.edges))
-        return result
-    except Exception as e:
-        logger.error("API /subgraph — FAILED: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+    result = await repo.get_subgraph(root_type, root_id, depth)
+    logger.info("API /subgraph — returning nodes=%d edges=%d", len(result.nodes), len(result.edges))
+    return result
 
 @router.get("/schema", response_model=GraphSchemaResponse)
 async def get_graph_schema():
@@ -73,13 +74,9 @@ async def get_flow(
         logger.warning("API /flow — unknown flow_id=%s", flow_id)
         raise HTTPException(status_code=404, detail=f"Unknown flow: {flow_id}")
     repo = GraphRepository(db)
-    try:
-        result = await repo.get_flow(flow_id, limit)
-        logger.info("API /flow — flow_id=%s returning nodes=%d edges=%d", flow_id, len(result.nodes), len(result.edges))
-        return result
-    except Exception as e:
-        logger.error("API /flow — flow_id=%s FAILED: %s", flow_id, e)
-        raise HTTPException(status_code=500, detail=str(e))
+    result = await repo.get_flow(flow_id, limit)
+    logger.info("API /flow — flow_id=%s returning nodes=%d edges=%d", flow_id, len(result.nodes), len(result.edges))
+    return result
 
 @router.get("/trace", response_model=GraphSubgraphResponse)
 async def trace_document(
@@ -91,13 +88,9 @@ async def trace_document(
     """Traces the full lifecycle (all connected entities) for a given document."""
     logger.info("API /trace — doc_type=%s doc_id=%s depth=%d", doc_type, doc_id, depth)
     repo = GraphRepository(db)
-    try:
-        result = await repo.get_subgraph(doc_type, doc_id, depth)
-        logger.info("API /trace — returning nodes=%d edges=%d", len(result.nodes), len(result.edges))
-        return result
-    except Exception as e:
-        logger.error("API /trace — FAILED: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+    result = await repo.get_subgraph(doc_type, doc_id, depth)
+    logger.info("API /trace — returning nodes=%d edges=%d", len(result.nodes), len(result.edges))
+    return result
 
 @router.get("/full", response_model=GraphSubgraphResponse)
 async def get_full_graph(
@@ -109,13 +102,9 @@ async def get_full_graph(
     logger.info("API /full — node_limit=%d type_filter=%s", node_limit, type_filter)
     types = [t.strip() for t in type_filter.split(",")] if type_filter else None
     repo = GraphRepository(db)
-    try:
-        result = await repo.get_full_graph(node_limit, types)
-        logger.info("API /full — returning nodes=%d edges=%d", len(result.nodes), len(result.edges))
-        return result
-    except Exception as e:
-        logger.error("API /full — FAILED: %s", e)
-        raise HTTPException(status_code=500, detail=str(e))
+    result = await repo.get_full_graph(node_limit, types)
+    logger.info("API /full — returning nodes=%d edges=%d", len(result.nodes), len(result.edges))
+    return result
 
 @router.get("/entities/{node_type}", response_model=GraphEntityResponse)
 async def get_entities(
