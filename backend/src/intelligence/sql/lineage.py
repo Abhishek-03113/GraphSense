@@ -25,6 +25,7 @@ class _Out:
     aggregate: bool
     constant: bool
     agg: str | None
+    names: frozenset[str] = frozenset()
 
 
 def _unwrap(node: exp.Expression) -> exp.Expression:
@@ -106,6 +107,7 @@ class _Analyzer:
                     aggregate=any(c.aggregate for c in column),
                     constant=all(c.constant for c in column),
                     agg=first.agg if all(c.agg == first.agg for c in column) else None,
+                    names=frozenset().union(*(c.names for c in column)),
                 )
             )
         return merged
@@ -135,6 +137,7 @@ class _Analyzer:
             aggregate=aggregate,
             constant=constant,
             agg=agg,
+            names=frozenset(c.name.lower() for c in inner.find_all(exp.Column)),
         )
 
     def _resolve(
@@ -172,6 +175,7 @@ def analyze_projections(qualified: exp.Expression) -> tuple[Projection, ...]:
             aggregate=o.aggregate,
             constant=o.constant,
             agg=o.agg,
+            names=tuple(sorted(o.names)),
         )
         for o in outs
     )

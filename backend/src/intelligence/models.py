@@ -115,6 +115,9 @@ class Projection:
     constant: bool = False
     # Lower-case name of the outermost aggregate function (``count``, ``sum``, ``max`` ...), if any.
     agg: str | None = None
+    # Lower-case names of every column the expression mentions, however they resolved.  A second,
+    # name-based view of the inputs, so masking does not depend on lineage being exact.
+    names: tuple[str, ...] = ()
 
     @property
     def reveals_input(self) -> bool:
