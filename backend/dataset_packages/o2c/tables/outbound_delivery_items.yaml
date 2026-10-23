@@ -1,0 +1,26 @@
+table: outbound_delivery_items
+description: "Lines of outbound deliveries. Each line delivers part of one sales order item."
+grain: "(delivery_document, delivery_document_item)"
+source: {path: outbound_delivery_items}
+primary_key: [delivery_document, delivery_document_item]
+columns:
+  - {source: deliveryDocument, type: text, role: id, refs: outbound_delivery_headers.delivery_document,
+     description: "Delivery the line belongs to."}
+  - {source: deliveryDocumentItem, type: text, role: item_number, normalize: [strip_leading_zeros],
+     description: "Line number within the delivery, stored without leading zeros."}
+  - {source: actualDeliveryQuantity, type: "decimal(18,2)", role: quantity,
+     description: "Quantity delivered, in delivery_quantity_unit."}
+  - {source: batch, type: text, role: code,
+     description: "Batch the goods were taken from, empty when not batch managed."}
+  - {source: deliveryQuantityUnit, type: text, role: code, value_set: unit_of_measure,
+     description: "Unit of measure of the delivered quantity."}
+  - {source: plant, type: text, role: reference, refs: plants.plant,
+     description: "Plant the goods were delivered from."}
+  - {source: referenceSdDocument, type: text, role: reference, refs: sales_order_headers.sales_order,
+     description: "Sales order this line fulfils."}
+  - {source: referenceSdDocumentItem, type: text, role: item_number, normalize: [strip_leading_zeros],
+     description: "Item of the sales order this line fulfils (sales_order_items.sales_order_item), without leading zeros."}
+  - {source: storageLocation, type: text, role: reference,
+     description: "Storage location within the plant the goods were taken from."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [itemBillingBlockReason, lastChangeDate]

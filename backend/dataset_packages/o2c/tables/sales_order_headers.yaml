@@ -1,0 +1,43 @@
+table: sales_order_headers
+description: "Sales orders: customer requests to buy products. One row per sales order header; this is where the order-to-cash process starts."
+grain: "sales_order"
+source: {path: sales_order_headers}
+primary_key: [sales_order]
+indexes: [[sold_to_party]]
+columns:
+  - {source: salesOrder, type: text, role: id,
+     description: "Sales order number."}
+  - {source: salesOrderType, type: text, role: code, value_set: sales_order_type,
+     description: "Type of sales order."}
+  - {source: salesOrganization, type: text, role: reference,
+     description: "Sales organisation that sells the goods."}
+  - {source: distributionChannel, type: text, role: code,
+     description: "Distribution channel the order was placed through (05, 10, 11, RB and RC occur)."}
+  - {source: organizationDivision, type: text, role: reference,
+     description: "Division the order belongs to."}
+  - {source: soldToParty, type: text, role: reference, refs: business_partners.customer,
+     description: "Customer who placed the order. Refers to business_partners.customer, not business_partners.business_partner."}
+  - {source: creationDate, type: date, role: date,
+     description: "Date the order was created."}
+  - {source: createdByUser, type: text, role: text, sensitive: true,
+     description: "User who created the order."}
+  - {source: lastChangeDateTime, type: timestamp, role: datetime,
+     description: "When the order was last changed."}
+  - {source: totalNetAmount, type: "decimal(18,4)", role: amount, currency_column: transaction_currency,
+     description: "Net value of the whole order in transaction currency."}
+  - {source: overallDeliveryStatus, type: text, role: status, value_set: sd_overall_delivery,
+     description: "How much of the order has been delivered."}
+  - {source: transactionCurrency, type: text, role: currency,
+     description: "ISO currency code of the order amounts."}
+  - {source: pricingDate, type: date, role: date,
+     description: "Date used to determine prices."}
+  - {source: requestedDeliveryDate, type: date, role: date,
+     description: "Delivery date the customer asked for."}
+  - {source: incotermsClassification, type: text, role: code, value_set: incoterms,
+     description: "International commercial terms (Incoterms) of the order."}
+  - {source: incotermsLocation1, type: text, role: text,
+     description: "Place named in the Incoterms."}
+  - {source: customerPaymentTerms, type: text, role: code,
+     description: "Payment terms key agreed for the order."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [salesGroup, salesOffice, overallOrdReltdBillgStatus, overallSdDocReferenceStatus, headerBillingBlockReason, deliveryBlockReason, totalCreditCheckStatus]

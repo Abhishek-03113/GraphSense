@@ -1,0 +1,25 @@
+table: billing_document_items
+description: "Lines of billing documents. Each line bills one delivery item."
+grain: "(billing_document, billing_document_item)"
+source: {path: billing_document_items}
+primary_key: [billing_document, billing_document_item]
+indexes: [[material]]
+columns:
+  - {source: billingDocument, type: text, role: id, refs: billing_document_headers.billing_document,
+     description: "Billing document the line belongs to."}
+  - {source: billingDocumentItem, type: text, role: item_number, normalize: [strip_leading_zeros],
+     description: "Line number within the billing document, stored without leading zeros."}
+  - {source: material, type: text, role: reference, refs: products.product,
+     description: "Product billed."}
+  - {source: billingQuantity, type: "decimal(18,2)", role: quantity,
+     description: "Quantity billed, in billing_quantity_unit."}
+  - {source: billingQuantityUnit, type: text, role: code, value_set: unit_of_measure,
+     description: "Unit of measure of the billed quantity."}
+  - {source: netAmount, type: "decimal(18,4)", role: amount, currency_column: transaction_currency,
+     description: "Net value of the line in transaction currency."}
+  - {source: transactionCurrency, type: text, role: currency,
+     description: "ISO currency code of the amounts."}
+  - {source: referenceSdDocument, type: text, role: reference, refs: outbound_delivery_headers.delivery_document,
+     description: "Delivery document this line bills."}
+  - {source: referenceSdDocumentItem, type: text, role: item_number, normalize: [strip_leading_zeros],
+     description: "Line of the delivery document this line bills (outbound_delivery_items.delivery_document_item), without leading zeros."}

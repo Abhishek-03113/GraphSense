@@ -1,0 +1,92 @@
+# Business knowledge about the data. Entries are retrieved into prompts by relevance,
+# so each one should stand on its own and name the tables it is about.
+
+- id: o2c_process
+  title: The order-to-cash process
+  tables: [sales_order_headers, outbound_delivery_headers, billing_document_headers, journal_entry_items_accounts_receivable, payments_accounts_receivable]
+  tags: [process]
+  text: |
+    The data follows an order-to-cash process:
+
+    1. A customer places a sales order (sales_order_headers) made of lines (sales_order_items); each line is for one product.
+    2. The goods are shipped on outbound deliveries (outbound_delivery_headers and outbound_delivery_items). A delivery line names the order and order line it fulfils.
+    3. The delivered goods are billed on invoices (billing_document_headers and billing_document_items). A billing line names the delivery and delivery line it bills.
+    4. Posting an invoice creates an accounting document with a receivable line (journal_entry_items_accounts_receivable).
+    5. A payment, or an offsetting posting, clears the receivable line (payments_accounts_receivable).
+
+    In graph terms: Customer, SalesOrder, SalesOrderItem, Product; DeliveryItem and Delivery fulfil SalesOrderItem; InvoiceItem and Invoice bill DeliveryItem and are billed to the Customer; Invoice generates a JournalEntry that a Payment clears.
+
+- id: table_relationships
+  title: How the tables join
+  tables: [sales_order_headers, sales_order_items, outbound_delivery_items, billing_document_items, billing_document_headers, journal_entry_items_accounts_receivable, payments_accounts_receivable, business_partners, business_partner_addresses]
+  tags: [joins]
+  text: |
+    Key joins, in the direction of the process:
+    - sales_order_headers.sold_to_party = business_partners.customer (the customer who placed the order).
+    - sales_order_items.sales_order = sales_order_headers.sales_order (the lines of an order).
+    - sales_order_items.material = products.product (the product ordered).
+    - outbound_delivery_items.reference_sd_document = sales_order_items.sales_order and outbound_delivery_items.reference_sd_document_item = sales_order_items.sales_order_item (the order line a delivery line fulfils).
+    - billing_document_items.reference_sd_document = outbound_delivery_items.delivery_document and billing_document_items.reference_sd_document_item = outbound_delivery_items.delivery_document_item (the delivery line an invoice line bills).
+    - billing_document_headers.sold_to_party = business_partners.customer (the customer billed).
+    - billing_document_headers.accounting_document = journal_entry_items_accounts_receivable.accounting_document (the receivable an invoice created).
+    - payments_accounts_receivable.accounting_document = journal_entry_items_accounts_receivable.accounting_document (the receivable line that was cleared).
+    - business_partner_addresses.business_partner = business_partners.business_partner (customer addresses).
+    There is no direct link from an invoice to a payment: go through the accounting document.
+
+- id: item_numbers
+  title: Item numbers
+  tables: [sales_order_items, outbound_delivery_items, billing_document_items, sales_order_schedule_lines, journal_entry_items_accounts_receivable, payments_accounts_receivable]
+  tags: [joins, normalisation]
+  text: |
+    Item (line) numbers are stored without leading zeros in every table: '10', not '000010'. The source systems disagree (deliveries pad item numbers, orders and invoices do not), so they are made uniform when the data is loaded. Item columns can therefore be compared directly across tables; no padding conversion is needed.
+
+- id: billing_documents_and_cancellations
+  title: Invoices and cancellations
+  tables: [billing_document_headers, billing_document_cancellations]
+  tags: [billing, rule]
+  text: |
+    billing_document_headers holds two kinds of document, told apart by billing_document_type:
+    - F2 is a customer invoice.
+    - S1 is a cancellation document. It reverses one invoice, named in cancelled_billing_document, and carries the same amount.
+    An invoice that has been cancelled stays in the table with billing_document_is_cancelled = TRUE; the cancellation document itself is not flagged. billing_document_cancellations lists the cancelled invoices (the same rows, as F2 documents flagged as cancelled).
+    To count or add up real sales, use only invoices that are still in force: billing_document_type = 'F2' AND billing_document_is_cancelled = FALSE. Filtering on billing_document_is_cancelled alone would also pick up the S1 cancellation documents.
+
+- id: customers_and_business_partners
+  title: Customers and business partners
+  tables: [business_partners, sales_order_headers, billing_document_headers]
+  tags: [master data, joins]
+  text: |
+    business_partners holds the customers. It has two number fields that look alike: business_partner is the partner number and customer is the customer number used on documents. Sales orders and invoices refer to the customer number: sold_to_party = business_partners.customer, not business_partners.business_partner. The customer name is business_partner_full_name. Use the customer number when joining documents to partners.
+
+- id: status_codes
+  title: Delivery status codes and broken flows
+  tables: [sales_order_headers, outbound_delivery_headers]
+  tags: [status, rule]
+  text: |
+    Status fields use single-letter codes: A = not started or not delivered, B = partly done, C = completed or fully delivered.
+    - sales_order_headers.overall_delivery_status: how much of the order has been delivered.
+    - outbound_delivery_headers.overall_goods_movement_status: whether the goods have left the warehouse. C also means actual_goods_movement_date is filled.
+    - outbound_delivery_headers.overall_picking_status: whether the goods have been picked.
+    A broken flow is an order that was delivered but never billed, or that was billed without a delivery. In this data every order with status A has no delivery, so deliveries that miss an invoice are the usual kind of broken flow.
+
+- id: amounts_and_currency
+  title: Amounts and currencies
+  tables: [sales_order_headers, billing_document_headers, journal_entry_items_accounts_receivable, payments_accounts_receivable]
+  tags: [finance]
+  text: |
+    Amounts are exact decimals. Each amount sits next to its currency column (transaction_currency); only add up amounts that share a currency. Journal and payment lines carry both the transaction currency amount and the company code currency amount. Receivable amounts are negative on lines that reverse a receivable (for example the posting of a cancellation document or a credit).
+
+- id: accounting_chain
+  title: From invoice to payment
+  tables: [billing_document_headers, journal_entry_items_accounts_receivable, payments_accounts_receivable]
+  tags: [finance, joins]
+  text: |
+    Posting an invoice creates an accounting document: billing_document_headers.accounting_document is the key into journal_entry_items_accounts_receivable. While the receivable line is open, clearing_accounting_document is empty and clearing_doc_fiscal_year is 0. Once it is cleared, the line gets a clearing document and date, and a matching row appears in payments_accounts_receivable.
+    The clearing posting is a customer payment, or, when an invoice has been cancelled, an offsetting posting that clears the invoice together with its cancellation document. To find invoices that are still unpaid, look for invoices without a row in payments_accounts_receivable for their accounting document.
+
+- id: products_and_plants
+  title: Products, plants and storage
+  tables: [products, product_descriptions, product_plants, product_storage_locations, plants]
+  tags: [master data]
+  text: |
+    products is the product master; names are in product_descriptions (one row per language: join on product and use language = 'EN' for English). product_plants says in which plants a product is kept and product_storage_locations in which storage locations. plants describes the plants. Sales and billing lines name the product in the material column.

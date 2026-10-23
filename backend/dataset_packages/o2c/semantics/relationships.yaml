@@ -1,0 +1,38 @@
+# Joins that the column `refs` and the graph edges do not already express (mostly
+# composite keys). Single-column references are declared with `refs:` on the column.
+- from_table: sales_order_schedule_lines
+  from_columns: [sales_order, sales_order_item]
+  to_table: sales_order_items
+  to_columns: [sales_order, sales_order_item]
+  cardinality: many_to_one
+  description: A schedule line belongs to one sales order line.
+- from_table: outbound_delivery_items
+  from_columns: [reference_sd_document, reference_sd_document_item]
+  to_table: sales_order_items
+  to_columns: [sales_order, sales_order_item]
+  cardinality: many_to_one
+  description: A delivery line fulfils one sales order line (an order line can be delivered in parts).
+- from_table: billing_document_items
+  from_columns: [reference_sd_document, reference_sd_document_item]
+  to_table: outbound_delivery_items
+  to_columns: [delivery_document, delivery_document_item]
+  cardinality: many_to_one
+  description: An invoice line bills one delivery line.
+- from_table: payments_accounts_receivable
+  from_columns: [company_code, fiscal_year, accounting_document, accounting_document_item]
+  to_table: journal_entry_items_accounts_receivable
+  to_columns: [company_code, fiscal_year, accounting_document, accounting_document_item]
+  cardinality: one_to_one
+  description: A cleared receivable line is the same line as in the journal entries, seen once it has been settled.
+- from_table: payments_accounts_receivable
+  from_columns: [clearing_accounting_document]
+  to_table: journal_entry_items_accounts_receivable
+  to_columns: [accounting_document]
+  cardinality: many_to_one
+  description: The clearing document of a payment, which the graph treats as a journal entry. Only some clearing documents appear in the journal entries of this data.
+- from_table: customer_sales_area_assignments
+  from_columns: [customer]
+  to_table: business_partners
+  to_columns: [customer]
+  cardinality: many_to_one
+  description: A customer has one assignment per sales area.

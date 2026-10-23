@@ -1,0 +1,39 @@
+table: business_partners
+description: "Business partners, which in this data are the customers (organisations) that buy from the company."
+grain: "business_partner"
+source: {path: business_partners}
+primary_key: [business_partner]
+indexes: [[customer]]
+columns:
+  - {source: businessPartner, type: text, role: id,
+     description: "Business partner number."}
+  - {source: customer, type: text, role: reference,
+     description: "Customer number of the partner. Sales and billing documents point here through sold_to_party. It has the same values as business_partner in this data but is a separate field."}
+  - {source: businessPartnerCategory, type: text, role: code, value_set: bp_category,
+     description: "Kind of partner: 1 person, 2 organisation, 3 group."}
+  - {source: businessPartnerFullName, type: text, role: name,
+     description: "Full name of the partner, used as the customer name."}
+  - {source: businessPartnerGrouping, type: text, role: code,
+     description: "Grouping that controls how the partner is numbered and which account group applies (local codes Y101 and Y102)."}
+  - {source: businessPartnerName, type: text, role: name,
+     description: "Short name of the partner."}
+  - {source: createdByUser, type: text, role: text, sensitive: true,
+     description: "User who created the partner record."}
+  - {source: creationDate, type: date, role: date,
+     description: "Date the partner record was created."}
+  - {source: creationTime, type: time, role: time,
+     description: "Time of day the partner record was created."}
+  - {source: formOfAddress, type: text, role: code, value_set: form_of_address,
+     description: "Form of address (title) key of the partner."}
+  - {source: lastChangeDate, type: date, role: date,
+     description: "Date the partner record was last changed."}
+  - {source: organizationBpName1, type: text, role: name,
+     description: "First name line of the organisation."}
+  - {source: organizationBpName2, type: text, role: name,
+     description: "Second name line of the organisation, empty when not used."}
+  - {source: businessPartnerIsBlocked, type: boolean, role: flag,
+     description: "True when the partner is blocked for business."}
+  - {source: isMarkedForArchiving, type: boolean, role: flag,
+     description: "True when the partner is marked for archiving (no longer active)."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [correspondenceLanguage, firstName, industry, lastName]

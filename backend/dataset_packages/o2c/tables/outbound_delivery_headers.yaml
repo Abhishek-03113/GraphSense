@@ -1,0 +1,28 @@
+table: outbound_delivery_headers
+description: "Outbound deliveries: shipments of goods to customers. One row per delivery document header."
+grain: "delivery_document"
+source: {path: outbound_delivery_headers}
+primary_key: [delivery_document]
+columns:
+  - {source: deliveryDocument, type: text, role: id,
+     description: "Delivery document number."}
+  - {source: actualGoodsMovementDate, type: date, role: date,
+     description: "Date the goods left the warehouse (goods issue). Empty until goods issue has happened."}
+  - {source: actualGoodsMovementTime, type: time, role: time,
+     description: "Time of day of the goods issue. 00:00:00 when goods issue has not happened."}
+  - {source: creationDate, type: date, role: date,
+     description: "Date the delivery was created."}
+  - {source: creationTime, type: time, role: time,
+     description: "Time of day the delivery was created."}
+  - {source: hdrGeneralIncompletionStatus, type: text, role: status, value_set: sd_completion_status,
+     description: "Whether all mandatory data of the delivery is complete."}
+  - {source: lastChangeDate, type: date, role: date,
+     description: "Date the delivery was last changed."}
+  - {source: overallGoodsMovementStatus, type: text, role: status, value_set: sd_processing_status,
+     description: "Progress of the goods issue for the whole delivery."}
+  - {source: overallPickingStatus, type: text, role: status, value_set: sd_processing_status,
+     description: "Progress of picking the goods for the whole delivery."}
+  - {source: shippingPoint, type: text, role: reference,
+     description: "Shipping point (loading location) that handles the delivery."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [deliveryBlockReason, headerBillingBlockReason, overallProofOfDeliveryStatus]

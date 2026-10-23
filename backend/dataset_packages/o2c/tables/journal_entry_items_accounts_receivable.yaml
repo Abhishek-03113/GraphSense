@@ -1,0 +1,49 @@
+table: journal_entry_items_accounts_receivable
+description: "Accounts receivable line items of accounting documents. Posting an invoice creates one line that stays open until a payment clears it."
+grain: "(company_code, fiscal_year, accounting_document, accounting_document_item)"
+source: {path: journal_entry_items_accounts_receivable}
+primary_key: [company_code, fiscal_year, accounting_document, accounting_document_item]
+indexes: [[reference_document], [customer]]
+columns:
+  - {source: companyCode, type: text, role: reference,
+     description: "Company code (legal entity) the posting belongs to."}
+  - {source: fiscalYear, type: text, role: text,
+     description: "Fiscal year of the posting."}
+  - {source: accountingDocument, type: text, role: id,
+     description: "Accounting document number. For invoice postings it equals billing_document_headers.accounting_document."}
+  - {source: accountingDocumentItem, type: text, role: item_number, normalize: [strip_leading_zeros],
+     description: "Line number within the accounting document, stored without leading zeros."}
+  - {source: glAccount, type: text, role: reference,
+     description: "General ledger account the line is posted to (the receivables reconciliation account)."}
+  - {source: referenceDocument, type: text, role: reference, refs: billing_document_headers.billing_document,
+     description: "Document that caused the posting: the billing document number."}
+  - {source: profitCenter, type: text, role: reference,
+     description: "Profit center the line is assigned to."}
+  - {source: transactionCurrency, type: text, role: currency,
+     description: "Currency of the document."}
+  - {source: amountInTransactionCurrency, type: "decimal(18,4)", role: amount, currency_column: transaction_currency,
+     description: "Amount of the line in transaction currency. Negative for lines that reverse a receivable."}
+  - {source: companyCodeCurrency, type: text, role: currency,
+     description: "Local currency of the company code."}
+  - {source: amountInCompanyCodeCurrency, type: "decimal(18,4)", role: amount, currency_column: company_code_currency,
+     description: "Amount of the line in the company code currency."}
+  - {source: postingDate, type: date, role: date,
+     description: "Date the line was posted to the ledger."}
+  - {source: documentDate, type: date, role: date,
+     description: "Date on the original document."}
+  - {source: accountingDocumentType, type: text, role: code, value_set: accounting_document_type,
+     description: "Type of accounting document."}
+  - {source: lastChangeDateTime, type: timestamp, role: datetime,
+     description: "When the line was last changed."}
+  - {source: customer, type: text, role: reference, refs: business_partners.customer,
+     description: "Customer the receivable is owed by."}
+  - {source: financialAccountType, type: text, role: code, value_set: financial_account_type,
+     description: "Kind of account the line is posted to."}
+  - {source: clearingDate, type: date, role: date,
+     description: "Date the line was cleared (settled). Empty while the line is open."}
+  - {source: clearingAccountingDocument, type: text, role: reference,
+     description: "Accounting document of the clearing posting (payment) that settled the line. Empty while open."}
+  - {source: clearingDocFiscalYear, type: text, role: text,
+     description: "Fiscal year of the clearing document. 0 while the line is open."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [costCenter, assignmentReference]

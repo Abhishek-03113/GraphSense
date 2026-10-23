@@ -1,0 +1,12 @@
+table: product_descriptions
+description: "Product names by language. Join to products on product and filter language = 'EN' for the English name."
+grain: "(product, language)"
+source: {path: product_descriptions}
+primary_key: [product, language]
+columns:
+  - {source: product, type: text, role: id, refs: products.product,
+     description: "Product the description belongs to."}
+  - {source: language, type: text, role: code, value_set: language_code,
+     description: "Language of the description."}
+  - {source: productDescription, type: text, role: name,
+     description: "Name of the product in that language."}

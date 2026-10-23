@@ -1,0 +1,18 @@
+table: sales_order_schedule_lines
+description: "Schedule lines of sales order items: when, and how much of, each item is confirmed for delivery."
+grain: "(sales_order, sales_order_item, schedule_line)"
+source: {path: sales_order_schedule_lines}
+primary_key: [sales_order, sales_order_item, schedule_line]
+columns:
+  - {source: salesOrder, type: text, role: id, refs: sales_order_headers.sales_order,
+     description: "Sales order."}
+  - {source: salesOrderItem, type: text, role: item_number, normalize: [strip_leading_zeros],
+     description: "Order line the schedule line belongs to, stored without leading zeros."}
+  - {source: scheduleLine, type: text, role: item_number, normalize: [strip_leading_zeros],
+     description: "Schedule line number within the order line, stored without leading zeros."}
+  - {source: confirmedDeliveryDate, type: date, role: date,
+     description: "Delivery date confirmed to the customer. Empty when nothing is confirmed."}
+  - {source: orderQuantityUnit, type: text, role: code, value_set: unit_of_measure,
+     description: "Unit of measure of the quantity."}
+  - {source: confdOrderQtyByMatlAvailCheck, type: "decimal(18,2)", role: quantity,
+     description: "Quantity confirmed by the availability check."}

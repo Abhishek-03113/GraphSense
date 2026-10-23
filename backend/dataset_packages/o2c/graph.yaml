@@ -1,0 +1,325 @@
+# Graph model of the order-to-cash data: what the nodes, edges and flows are.
+# Edge direction follows business causality; edge order is the order of the UNION ALL blocks
+# of the graph SQL, and node order is the order of keys in /api/graph/summary.
+#
+# Full trace, starting at any Invoice node with depth >= 2:
+#   Invoice -> HAS_ITEM -> InvoiceItem -> BILLS_FOR -> DeliveryItem <- HAS_ITEM <- Delivery
+#   DeliveryItem -> FULFILLS -> SalesOrderItem <- HAS_ITEM <- SalesOrder
+#   Invoice -> GENERATES -> JournalEntry <- CLEARS <- Payment
+#
+# Item numbers are stored without leading zeros in every table (see the item_number
+# columns), so composite 'document-item' ids match across documents.
+#
+# Join paths checked against the sample data (share of rows that find a match):
+#   sold_to_party -> business_partners.customer                       100%
+#   sales_order_items.sales_order -> sales_order_headers               100%
+#   outbound_delivery_items.reference_sd_document -> sales_order_headers  100% -> 86%
+#   outbound_delivery_items.delivery_document -> outbound_delivery_headers 100%
+#   billing_document_items.reference_sd_document -> outbound_delivery_headers 100% -> 97%
+#   billing_document_headers.accounting_document ~ journal entries    75% -> 100%
+#   journal entries.accounting_document ~ payments.accounting_document  98% -> 100%
+# The direct billing -> payment link is broken (payments.invoice_reference is empty in
+# every record); the bridge goes via the accounting document through the journal entries.
+
+node_types:
+  - key: SalesOrder
+    label: "Sales order"
+    plural: "Sales orders"
+    description: "A customer's request to buy products."
+    category: document
+    accent: blue
+    icon: file-text
+    is_primary: true
+    display_properties: [sold_to_party, creation_date, total_net_amount, transaction_currency, overall_delivery_status]
+    table: sales_order_headers
+    id_columns: [sales_order]
+    property_columns: [sales_order_type, sales_organization, distribution_channel, organization_division, requested_delivery_date, pricing_date, customer_payment_terms, incoterms_classification, incoterms_location1, created_by_user, last_change_datetime]
+  - key: SalesOrderItem
+    label: "Sales order item"
+    plural: "Sales order items"
+    description: "One product line on a sales order."
+    category: item
+    accent: cyan
+    icon: list
+    display_properties: [material, requested_quantity, requested_quantity_unit, net_amount, transaction_currency]
+    table: sales_order_items
+    id_columns: [sales_order, sales_order_item]
+    property_columns: [sales_order_item_category, material_group, production_plant, storage_location, sales_document_rjcn_reason]
+  - key: Delivery
+    label: "Delivery"
+    plural: "Deliveries"
+    description: "An outbound shipment of goods to a customer."
+    category: document
+    accent: orange
+    icon: truck
+    is_primary: true
+    display_properties: [creation_date, overall_goods_movement_status, overall_picking_status, shipping_point]
+    table: outbound_delivery_headers
+    id_columns: [delivery_document]
+    property_columns: [actual_goods_movement_date, hdr_general_incompletion_status, last_change_date]
+  - key: DeliveryItem
+    label: "Delivery item"
+    plural: "Delivery items"
+    description: "One product line on a delivery."
+    category: item
+    accent: yellow
+    icon: package
+    display_properties: [actual_delivery_quantity, delivery_quantity_unit, plant, storage_location]
+    table: outbound_delivery_items
+    id_columns: [delivery_document, delivery_document_item]
+    property_columns: [batch, reference_sd_document, reference_sd_document_item]
+  - key: Invoice
+    label: "Invoice"
+    plural: "Invoices"
+    description: "A billing document charging a customer for delivered goods."
+    category: document
+    accent: green
+    icon: receipt
+    is_primary: true
+    display_properties: [billing_document_date, total_net_amount, transaction_currency, billing_document_is_cancelled, accounting_document]
+    table: billing_document_headers
+    id_columns: [billing_document]
+    property_columns: [billing_document_type, sold_to_party, company_code, fiscal_year, creation_date, cancelled_billing_document, last_change_datetime]
+  - key: InvoiceItem
+    label: "Invoice item"
+    plural: "Invoice items"
+    description: "One billed line on an invoice."
+    category: item
+    accent: mint
+    icon: list
+    display_properties: [material, billing_quantity, billing_quantity_unit, net_amount, transaction_currency]
+    table: billing_document_items
+    id_columns: [billing_document, billing_document_item]
+    property_columns: [reference_sd_document, reference_sd_document_item]
+  - key: JournalEntry
+    label: "Journal entry"
+    plural: "Journal entries"
+    description: "The accounting document posted when an invoice is booked."
+    category: finance
+    accent: purple
+    icon: book-open
+    is_primary: true
+    display_properties: [posting_date, amount_in_transaction_currency, transaction_currency, gl_account, clearing_date]
+    table: journal_entry_items_accounts_receivable
+    id_columns: [accounting_document]
+    count_distinct: true
+    property_columns: [company_code, fiscal_year, accounting_document_type, document_date, customer, reference_document, profit_center, financial_account_type, clearing_accounting_document, amount_in_company_code_currency, company_code_currency]
+  - key: Payment
+    label: "Payment"
+    plural: "Payments"
+    description: "A customer payment that clears an open receivable."
+    category: finance
+    accent: pink
+    icon: credit-card
+    is_primary: true
+    display_properties: [posting_date, amount_in_transaction_currency, transaction_currency, clearing_date, customer]
+    table: payments_accounts_receivable
+    id_columns: [accounting_document]
+    count_distinct: true
+    property_columns: [company_code, fiscal_year, document_date, gl_account, clearing_accounting_document, financial_account_type, profit_center, amount_in_company_code_currency, company_code_currency]
+  - key: Product
+    label: "Product"
+    plural: "Products"
+    description: "A material or product that can be sold."
+    category: master
+    accent: teal
+    icon: box
+    is_primary: true
+    display_properties: [product_description, product_type, product_group, base_unit, gross_weight]
+    table: products
+    id_columns: [product]
+    property_columns: [net_weight, weight_unit, division, industry_sector, creation_date, product_old_id, is_marked_for_deletion]
+    label_lookup: {table: product_descriptions, match_column: product, label_column: product_description, filters: [[language, EN]]}
+  - key: Customer
+    label: "Customer"
+    plural: "Customers"
+    description: "A business partner who buys from you."
+    category: party
+    accent: indigo
+    icon: user
+    is_primary: true
+    display_properties: [business_partner_full_name, business_partner_category, creation_date, business_partner_is_blocked]
+    table: business_partners
+    id_columns: [business_partner]
+    property_columns: [customer, business_partner_name, organization_bp_name1, business_partner_grouping, form_of_address, last_change_date, is_marked_for_archiving]
+    label_column: business_partner_full_name
+  - key: Address
+    label: "Address"
+    plural: "Addresses"
+    description: "A postal address on file for a customer."
+    category: master
+    accent: gray
+    icon: map-pin
+    display_properties: [street_name, city_name, postal_code, country]
+    table: business_partner_addresses
+    id_columns: [business_partner, address_id]
+    property_columns: [region, validity_start_date, validity_end_date, address_time_zone]
+edge_types:
+  - key: PLACED
+    label: "placed"
+    source: Customer
+    target: SalesOrder
+    description: "Customer placed the sales order."
+    table: sales_order_headers
+    alias: soh
+    source_columns: [sold_to_party]
+    target_columns: [sales_order]
+    not_null: [sold_to_party]
+  - key: HAS_ITEM
+    label: "has item"
+    source: SalesOrder
+    target: SalesOrderItem
+    description: "Sales order contains the line item."
+    table: sales_order_items
+    alias: soi
+    source_columns: [sales_order]
+    target_columns: [sales_order, sales_order_item]
+  - key: INCLUDES
+    label: "includes"
+    source: SalesOrderItem
+    target: Product
+    description: "Sales order item is for the product."
+    table: sales_order_items
+    alias: soi
+    source_columns: [sales_order, sales_order_item]
+    target_columns: [material]
+    not_null: [material]
+  - key: HAS_ITEM
+    label: "has item"
+    source: Delivery
+    target: DeliveryItem
+    description: "Delivery contains the line item."
+    table: outbound_delivery_items
+    alias: odi
+    source_columns: [delivery_document]
+    target_columns: [delivery_document, delivery_document_item]
+  - key: FULFILLS
+    label: "fulfills"
+    source: DeliveryItem
+    target: SalesOrderItem
+    description: "Delivery item fulfills the sales order item."
+    table: outbound_delivery_items
+    alias: odi
+    source_columns: [delivery_document, delivery_document_item]
+    target_columns: [reference_sd_document, reference_sd_document_item]
+    not_null: [reference_sd_document]
+  - key: HAS_ITEM
+    label: "has item"
+    source: Invoice
+    target: InvoiceItem
+    description: "Invoice contains the billed line."
+    table: billing_document_items
+    alias: bdi
+    source_columns: [billing_document]
+    target_columns: [billing_document, billing_document_item]
+  - key: BILLS_FOR
+    label: "bills for"
+    source: InvoiceItem
+    target: DeliveryItem
+    description: "Invoice item bills for the delivery item."
+    table: billing_document_items
+    alias: bdi
+    source_columns: [billing_document, billing_document_item]
+    target_columns: [reference_sd_document, reference_sd_document_item]
+    not_null: [reference_sd_document]
+  - key: BILLED_TO
+    label: "billed to"
+    source: Invoice
+    target: Customer
+    description: "Invoice was billed to the customer."
+    table: billing_document_headers
+    alias: bdh
+    source_columns: [billing_document]
+    target_columns: [sold_to_party]
+    not_null: [sold_to_party]
+  - key: GENERATES
+    label: "generates"
+    source: Invoice
+    target: JournalEntry
+    description: "Invoice generates the journal entry when posted."
+    table: billing_document_headers
+    alias: bdh
+    source_columns: [billing_document]
+    target_columns: [accounting_document]
+    not_null: [accounting_document]
+  - key: CLEARS
+    label: "clears"
+    source: Payment
+    target: JournalEntry
+    description: "Payment clears the open journal entry."
+    table: payments_accounts_receivable
+    alias: par
+    source_columns: [accounting_document]
+    target_columns: [clearing_accounting_document]
+    not_null: [clearing_accounting_document]
+    distinct: true
+  - key: HAS_ADDRESS
+    label: "has address"
+    source: Customer
+    target: Address
+    description: "Customer has the address on file."
+    table: business_partner_addresses
+    alias: bpa
+    source_columns: [business_partner]
+    target_columns: [business_partner, address_id]
+flows:
+  - id: sales
+    label: "Sales Flow"
+    description: "Customer places a sales order; line items reference products"
+    node_types: [Customer, SalesOrder, SalesOrderItem, Product]
+    edge_types: [PLACED, HAS_ITEM, INCLUDES]
+  - id: fulfillment
+    label: "Fulfillment Flow"
+    description: "Sales order items fulfilled via outbound delivery documents"
+    node_types: [SalesOrder, SalesOrderItem, Delivery, DeliveryItem, Product]
+    edge_types: [HAS_ITEM, FULFILLS, INCLUDES]
+  - id: billing
+    label: "Billing Flow"
+    description: "Deliveries billed to customers via billing documents"
+    node_types: [Delivery, DeliveryItem, Invoice, InvoiceItem, Customer]
+    edge_types: [HAS_ITEM, BILLS_FOR, BILLED_TO]
+  - id: financial
+    label: "Financial Flow"
+    description: "Billing documents post journal entries cleared by payments"
+    node_types: [Invoice, JournalEntry, Payment, Customer]
+    edge_types: [GENERATES, CLEARS, BILLED_TO]
+  - id: customer_master
+    label: "Customer Master"
+    description: "Customer profile with address and account configuration"
+    node_types: [Customer, Address]
+    edge_types: [HAS_ADDRESS]
+  - id: full_o2c
+    label: "Full O2C Flow"
+    description: "End-to-end: Customer → Sales Order → Delivery → Invoice → Journal Entry → Payment"
+    node_types: [Customer, Address, SalesOrder, SalesOrderItem, Delivery, DeliveryItem, Invoice, InvoiceItem, JournalEntry, Payment, Product]
+    edge_types: [PLACED, HAS_ITEM, INCLUDES, FULFILLS, BILLS_FOR, BILLED_TO, GENERATES, CLEARS, HAS_ADDRESS]
+# Substring of a result column name -> node type; first match wins, so more specific names come first.
+entity_column_hints:
+  - [billing_doc_number, Invoice]
+  - [billing_document, Invoice]
+  - [invoice, Invoice]
+  - [sales_order_id, SalesOrder]
+  - [sales_order, SalesOrder]
+  - [delivery_document, Delivery]
+  - [delivery_id, Delivery]
+  - [delivery, Delivery]
+  - [accounting_document, JournalEntry]
+  - [journal_entry_id, JournalEntry]
+  - [journal_entry, JournalEntry]
+  - [payment_document, Payment]
+  - [payment_id, Payment]
+  - [customer_id, Customer]
+  - [customer, Customer]
+  - [business_partner, Customer]
+  - [material_id, Product]
+  - [material, Product]
+  - [product, Product]
+# Single columns that hold the id of a node type but are not part of a node or edge definition.
+entity_refs:
+  - {table: billing_document_items, column: reference_sd_document, node_type: Delivery}
+  - {table: billing_document_items, column: material, node_type: Product}
+  - {table: outbound_delivery_items, column: reference_sd_document, node_type: SalesOrder}
+  - {table: billing_document_headers, column: cancelled_billing_document, node_type: Invoice}
+  - {table: journal_entry_items_accounts_receivable, column: reference_document, node_type: Invoice}
+  - {table: journal_entry_items_accounts_receivable, column: customer, node_type: Customer}
+  - {table: payments_accounts_receivable, column: customer, node_type: Customer}

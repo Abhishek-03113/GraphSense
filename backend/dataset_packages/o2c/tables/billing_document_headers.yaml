@@ -1,0 +1,35 @@
+table: billing_document_headers
+description: "Billing documents: customer invoices and the cancellation documents that reverse them. One row per billing document header."
+grain: "billing_document"
+source: {path: billing_document_headers}
+primary_key: [billing_document]
+indexes: [[sold_to_party], [accounting_document]]
+columns:
+  - {source: billingDocument, type: text, role: id,
+     description: "Billing document number (the invoice number)."}
+  - {source: billingDocumentType, type: text, role: code, value_set: billing_doc_type,
+     description: "Type of billing document: F2 is a customer invoice, S1 is a cancellation document that reverses an invoice."}
+  - {source: creationDate, type: date, role: date,
+     description: "Date the document was created in the system."}
+  - {source: creationTime, type: time, role: time,
+     description: "Time of day the document was created."}
+  - {source: lastChangeDateTime, type: timestamp, role: datetime,
+     description: "When the document was last changed."}
+  - {source: billingDocumentDate, type: date, role: date,
+     description: "Billing (invoice) date of the document."}
+  - {source: billingDocumentIsCancelled, type: boolean, role: flag,
+     description: "True when the invoice has been cancelled by a cancellation document. Cancelled invoices stay in the table."}
+  - {source: cancelledBillingDocument, type: text, role: reference, refs: billing_document_headers.billing_document,
+     description: "On a cancellation document (type S1), the number of the invoice it cancels. Empty on invoices."}
+  - {source: totalNetAmount, type: "decimal(18,4)", role: amount, currency_column: transaction_currency,
+     description: "Net value of the document in transaction currency."}
+  - {source: transactionCurrency, type: text, role: currency,
+     description: "ISO currency code of the amounts on the document."}
+  - {source: companyCode, type: text, role: reference,
+     description: "Company code (legal entity) the document is posted to."}
+  - {source: fiscalYear, type: text, role: text,
+     description: "Fiscal year of the accounting posting."}
+  - {source: accountingDocument, type: text, role: reference, refs: journal_entry_items_accounts_receivable.accounting_document,
+     description: "Number of the accounting (journal) document created when the invoice was posted."}
+  - {source: soldToParty, type: text, role: reference, refs: business_partners.customer,
+     description: "Customer who is billed. Refers to business_partners.customer, not business_partners.business_partner."}

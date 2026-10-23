@@ -1,0 +1,33 @@
+table: sales_order_items
+description: "Lines of sales orders. Each line orders a quantity of one product."
+grain: "(sales_order, sales_order_item)"
+source: {path: sales_order_items}
+primary_key: [sales_order, sales_order_item]
+indexes: [[material]]
+columns:
+  - {source: salesOrder, type: text, role: id, refs: sales_order_headers.sales_order,
+     description: "Sales order the line belongs to."}
+  - {source: salesOrderItem, type: text, role: item_number, normalize: [strip_leading_zeros],
+     description: "Line number within the order, stored without leading zeros."}
+  - {source: salesOrderItemCategory, type: text, role: code, value_set: sales_order_item_category,
+     description: "Category of the item, which controls how it is processed."}
+  - {source: material, type: text, role: reference, refs: products.product,
+     description: "Product ordered."}
+  - {source: requestedQuantity, type: "decimal(18,2)", role: quantity,
+     description: "Quantity ordered, in requested_quantity_unit."}
+  - {source: requestedQuantityUnit, type: text, role: code, value_set: unit_of_measure,
+     description: "Unit of measure of the ordered quantity."}
+  - {source: transactionCurrency, type: text, role: currency,
+     description: "ISO currency code of the amounts."}
+  - {source: netAmount, type: "decimal(18,4)", role: amount, currency_column: transaction_currency,
+     description: "Net value of the line in transaction currency."}
+  - {source: materialGroup, type: text, role: code, value_set: product_group,
+     description: "Material group of the product (equals the product group here)."}
+  - {source: productionPlant, type: text, role: reference, refs: plants.plant,
+     description: "Plant that supplies the item."}
+  - {source: storageLocation, type: text, role: reference,
+     description: "Storage location the item is taken from."}
+  - {source: salesDocumentRjcnReason, type: text, role: code, value_set: rejection_reason,
+     description: "Reason the item was rejected by the customer or the company. Empty when the item is not rejected."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [itemBillingBlockReason]

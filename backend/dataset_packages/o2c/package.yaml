@@ -1,0 +1,23 @@
+# Reference dataset package: SAP order-to-cash data (sales orders through delivery,
+# billing, accounting and payment).
+#
+# Copy this directory to start a package for another dataset. Keep customer packages
+# outside the repository and point PACKAGES_DIR at them.
+package_format: 1
+id: o2c
+version: "2.0.0"
+name: Order to Cash
+description: Sales orders through delivery, billing and payment.
+locale: en
+
+# Source files are read from <DATA_ROOT>/<default_subdir>/<table.source.path>/*.jsonl in
+# sorted file name order. The subdirectory is relative and can never be absolute.
+source: {kind: jsonl_dir, default_subdir: sap-o2c-data}
+
+ingest:
+  empty_string_is_null: true   # "" in the source means no value
+  unknown_fields: warn         # a source field that is neither stored nor in `ignore`
+  max_reject_rate: 0.001       # abort a load when more than 0.1% of records are rejected
+  on_duplicate_key: last_wins  # the later record wins when a primary key repeats
+
+includes: [tables/*.yaml, graph.yaml, semantics/*.yaml]
