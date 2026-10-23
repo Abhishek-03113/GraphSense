@@ -1,0 +1,14 @@
+table: product_storage_locations
+description: "Storage locations a product is kept in, per plant."
+grain: "(product, plant, storage_location)"
+source: {path: product_storage_locations}
+primary_key: [product, plant, storage_location]
+columns:
+  - {source: product, type: text, role: id, refs: products.product,
+     description: "Product."}
+  - {source: plant, type: text, role: id, refs: plants.plant,
+     description: "Plant the storage location belongs to."}
+  - {source: storageLocation, type: text, role: id,
+     description: "Storage location within the plant."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [physicalInventoryBlockInd, dateOfLastPostedCntUnRstrcdStk]

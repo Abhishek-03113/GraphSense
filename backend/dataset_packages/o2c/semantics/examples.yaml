@@ -1,0 +1,371 @@
+# Question and reference SQL pairs.
+#   role: example  few-shot guidance, retrieved into prompts
+#   role: golden   evaluation only, never retrieved (so the evaluation is not contaminated)
+# Item numbers are canonical (no leading zeros), so item columns are compared directly.
+
+# --- few-shot examples (migrated from the original training set) ---------------------------
+
+- id: top_products_by_billing_docs
+  role: example
+  question: Which products are associated with the highest number of billing documents?
+  tags: [product, billing]
+  sql: |
+    SELECT p.product, pd.product_description, COUNT(DISTINCT bdi.billing_document) AS billing_doc_count
+    FROM billing_document_items bdi
+    JOIN products p ON bdi.material = p.product
+    LEFT JOIN product_descriptions pd ON p.product = pd.product AND pd.language = 'EN'
+    GROUP BY p.product, pd.product_description
+    ORDER BY billing_doc_count DESC
+    LIMIT 10
+
+- id: trace_billing_document
+  role: example
+  question: Trace the full flow of a billing document
+  tags: [flow, billing, trace]
+  sql: |
+    SELECT
+        bdh.billing_document AS invoice,
+        bdh.sold_to_party AS customer,
+        bp.business_partner_full_name AS customer_name,
+        bdi.reference_sd_document AS delivery,
+        odi.reference_sd_document AS sales_order,
+        soh.sold_to_party AS so_customer,
+        bdh.accounting_document AS journal_entry,
+        bdh.total_net_amount AS invoice_amount,
+        bdh.transaction_currency,
+        soh.total_net_amount AS order_amount,
+        soh.creation_date AS order_date,
+        bdh.billing_document_date AS invoice_date
+    FROM billing_document_headers bdh
+    JOIN billing_document_items bdi ON bdh.billing_document = bdi.billing_document
+    LEFT JOIN outbound_delivery_items odi
+        ON bdi.reference_sd_document = odi.delivery_document
+        AND bdi.reference_sd_document_item = odi.delivery_document_item
+    LEFT JOIN sales_order_headers soh ON odi.reference_sd_document = soh.sales_order
+    LEFT JOIN business_partners bp ON bdh.sold_to_party = bp.customer
+    LIMIT 20
+
+- id: delivered_not_billed
+  role: example
+  question: Find sales orders that have been delivered but not billed
+  tags: [broken-flow, delivery, billing]
+  sql: |
+    SELECT DISTINCT soh.sales_order, soh.sold_to_party AS customer,
+        soh.total_net_amount, soh.creation_date, soh.overall_delivery_status
+    FROM sales_order_headers soh
+    JOIN sales_order_items soi ON soh.sales_order = soi.sales_order
+    JOIN outbound_delivery_items odi
+        ON odi.reference_sd_document = soh.sales_order
+        AND odi.reference_sd_document_item = soi.sales_order_item
+    WHERE NOT EXISTS (
+        SELECT 1 FROM billing_document_items bdi
+        JOIN outbound_delivery_items odi2
+            ON bdi.reference_sd_document = odi2.delivery_document
+            AND bdi.reference_sd_document_item = odi2.delivery_document_item
+        WHERE odi2.reference_sd_document = soh.sales_order
+    )
+    LIMIT 20
+
+- id: billed_not_delivered
+  role: example
+  question: Find billing documents that were billed without a delivery
+  tags: [broken-flow, delivery, billing]
+  notes: >-
+    Replaces the original pair "Find sales orders that were billed but never delivered", whose SQL
+    joined invoices to orders by customer and did not express billed-without-delivery. An invoice
+    line names the delivery it bills, so billing without a delivery means that delivery is missing.
+  sql: |
+    SELECT DISTINCT bdi.billing_document, bdi.reference_sd_document AS delivery_document,
+        bdh.sold_to_party AS customer, bdh.total_net_amount, bdh.billing_document_date
+    FROM billing_document_items bdi
+    JOIN billing_document_headers bdh ON bdi.billing_document = bdh.billing_document
+    LEFT JOIN outbound_delivery_headers odh ON bdi.reference_sd_document = odh.delivery_document
+    WHERE odh.delivery_document IS NULL
+    LIMIT 20
+
+- id: revenue_by_customer
+  role: example
+  question: What is the total revenue by customer?
+  tags: [revenue, customer, billing]
+  notes: >-
+    The original filtered on billing_document_is_cancelled = FALSE only, which also counted the
+    S1 cancellation documents. Revenue is the invoices (F2) still in force.
+  sql: |
+    SELECT bp.customer, bp.business_partner_full_name,
+        SUM(bdh.total_net_amount) AS total_revenue,
+        COUNT(DISTINCT bdh.billing_document) AS invoice_count,
+        bdh.transaction_currency
+    FROM billing_document_headers bdh
+    JOIN business_partners bp ON bdh.sold_to_party = bp.customer
+    WHERE bdh.billing_document_type = 'F2' AND bdh.billing_document_is_cancelled = FALSE
+    GROUP BY bp.customer, bp.business_partner_full_name, bdh.transaction_currency
+    ORDER BY total_revenue DESC
+    LIMIT 20
+
+- id: complete_flow_for_sales_order
+  role: example
+  question: Show the complete O2C flow for a specific sales order
+  tags: [flow, trace, sales-order]
+  notes: >-
+    The original joined payments on clearing_accounting_document = accounting_document, which
+    does not link a payment to its invoice. A cleared line shares the accounting_document of the
+    receivable it settles.
+  sql: |
+    SELECT
+        soh.sales_order,
+        soh.sold_to_party AS customer,
+        soi.sales_order_item,
+        soi.material AS product,
+        soi.net_amount AS item_amount,
+        odh.delivery_document,
+        odi.actual_delivery_quantity,
+        bdh.billing_document AS invoice,
+        bdh.total_net_amount AS invoice_amount,
+        bdh.accounting_document AS journal_entry,
+        par.clearing_accounting_document AS payment_document
+    FROM sales_order_headers soh
+    JOIN sales_order_items soi ON soh.sales_order = soi.sales_order
+    LEFT JOIN outbound_delivery_items odi
+        ON odi.reference_sd_document = soh.sales_order
+        AND odi.reference_sd_document_item = soi.sales_order_item
+    LEFT JOIN outbound_delivery_headers odh ON odi.delivery_document = odh.delivery_document
+    LEFT JOIN billing_document_items bdi
+        ON bdi.reference_sd_document = odi.delivery_document
+        AND bdi.reference_sd_document_item = odi.delivery_document_item
+    LEFT JOIN billing_document_headers bdh ON bdi.billing_document = bdh.billing_document
+    LEFT JOIN journal_entry_items_accounts_receivable je
+        ON bdh.accounting_document = je.accounting_document
+    LEFT JOIN payments_accounts_receivable par
+        ON je.accounting_document = par.accounting_document
+        AND je.accounting_document_item = par.accounting_document_item
+    LIMIT 30
+
+- id: document_counts
+  role: example
+  question: How many sales orders, deliveries, invoices, and payments are there?
+  tags: [counts, overview]
+  notes: >-
+    Invoices are counted as F2 documents still in force; the original also counted S1
+    cancellation documents.
+  sql: |
+    SELECT
+        (SELECT COUNT(*) FROM sales_order_headers) AS sales_orders,
+        (SELECT COUNT(*) FROM outbound_delivery_headers) AS deliveries,
+        (SELECT COUNT(*) FROM billing_document_headers
+         WHERE billing_document_type = 'F2' AND billing_document_is_cancelled = FALSE) AS invoices,
+        (SELECT COUNT(DISTINCT accounting_document) FROM payments_accounts_receivable) AS payments
+
+- id: top_selling_products_by_quantity
+  role: example
+  question: What are the top selling products by quantity?
+  tags: [product, quantity]
+  sql: |
+    SELECT soi.material AS product, pd.product_description,
+        SUM(soi.requested_quantity) AS total_quantity,
+        soi.requested_quantity_unit AS unit,
+        COUNT(DISTINCT soi.sales_order) AS order_count
+    FROM sales_order_items soi
+    JOIN products p ON soi.material = p.product
+    LEFT JOIN product_descriptions pd ON p.product = pd.product AND pd.language = 'EN'
+    GROUP BY soi.material, pd.product_description, soi.requested_quantity_unit
+    ORDER BY total_quantity DESC
+    LIMIT 10
+
+- id: unpaid_invoices
+  role: example
+  question: Show invoices that have not been paid yet
+  tags: [invoice, payment, finance]
+  notes: >-
+    The original looked for payments with clearing_accounting_document equal to the invoice's
+    accounting document and listed S1 cancellation documents; a settled invoice has a row in
+    payments_accounts_receivable with the same accounting_document.
+  sql: |
+    SELECT bdh.billing_document, bdh.sold_to_party AS customer,
+        bp.business_partner_full_name AS customer_name,
+        bdh.total_net_amount, bdh.transaction_currency,
+        bdh.billing_document_date, bdh.accounting_document
+    FROM billing_document_headers bdh
+    LEFT JOIN business_partners bp ON bdh.sold_to_party = bp.customer
+    WHERE bdh.billing_document_type = 'F2'
+    AND bdh.billing_document_is_cancelled = FALSE
+    AND bdh.accounting_document IS NOT NULL
+    AND NOT EXISTS (
+        SELECT 1 FROM payments_accounts_receivable par
+        WHERE par.accounting_document = bdh.accounting_document
+    )
+    LIMIT 20
+
+- id: customers_with_most_orders
+  role: example
+  question: Which customers have the most sales orders?
+  tags: [customer, sales-order]
+  sql: |
+    SELECT bp.customer, bp.business_partner_full_name,
+        COUNT(DISTINCT soh.sales_order) AS order_count,
+        SUM(soh.total_net_amount) AS total_amount,
+        soh.transaction_currency
+    FROM sales_order_headers soh
+    JOIN business_partners bp ON soh.sold_to_party = bp.customer
+    GROUP BY bp.customer, bp.business_partner_full_name, soh.transaction_currency
+    ORDER BY order_count DESC
+    LIMIT 10
+
+- id: customer_addresses
+  role: example
+  question: Show customer addresses
+  tags: [customer, address]
+  sql: |
+    SELECT bp.customer, bp.business_partner_full_name,
+        bpa.city_name, bpa.region, bpa.country, bpa.postal_code, bpa.street_name
+    FROM business_partners bp
+    JOIN business_partner_addresses bpa ON bp.business_partner = bpa.business_partner
+    LIMIT 20
+
+- id: average_order_value
+  role: example
+  question: What is the average order value?
+  tags: [sales-order, statistics]
+  sql: |
+    SELECT
+        AVG(total_net_amount) AS avg_order_value,
+        MIN(total_net_amount) AS min_order_value,
+        MAX(total_net_amount) AS max_order_value,
+        transaction_currency
+    FROM sales_order_headers
+    WHERE total_net_amount IS NOT NULL
+    GROUP BY transaction_currency
+
+- id: monthly_sales_trend
+  role: example
+  question: Show the monthly sales trend
+  tags: [sales-order, trend]
+  sql: |
+    SELECT DATE_TRUNC('month', creation_date) AS month,
+        COUNT(*) AS order_count,
+        SUM(total_net_amount) AS total_amount,
+        transaction_currency
+    FROM sales_order_headers
+    WHERE creation_date IS NOT NULL
+    GROUP BY DATE_TRUNC('month', creation_date), transaction_currency
+    ORDER BY month
+
+- id: products_with_descriptions
+  role: example
+  question: List all products with their descriptions
+  tags: [product]
+  sql: |
+    SELECT p.product, pd.product_description, p.product_type,
+        p.product_group, p.base_unit, p.gross_weight, p.weight_unit
+    FROM products p
+    LEFT JOIN product_descriptions pd ON p.product = pd.product AND pd.language = 'EN'
+    ORDER BY p.product
+    LIMIT 50
+
+- id: delivery_without_invoice
+  role: example
+  question: Find incomplete O2C flows where delivery exists but no invoice
+  tags: [broken-flow, delivery, billing]
+  sql: |
+    SELECT DISTINCT
+        soh.sales_order,
+        soh.sold_to_party AS customer,
+        odh.delivery_document,
+        soh.total_net_amount,
+        soh.creation_date AS order_date,
+        odh.creation_date AS delivery_date,
+        'Delivered but not billed' AS status
+    FROM sales_order_headers soh
+    JOIN outbound_delivery_items odi ON odi.reference_sd_document = soh.sales_order
+    JOIN outbound_delivery_headers odh ON odi.delivery_document = odh.delivery_document
+    WHERE NOT EXISTS (
+        SELECT 1 FROM billing_document_items bdi
+        WHERE bdi.reference_sd_document = odi.delivery_document
+    )
+    LIMIT 20
+
+# --- golden questions (evaluation only; checked against the sample data) ---------------------
+
+- id: golden_active_invoice_count
+  role: golden
+  question: How many invoices are still in force, not cancelled?
+  tags: [billing, counts]
+  sql: |
+    SELECT COUNT(*) AS active_invoices
+    FROM billing_document_headers
+    WHERE billing_document_type = 'F2' AND billing_document_is_cancelled = FALSE
+  expect: {min_rows: 1, max_rows: 1, columns_include: [active_invoices]}
+
+- id: golden_cancelled_invoice_count
+  role: golden
+  question: How many invoices have been cancelled?
+  tags: [billing, counts]
+  sql: |
+    SELECT COUNT(*) AS cancelled_invoices
+    FROM billing_document_headers
+    WHERE billing_document_type = 'F2' AND billing_document_is_cancelled = TRUE
+  expect: {min_rows: 1, max_rows: 1, columns_include: [cancelled_invoices]}
+
+- id: golden_undelivered_orders
+  role: golden
+  question: How many sales orders have no delivery yet?
+  tags: [sales-order, delivery, counts]
+  sql: |
+    SELECT COUNT(*) AS undelivered_orders
+    FROM sales_order_headers
+    WHERE overall_delivery_status = 'A'
+  expect: {min_rows: 1, max_rows: 1, columns_include: [undelivered_orders]}
+
+- id: golden_orders_by_customer_name
+  role: golden
+  question: Which customer name has the biggest total order value?
+  tags: [customer, sales-order]
+  sql: |
+    SELECT bp.business_partner_full_name, SUM(soh.total_net_amount) AS total_order_value
+    FROM sales_order_headers soh
+    JOIN business_partners bp ON soh.sold_to_party = bp.customer
+    GROUP BY bp.business_partner_full_name
+    ORDER BY total_order_value DESC
+    LIMIT 1
+  expect: {min_rows: 1, max_rows: 1, columns_include: [business_partner_full_name, total_order_value]}
+
+- id: golden_unbilled_delivery_lines
+  role: golden
+  question: Which delivery lines have no billing line?
+  tags: [broken-flow, delivery, billing]
+  sql: |
+    SELECT odi.delivery_document, odi.delivery_document_item
+    FROM outbound_delivery_items odi
+    LEFT JOIN billing_document_items bdi
+        ON bdi.reference_sd_document = odi.delivery_document
+        AND bdi.reference_sd_document_item = odi.delivery_document_item
+    WHERE bdi.billing_document IS NULL
+  expect: {min_rows: 1, columns_include: [delivery_document, delivery_document_item]}
+
+- id: golden_plant_with_most_delivery_lines
+  role: golden
+  question: Which plant ships the most delivery lines?
+  tags: [delivery, plant]
+  sql: |
+    SELECT odi.plant, p.plant_name, COUNT(*) AS delivery_lines
+    FROM outbound_delivery_items odi
+    JOIN plants p ON p.plant = odi.plant
+    GROUP BY odi.plant, p.plant_name
+    ORDER BY delivery_lines DESC
+    LIMIT 1
+  expect: {min_rows: 1, max_rows: 1, columns_include: [plant, delivery_lines]}
+
+- id: golden_unpaid_invoice_total
+  role: golden
+  question: What is the total value of invoices that are unpaid?
+  tags: [invoice, payment, finance]
+  sql: |
+    SELECT SUM(bdh.total_net_amount) AS unpaid_total, bdh.transaction_currency
+    FROM billing_document_headers bdh
+    WHERE bdh.billing_document_type = 'F2'
+    AND bdh.billing_document_is_cancelled = FALSE
+    AND NOT EXISTS (
+        SELECT 1 FROM payments_accounts_receivable par
+        WHERE par.accounting_document = bdh.accounting_document
+    )
+    GROUP BY bdh.transaction_currency
+  expect: {min_rows: 1, columns_include: [unpaid_total]}

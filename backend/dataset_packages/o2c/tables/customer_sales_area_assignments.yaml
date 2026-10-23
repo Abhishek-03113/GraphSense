@@ -1,0 +1,34 @@
+table: customer_sales_area_assignments
+description: "Sales settings of a customer for each sales area (sales organisation, distribution channel and division): payment terms, shipping and delivery rules."
+grain: "(customer, sales_organization, distribution_channel, division)"
+source: {path: customer_sales_area_assignments}
+primary_key: [customer, sales_organization, distribution_channel, division]
+columns:
+  - {source: customer, type: text, role: reference, refs: business_partners.customer,
+     description: "Customer number."}
+  - {source: salesOrganization, type: text, role: reference,
+     description: "Sales organisation of the sales area."}
+  - {source: distributionChannel, type: text, role: code,
+     description: "Distribution channel of the sales area (05, 10, 11, RB and RC occur)."}
+  - {source: division, type: text, role: reference,
+     description: "Division of the sales area."}
+  - {source: completeDeliveryIsDefined, type: boolean, role: flag,
+     description: "True when the customer requires orders to be delivered completely."}
+  - {source: currency, type: text, role: currency,
+     description: "Default currency for the customer in this sales area."}
+  - {source: customerPaymentTerms, type: text, role: code,
+     description: "Payment terms key for the customer in this sales area."}
+  - {source: deliveryPriority, type: text, role: code,
+     description: "Delivery priority of the customer."}
+  - {source: incotermsClassification, type: text, role: code, value_set: incoterms,
+     description: "International commercial terms (Incoterms) agreed with the customer."}
+  - {source: incotermsLocation1, type: text, role: text,
+     description: "Place named in the Incoterms, empty when none."}
+  - {source: shippingCondition, type: text, role: code,
+     description: "Shipping condition key, empty when none."}
+  - {source: slsUnlmtdOvrdelivIsAllwd, type: boolean, role: flag,
+     description: "True when unlimited over-delivery is allowed for the customer."}
+  - {source: exchangeRateType, type: text, role: code, value_set: exchange_rate_type,
+     description: "Exchange rate type used to convert currencies, empty when default."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [billingIsBlockedForCustomer, creditControlArea, salesGroup, salesOffice, supplyingPlant, salesDistrict]

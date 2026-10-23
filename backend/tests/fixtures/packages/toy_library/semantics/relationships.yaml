@@ -1,0 +1,6 @@
+- from_table: loans
+  from_columns: [isbn]
+  to_table: books
+  to_columns: [isbn]
+  cardinality: many_to_one
+  description: Each loan is for one book; a book can be lent many times.

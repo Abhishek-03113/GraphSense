@@ -1,0 +1,19 @@
+# Codes that YAML 1.1 would turn into booleans or numbers (NO, 05) must survive as written.
+country_code:
+  description: Country of origin of an author.
+  values: {NO: Norway, SE: Sweden, GB: United Kingdom}
+  applies_to: [authors.home_country]
+language_code:
+  description: Language a book is written in.
+  values: {EN: English, NO: Norwegian, "05": Swedish}
+  applies_to: [books.language]
+  confidence: medium
+  notes: "05 is a local catalogue code, not an ISO code."
+member_tier:
+  description: Membership level.
+  values: {B: Bronze, S: Silver, G: Gold}
+  applies_to: [members.tier]
+loan_status:
+  description: Where a loan stands.
+  values: {O: Open, R: Returned, L: Late}
+  applies_to: [loans.status]

@@ -1,0 +1,12 @@
+- id: lending_process
+  title: How lending works
+  text: >-
+    A member borrows a book, which creates a loan. The loan is open until the book is
+    returned. A loan returned after its due date is late and may carry a late fee.
+  tables: [loans, members, books]
+  tags: [process]
+- id: reference_books
+  title: Reference books
+  text: Books flagged is_reference cannot be borrowed, so they never appear on a loan.
+  tables: [books]
+  tags: [rule]

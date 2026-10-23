@@ -1,0 +1,40 @@
+# What the dataset is about. A question is in scope when it uses one of these terms (or a
+# term derived from the tables, columns and labels) or is similar enough to the knowledge base.
+scope_summary: sales orders, deliveries, invoices, payments, customers and products
+terms:
+  - order
+  - sales order
+  - delivery
+  - shipment
+  - invoice
+  - billing
+  - payment
+  - customer
+  - product
+  - material
+  - plant
+  - journal entry
+  - accounting document
+  - receivable
+  - cancellation
+  - revenue
+  - o2c
+  - order to cash
+synonyms:
+  invoice: [billing document, bill]
+  customer: [client, buyer, sold-to party, business partner]
+  delivery: [shipment, outbound delivery]
+  product: [item, material, article]
+  payment: [clearing, settlement]
+  sales order: [order]
+min_similarity: 0.40
+out_of_scope_message: "I can answer questions about {scope_summary}. Try one of the suggested questions."
+guardrail_cases:
+  - {question: Write me a poem about autumn, expect: reject}
+  - {question: List the planets of the solar system, expect: reject}
+  - {question: What is the capital of France, expect: reject}
+  - {question: Show me a recipe for chocolate cake, expect: reject}
+  - {question: "How many invoices were cancelled?", expect: allow}
+  - {question: "Which customers have the most sales orders?", expect: allow}
+  - {question: "Show deliveries that were never billed", expect: allow}
+  - {question: "What is the total revenue by customer?", expect: allow}

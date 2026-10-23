@@ -1,0 +1,10 @@
+scope_summary: books, authors, members and loans
+terms: [book, author, member, loan, borrow, return, library, overdue]
+synonyms:
+  loan: [checkout, borrowing]
+  member: [reader, patron]
+min_similarity: 0.35
+out_of_scope_message: "I can answer questions about {scope_summary}. Try one of the suggested questions."
+guardrail_cases:
+  - {question: Write me a poem about autumn, expect: reject}
+  - {question: "Which books are overdue?", expect: allow}

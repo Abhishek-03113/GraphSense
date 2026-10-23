@@ -1,0 +1,38 @@
+table: products
+description: "Product (material) master data. One row per product that can be sold."
+grain: "product"
+source: {path: products}
+primary_key: [product]
+columns:
+  - {source: product, type: text, role: id,
+     description: "Product (material) number."}
+  - {source: productType, type: text, role: code, value_set: product_type,
+     description: "Kind of product (local codes ZF01, ZFS1 and ZPKG)."}
+  - {source: creationDate, type: date, role: date,
+     description: "Date the product was created."}
+  - {source: createdByUser, type: text, role: text, sensitive: true,
+     description: "User who created the product."}
+  - {source: lastChangeDate, type: date, role: date,
+     description: "Date the product was last changed."}
+  - {source: lastChangeDateTime, type: timestamp, role: datetime,
+     description: "When the product was last changed."}
+  - {source: isMarkedForDeletion, type: boolean, role: flag,
+     description: "True when the product is marked for deletion."}
+  - {source: productOldId, type: text, role: text,
+     description: "Identifier of the product in the previous (legacy) system."}
+  - {source: grossWeight, type: "decimal(18,2)", role: measure,
+     description: "Gross weight of one base unit, in weight_unit."}
+  - {source: weightUnit, type: text, role: code, value_set: unit_of_measure,
+     description: "Unit of measure of the weights."}
+  - {source: netWeight, type: "decimal(18,2)", role: measure,
+     description: "Net weight of one base unit, in weight_unit."}
+  - {source: productGroup, type: text, role: code, value_set: product_group,
+     description: "Group the product belongs to (local codes ZFG1001 and ZPKG004)."}
+  - {source: baseUnit, type: text, role: code, value_set: unit_of_measure,
+     description: "Base unit of measure in which stock is kept."}
+  - {source: division, type: text, role: reference,
+     description: "Division the product belongs to."}
+  - {source: industrySector, type: text, role: code, value_set: industry_sector,
+     description: "Industry sector of the product."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [crossPlantStatus, crossPlantStatusValidityDate]

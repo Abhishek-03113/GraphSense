@@ -1,0 +1,159 @@
+# Labels for coded fields. 'confidence' says how sure the author is of the labels:
+#   high   - standard meaning, confirmed against the data;
+#   medium - standard meaning but not confirmable from this data;
+#   low    - a guess that a domain expert must confirm. Low-confidence labels are kept here
+#            for review but are not served to clients.
+
+sd_overall_delivery:
+  description: "Delivery progress of a whole sales order."
+  values:
+    "A": "Not yet delivered"
+    "B": "Partially delivered"
+    "C": "Completely delivered"
+  applies_to: [sales_order_headers.overall_delivery_status]
+  notes: "Standard meaning of the overall delivery status of a sales order. Only A and C occur in the sample data; every order with status C has a delivery and every order with status A has none."
+sd_processing_status:
+  description: "Progress of a processing step (picking, goods issue) of a whole delivery."
+  values:
+    "A": "Not started"
+    "B": "Partially processed"
+    "C": "Completed"
+  applies_to: [outbound_delivery_headers.overall_goods_movement_status, outbound_delivery_headers.overall_picking_status]
+  notes: "Standard meaning of the overall picking and goods movement statuses. In the sample data goods movement C coincides with a recorded goods issue date and A with none."
+sd_completion_status:
+  description: "Whether all mandatory data of a document is complete."
+  values:
+    "A": "Not complete"
+    "B": "Partly complete"
+    "C": "Complete"
+  applies_to: [outbound_delivery_headers.hdr_general_incompletion_status]
+  confidence: medium
+  notes: "Standard completion status triple; only C occurs in the sample data."
+billing_doc_type:
+  description: "Type of billing document."
+  values:
+    "F2": "Invoice"
+    "S1": "Cancellation"
+  applies_to: [billing_document_headers.billing_document_type, billing_document_cancellations.billing_document_type]
+  notes: "Confirmed against the data: every S1 document has cancelled_billing_document pointing at an F2 invoice that is flagged as cancelled."
+bp_category:
+  description: "Kind of business partner."
+  values:
+    "1": "Person"
+    "2": "Organization"
+    "3": "Group"
+  applies_to: [business_partners.business_partner_category]
+form_of_address:
+  description: "Form of address (title) key."
+  values:
+    "0003": "Company"
+  applies_to: [business_partners.form_of_address]
+  confidence: medium
+  notes: "Standard title key 0003 is Company; consistent with all partners being organisations."
+financial_account_type:
+  description: "Kind of account a ledger line is posted to."
+  values:
+    "D": "Customer (accounts receivable)"
+  applies_to: [journal_entry_items_accounts_receivable.financial_account_type, payments_accounts_receivable.financial_account_type]
+  notes: "Standard account type D (debtor). Only D occurs."
+accounting_document_type:
+  description: "Type of accounting document."
+  values:
+    "RV": "Billing document transfer to accounting"
+  applies_to: [journal_entry_items_accounts_receivable.accounting_document_type]
+  notes: "Standard document type RV, the type created when a billing document is posted. Only RV occurs."
+sales_order_type:
+  description: "Type of sales order."
+  values:
+    "OR": "Standard order"
+  applies_to: [sales_order_headers.sales_order_type]
+  notes: "Standard order type OR. Only OR occurs."
+sales_order_item_category:
+  description: "Category of a sales order item."
+  values:
+    "TAN": "Standard item"
+  applies_to: [sales_order_items.sales_order_item_category]
+  notes: "Standard item category TAN. Only TAN occurs."
+incoterms:
+  description: "International commercial terms."
+  values:
+    "FOR": "Free on rail"
+  applies_to: [customer_sales_area_assignments.incoterms_classification, sales_order_headers.incoterms_classification]
+  notes: "Only FOR occurs."
+exchange_rate_type:
+  description: "Exchange rate type used for currency conversion."
+  values:
+    "M": "Average rate (standard translation)"
+  applies_to: [customer_sales_area_assignments.exchange_rate_type]
+  confidence: medium
+  notes: "Standard exchange rate type M. Only M occurs."
+unit_of_measure:
+  description: "Unit of measure."
+  values:
+    "PC": "Piece"
+    "KG": "Kilogram"
+  applies_to: [billing_document_items.billing_quantity_unit, outbound_delivery_items.delivery_quantity_unit, products.weight_unit, products.base_unit, sales_order_items.requested_quantity_unit, sales_order_schedule_lines.order_quantity_unit]
+language_code:
+  description: "Language of a text."
+  values:
+    "EN": "English"
+  applies_to: [plants.language, product_descriptions.language]
+country_code:
+  description: "Country (ISO 3166 alpha-2)."
+  values:
+    "IN": "India"
+  applies_to: [business_partner_addresses.country]
+region_in:
+  description: "Region (state) of India."
+  values:
+    "KA": "Karnataka"
+    "MH": "Maharashtra"
+    "OD": "Odisha"
+    "RJ": "Rajasthan"
+    "TN": "Tamil Nadu"
+    "TS": "Telangana"
+    "WB": "West Bengal"
+  applies_to: [business_partner_addresses.region]
+availability_check_type:
+  description: "Availability check applied to a product in a plant."
+  values:
+    "NC": "No check"
+  applies_to: [product_plants.availability_check_type]
+  notes: "Standard availability check group NC. Only NC occurs."
+mrp_type:
+  description: "Material requirements planning type."
+  values:
+    "ND": "No planning"
+  applies_to: [product_plants.mrp_type]
+  notes: "Standard MRP type ND. Only ND occurs."
+industry_sector:
+  description: "Industry sector of a product."
+  values:
+    "M": "Mechanical engineering"
+  applies_to: [products.industry_sector]
+  confidence: medium
+  notes: "Standard industry sector M. The business is not mechanical engineering (the products are personal care items), so the sector is probably a system default."
+product_type:
+  description: "Kind of product (local codes)."
+  values:
+    "ZF01": "Finished product, combo or pack"
+    "ZFS1": "Finished product, single item"
+    "ZPKG": "Packaging material"
+  applies_to: [products.product_type]
+  confidence: low
+  notes: "GUESS inferred from product names: ZPKG products are boxes, ZF01 products are combos and packs, ZFS1 products are single items. Needs confirmation by the data owner."
+product_group:
+  description: "Group a product belongs to (local codes)."
+  values:
+    "ZFG1001": "Finished goods"
+    "ZPKG004": "Packaging"
+  applies_to: [products.product_group, sales_order_items.material_group]
+  confidence: low
+  notes: "GUESS inferred from product names and product type. Needs confirmation by the data owner."
+rejection_reason:
+  description: "Reason a sales order item was rejected."
+  values:
+    "61": "Rejected (reason code 61)"
+  applies_to: [sales_order_items.sales_document_rjcn_reason]
+  confidence: low
+  notes: "The meaning of code 61 is not known; the label only restates the code. Needs confirmation by the data owner."

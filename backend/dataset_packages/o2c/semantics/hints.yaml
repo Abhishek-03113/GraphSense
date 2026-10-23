@@ -1,0 +1,8 @@
+# Rules added to the SQL-writing prompt for this dataset, on top of the generic ones.
+- "To get a customer name, join business_partners ON business_partners.customer = <table>.sold_to_party. sold_to_party refers to business_partners.customer, NOT to business_partners.business_partner."
+- "Item numbers are stored without leading zeros in every table, so item columns can be compared directly (for example odi.reference_sd_document_item = soi.sales_order_item). Do not use REGEXP_REPLACE or casts on them."
+- "Invoices still in force are billing_document_headers rows with billing_document_type = 'F2' AND billing_document_is_cancelled = FALSE. Type S1 rows are cancellation documents, not sales."
+- "Product names are in product_descriptions: join ON product_descriptions.product = <table>.material (or products.product) AND product_descriptions.language = 'EN'."
+- "To link an invoice to its payment, join payments_accounts_receivable ON payments_accounts_receivable.accounting_document = billing_document_headers.accounting_document. There is no direct invoice-to-payment column."
+- "A broken flow is a sales order that was delivered but not billed, or billed without a delivery. Check deliveries with NOT EXISTS on billing_document_items (reference_sd_document, reference_sd_document_item) against the delivery items."
+- "Only add up amounts that share a transaction_currency; group by it when the currency can differ."

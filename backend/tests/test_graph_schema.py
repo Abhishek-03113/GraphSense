@@ -4,16 +4,15 @@ import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
 
-from src.db import models  # noqa: F401  (registers tables on Base.metadata)
-from src.db.base import Base
+from src.datasets import get_package, load_package
 from src.domain.graph_registry import (
     UnknownDatasetError,
-    available_datasets,
     get_dataset,
     load_dataset,
 )
 from src.domain.graph_schema import EdgeTypeDef, GraphDataset, NodeTypeDef
 from src.main import app
+from tests.conftest import TOY_DIR
 
 CATEGORIES = {"party", "document", "item", "master", "finance", "other"}
 ACCENTS = {
@@ -22,8 +21,11 @@ ACCENTS = {
 }
 
 
-@pytest.fixture(params=available_datasets())
+@pytest.fixture(params=["o2c", "toy_library"])
 def dataset(request) -> GraphDataset:
+    """Every definition is checked for the shipped package and for the unrelated toy package."""
+    if request.param == "toy_library":
+        return load_package(TOY_DIR).graph_dataset()
     return load_dataset(request.param)
 
 
@@ -79,19 +81,19 @@ def test_main_documents_have_distinct_accents(dataset):
 
 
 # ---------------------------------------------------------------------------
-# O2C definitions line up with the ORM models
+# Definitions line up with the package's tables (every dataset)
 # ---------------------------------------------------------------------------
 
 
-def _columns(table: str) -> set:
-    assert table in Base.metadata.tables, f"unknown table {table}"
-    return {c.name for c in Base.metadata.tables[table].columns}
+def _package_columns(dataset: GraphDataset, table: str) -> set:
+    package = load_package(TOY_DIR) if dataset.id == "toy_library" else get_package(dataset.id)
+    assert package.has_table(table), f"unknown table {table}"
+    return set(package.table(table).column_names)
 
 
-def test_o2c_node_columns_exist_in_models():
-    ds = load_dataset("o2c")
-    for n in ds.node_types:
-        cols = _columns(n.table)
+def test_node_columns_exist_in_the_package_tables(dataset):
+    for n in dataset.node_types:
+        cols = _package_columns(dataset, n.table)
         assert set(n.id_columns) <= cols, n.key
         assert set(n.detail_columns) <= cols, n.key
         assert set(n.display_properties) <= set(n.detail_keys), n.key
@@ -99,17 +101,21 @@ def test_o2c_node_columns_exist_in_models():
             assert n.label_column in cols, n.key
         if n.label_lookup:
             lk = n.label_lookup
-            lookup_cols = _columns(lk.table)
+            lookup_cols = _package_columns(dataset, lk.table)
             assert {lk.match_column, lk.label_column} <= lookup_cols, n.key
             assert {c for c, _ in lk.filters} <= lookup_cols, n.key
 
 
-def test_o2c_edge_columns_exist_in_models():
-    ds = load_dataset("o2c")
-    for e in ds.edge_types:
-        cols = _columns(e.table)
+def test_edge_columns_exist_in_the_package_tables(dataset):
+    for e in dataset.edge_types:
+        cols = _package_columns(dataset, e.table)
         used = set(e.source_columns) | set(e.target_columns) | set(e.not_null)
         assert used <= cols, (e.key, e.source, e.target)
+
+
+def test_entity_refs_point_at_package_columns(dataset):
+    for ref in dataset.entity_refs:
+        assert ref.column in _package_columns(dataset, ref.table), ref
 
 
 # ---------------------------------------------------------------------------
@@ -194,11 +200,14 @@ def test_schema_endpoint_matches_contract(client):
     assert res.status_code == 200
     body = res.json()
     assert set(body) == {"domain", "node_types", "edge_types", "flows"}
-    assert body["domain"] == {
+    # Additive contract: everything the original payload had, plus new fields.
+    assert {
         "id": "o2c",
         "name": "Order to Cash",
         "description": "Sales orders through delivery, billing and payment.",
-    }
+    }.items() <= body["domain"].items()
+    assert {"version", "is_default"} <= set(body["domain"])
+    assert body["domain"]["is_default"] is False
 
     node_fields = {
         "key", "label", "plural", "description", "category",
@@ -206,7 +215,8 @@ def test_schema_endpoint_matches_contract(client):
     }
     assert body["node_types"]
     for n in body["node_types"]:
-        assert set(n) == node_fields
+        assert node_fields <= set(n)
+        assert set(n) - node_fields <= {"value_labels"}
         assert n["category"] in CATEGORIES
         assert n["accent"] is None or n["accent"] in ACCENTS
         assert isinstance(n["is_primary"], bool)
