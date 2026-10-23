@@ -17,7 +17,7 @@ from src.datasets import (
 )
 from src.datasets.loader import load_yaml_text
 from src.datasets.models import derive_column_name, parse_type
-from tests.conftest import TOY_DATA_DIR
+from tests.conftest import TOY_DATA_DIR, TOY_DIR
 
 # ---------------------------------------------------------------------------
 # Strict YAML loading
@@ -259,7 +259,9 @@ def test_expected_columns_must_be_columns_of_the_query(package_copy):
 
 
 def test_guardrail_cases_need_both_outcomes(package_copy):
-    path = package_copy(edits={"semantics/vocabulary.yaml": ('  - {question: "Which books are overdue?", expect: allow}\n', "")})
+    original = (TOY_DIR / "semantics" / "vocabulary.yaml").read_text(encoding="utf-8")
+    rejects_only = "".join(line for line in original.splitlines(keepends=True) if "expect: allow" not in line)
+    path = package_copy(edits={"semantics/vocabulary.yaml": rejects_only})
     assert "at least one allow and one reject" in _lint_errors(path)
 
 
@@ -312,7 +314,7 @@ def test_warnings_flag_gaps_without_failing(toy_package):
 def test_coverage_counts(toy_package):
     c = validate_package(toy_package).coverage
     assert (c.tables, c.node_types, c.edge_types, c.flows) == (4, 4, 3, 1)
-    assert c.examples == 2 and c.golden_examples == 1
+    assert c.examples == 2 and c.golden_examples == 5
     assert c.columns_with_description == c.columns
 
 

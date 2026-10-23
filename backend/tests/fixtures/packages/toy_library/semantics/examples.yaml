@@ -24,3 +24,27 @@
   tags: [loans]
   sql: SELECT COUNT(*) AS open_loans FROM loans WHERE returned_at IS NULL
   expect: {min_rows: 1, columns_include: [open_loans]}
+- id: late_loans
+  role: golden
+  question: Which loans were returned late?
+  tags: [loans]
+  sql: SELECT loan_id, member_id FROM loans WHERE status = 'L'
+  expect: {min_rows: 1, columns_include: [loan_id, member_id]}
+- id: norwegian_books
+  role: golden
+  question: Which books are written in Norwegian?
+  tags: [books]
+  sql: SELECT isbn, title FROM books WHERE language = 'NO'
+  expect: {min_rows: 1, columns_include: [isbn, title]}
+- id: gold_members
+  role: golden
+  question: Which members hold a gold membership?
+  tags: [members]
+  sql: SELECT member_id, full_name FROM members WHERE tier = 'G'
+  expect: {min_rows: 1, columns_include: [member_id, full_name]}
+- id: total_late_fees
+  role: golden
+  question: What is the sum of all late fees?
+  tags: [loans]
+  sql: SELECT SUM(late_fee) AS total_late_fees FROM loans
+  expect: {min_rows: 1, max_rows: 1, columns_include: [total_late_fees]}

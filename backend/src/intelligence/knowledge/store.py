@@ -119,6 +119,15 @@ class KnowledgeStore:
                 for r in result
             ]
 
+    async def texts(self, dataset_id: str) -> list[tuple[str, str, str]]:
+        """``(kind, ref, text)`` of every active item (for audits such as the evaluation's leakage check)."""
+        async with self.engine.connect() as conn:
+            result = await conn.execute(
+                text(f"SELECT kind, ref, text FROM {self.table} WHERE dataset_id = :d AND active ORDER BY id"),
+                {"d": dataset_id},
+            )
+            return [(r.kind, r.ref, r.text) for r in result]
+
     async def count(self, dataset_id: str) -> int:
         async with self.engine.connect() as conn:
             return int(

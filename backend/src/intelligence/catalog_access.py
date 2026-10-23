@@ -2,8 +2,8 @@
 
 The pipeline depends on the one-method :class:`CatalogSource`.  The application uses the
 catalog service (stored build, live profile or package fallback, see ``src.catalog.service``).
-:class:`PackageCatalogSource` (package only: no row counts or profile statistics) is kept for
-tests and tools that run without a database.
+A package-only source (no row counts, no profile statistics) exists for tests only, as
+``PackageCatalogSource`` in ``tests/ask_support.py``.
 """
 
 from __future__ import annotations
@@ -18,21 +18,6 @@ from src.datasets.context import DatasetContext
 
 class CatalogSource(Protocol):
     async def get_snapshot(self, ctx: DatasetContext) -> CatalogSnapshot: ...
-
-
-class PackageCatalogSource:
-    """Snapshots built from the package only, cached per package content hash."""
-
-    def __init__(self) -> None:
-        self._cache: dict[str, CatalogSnapshot] = {}
-
-    async def get_snapshot(self, ctx: DatasetContext) -> CatalogSnapshot:
-        key = ctx.package.content_hash
-        snap = self._cache.get(key)
-        if snap is None:
-            snap = CatalogSnapshot.from_package(ctx.package)
-            self._cache = {key: snap}
-        return snap
 
 
 def sensitive_columns(snapshot: CatalogSnapshot) -> frozenset[tuple[str, str]]:
