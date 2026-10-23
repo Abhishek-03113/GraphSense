@@ -116,6 +116,8 @@ GENERIC_SOURCES = [
     *sorted((BACKEND_DIR / "src" / "datasets").glob("*.py")),
     *sorted((BACKEND_DIR / "src" / "catalog").glob("*.py")),
     *sorted((BACKEND_DIR / "src" / "cli").rglob("*.py")),
+    *sorted((BACKEND_DIR / "src" / "intelligence").rglob("*.py")),
+    *sorted((BACKEND_DIR / "src" / "intelligence").rglob("*.j2")),
     BACKEND_DIR / "src" / "api" / "deps.py",
     BACKEND_DIR / "src" / "api" / "errors.py",
     BACKEND_DIR / "src" / "domain" / "graph_schema.py",

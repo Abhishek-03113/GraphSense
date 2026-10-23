@@ -423,6 +423,21 @@ class IngestPolicy(_Model):
     on_duplicate_key: Literal["last_wins", "error"] = "last_wins"
 
 
+class SqlPolicy(_Model):
+    """Per-dataset additions to the rules for model-written SQL."""
+
+    # Extra SQL function names a generated query may call, on top of the built-in allowlist.
+    extra_functions: tuple[str, ...] = ()
+
+    @field_validator("extra_functions")
+    @classmethod
+    def _valid_functions(cls, v: tuple[str, ...]) -> tuple[str, ...]:
+        for name in v:
+            if not _NAME.match(name):
+                raise ValueError(f"invalid function name {name!r}")
+        return v
+
+
 # ---------------------------------------------------------------------------
 # Graph
 # ---------------------------------------------------------------------------
@@ -602,6 +617,11 @@ class DatasetPackage(_Model):
     locale: str = "en"
     source: SourceSpec
     ingest: IngestPolicy = Field(default_factory=IngestPolicy)
+    # May query results (row values) be sent to the language model to write the answer?
+    # When false only aggregates and summaries are sent, never row values.  Columns marked
+    # ``sensitive`` are never sent either way.
+    llm_sees_rows: bool = True
+    sql: SqlPolicy = Field(default_factory=SqlPolicy)
     includes: tuple[str, ...] = ("tables/*.yaml", "graph.yaml", "semantics/*.yaml")
 
     tables: tuple[TableSpec, ...] = ()
