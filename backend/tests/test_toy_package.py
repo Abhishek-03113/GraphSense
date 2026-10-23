@@ -119,6 +119,8 @@ GENERIC_SOURCES = [
     *sorted((BACKEND_DIR / "src" / "intelligence").rglob("*.py")),
     *sorted((BACKEND_DIR / "src" / "intelligence").rglob("*.j2")),
     BACKEND_DIR / "src" / "api" / "deps.py",
+    BACKEND_DIR / "src" / "api" / "chat.py",
+    BACKEND_DIR / "src" / "api" / "ratelimit.py",
     BACKEND_DIR / "src" / "api" / "errors.py",
     BACKEND_DIR / "src" / "domain" / "graph_schema.py",
     BACKEND_DIR / "src" / "domain" / "graph_models.py",
