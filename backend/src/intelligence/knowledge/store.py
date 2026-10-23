@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
@@ -72,6 +73,7 @@ class KnowledgeStore:
         self._engine = engine
         self.table = table
         self._has_vector: bool | None = None
+        self._checked_at = 0.0
 
     @property
     def engine(self) -> AsyncEngine:
@@ -82,7 +84,10 @@ class KnowledgeStore:
 
     async def has_vector(self) -> bool:
         """True when the table has an ``embedding`` column (pgvector is installed)."""
-        if self._has_vector is None:
+        # A positive answer is final; a negative one is re-checked now and then, because the
+        # embeddings migration may be applied while the application is running.
+        if self._has_vector is None or (not self._has_vector and time.monotonic() - self._checked_at > 60):
+            self._checked_at = time.monotonic()
             schema, _, name = self.table.rpartition(".")
             async with self.engine.connect() as conn:
                 found = await conn.scalar(

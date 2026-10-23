@@ -36,6 +36,7 @@ class HookContextLike(Protocol):
     schema: str
     engine: Any
     settings: Any
+    options: Any
 
 
 @dataclass
@@ -79,8 +80,11 @@ class RefreshKnowledgeHook:
             dataset = DatasetContext(id=ctx.dataset_id, schema_name=ctx.schema, package=ctx.package)
             snapshot = await build_catalog_source().get_snapshot(dataset)
             providers = build_providers()
+            options = getattr(ctx, "options", None) or {}
             async with knowledge_engine(getattr(ctx, "engine", None)) as engine:
-                report = await run_refresh(KnowledgeStore(engine), snapshot, providers.embedder)
+                report = await run_refresh(
+                    KnowledgeStore(engine), snapshot, providers.embedder, force=bool(options.get("force"))
+                )
         except Exception as exc:
             logger.exception("Knowledge refresh failed for %s", ctx.dataset_id)
             return KnowledgeHookResult(self.name, "warning", f"knowledge refresh failed ({type(exc).__name__})")

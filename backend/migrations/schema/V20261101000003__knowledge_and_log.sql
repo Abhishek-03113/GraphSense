@@ -2,15 +2,13 @@
 -- Category: schema
 --
 -- app.knowledge_items holds the text the Ask layer retrieves from (tables, relationships,
--- glossary entries, example questions, data profiles, coded values) with an optional embedding.
--- The embedding column has no fixed size: embed_model and dims are stored per row, so a change of
--- embedding model never needs a schema change.  A row without an embedding is still found by text search.
--- Note: no vector index, because exact search is fast enough for a few thousand items per dataset.
+-- glossary entries, example questions, data profiles, coded values).  Full-text search works
+-- on every server.  The optional embedding column is added by the next migration
+-- (V20261101000004), which needs the pgvector extension, so a server without pgvector still
+-- gets this table, the query log and the evaluation log.
 --
 -- No foreign keys to other streams' tables.  The migration runner splits on semicolons,
 -- so a statement never contains one inside.
-
-CREATE EXTENSION IF NOT EXISTS vector;
 
 CREATE SCHEMA IF NOT EXISTS app;
 
@@ -23,7 +21,6 @@ CREATE TABLE IF NOT EXISTS app.knowledge_items (
     content_hash  TEXT         NOT NULL,
     embed_model   TEXT         NOT NULL DEFAULT '',
     dims          INTEGER,
-    embedding     vector,
     metadata      JSONB        NOT NULL DEFAULT '{}',
     tsv           TSVECTOR GENERATED ALWAYS AS (to_tsvector('english', replace(text, '_', ' '))) STORED,
     active        BOOLEAN      NOT NULL DEFAULT TRUE,

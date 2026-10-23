@@ -25,7 +25,9 @@ from src.datasets import row_coercer, schema_ddl
 from src.datasets.models import DatasetPackage
 from tests.conftest import FIXTURES, TOY_DATA_DIR
 
-MIGRATION = BACKEND_DIR / "migrations" / "schema" / "V20261101000003__knowledge_and_log.sql"
+MIGRATIONS = BACKEND_DIR / "migrations" / "schema"
+MIGRATION = MIGRATIONS / "V20261101000003__knowledge_and_log.sql"
+EMBEDDINGS_MIGRATION = MIGRATIONS / "V20261101000004__knowledge_embeddings.sql"
 
 def pytest_collection_modifyitems(items):
     for item in items:
@@ -118,18 +120,15 @@ def pg(toy_package, o2c_package):
     conn.autocommit = True
     cur = conn.cursor()
 
+    for stmt in _statements(MIGRATION.read_text(encoding="utf-8")):
+        cur.execute(stmt)
+    # The embeddings migration needs pgvector; without it the store is full-text only.
     has_vector = True
     try:
-        cur.execute("CREATE EXTENSION IF NOT EXISTS vector")
+        for stmt in _statements(EMBEDDINGS_MIGRATION.read_text(encoding="utf-8")):
+            cur.execute(stmt)
     except psycopg2.Error:
         has_vector = False
-    statements = _statements(MIGRATION.read_text(encoding="utf-8"))
-    for stmt in statements:
-        if not has_vector:
-            if stmt.startswith("CREATE EXTENSION"):
-                continue
-            stmt = re.sub(r"^\s*embedding\s+vector,\s*$", "", stmt, flags=re.MULTILINE)
-        cur.execute(stmt)
 
     create_dataset(cur, toy_package, toy_records())
     create_dataset(cur, o2c_package, o2c_records())

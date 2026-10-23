@@ -66,6 +66,22 @@ _CATEGORY_BY_STATE: dict[str, ExecutionCategory] = {
 }
 
 
+def search_path_for(schema_name: str | None) -> str:
+    """The ``search_path`` for generated SQL: the dataset schema, then ``public``.
+
+    ``public`` stays on the path so a database whose tables are not yet moved into the dataset
+    schema (a legacy layout) works unchanged.  Uses the storage layer's helper when it exists, so
+    both agree.
+    """
+    if schema_name is None:
+        return "public"
+    try:
+        from src.storage.schema_names import search_path_for as storage_path
+    except ImportError:
+        return f"{schema_name}, public"
+    return storage_path(schema_name)
+
+
 def asyncpg_dsn(dsn: str) -> str:
     """The plain ``postgresql://`` form asyncpg wants (SQLAlchemy's ``+asyncpg`` marker removed)."""
     return re.sub(r"^postgres(?:ql)?(?:\+\w+)?://", "postgresql://", dsn, count=1)
@@ -161,7 +177,7 @@ class ReadOnlyExecutor:
         """Run the query.  Raises :class:`ExecutionError`."""
         if schema_name is not None and not _SCHEMA.match(schema_name):
             raise ExecutionError("other", "invalid schema name")
-        search_path = schema_name or "public"
+        search_path = search_path_for(schema_name)
         timeout_ms = self.settings.SQL_STATEMENT_TIMEOUT_MS
         started = time.perf_counter()
         try:
