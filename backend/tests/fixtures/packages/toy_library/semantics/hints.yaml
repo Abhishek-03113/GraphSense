@@ -1,0 +1,2 @@
+- A loan is open while returned_at is NULL.
+- Use authors.full_name for author names and members.full_name for member names.

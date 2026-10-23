@@ -1,0 +1,17 @@
+table: books
+description: One row per title in the collection.
+grain: book
+source: {path: books}
+primary_key: [isbn]
+indexes: [[author_id]]
+columns:
+  - {source: isbn, type: text, role: id, description: International Standard Book Number.}
+  - {source: title, type: text, role: name, description: Title of the book.}
+  - {source: authorId, type: text, role: reference, refs: authors.author_id, description: Author of the book.}
+  - {source: published, type: date, role: date, description: Publication date.}
+  - {source: pageCount, type: integer, role: measure, description: Number of pages.}
+  - {source: price, type: "decimal(8,2)", role: amount, currency_column: price_currency, description: Replacement price.}
+  - {source: priceCurrency, type: text, role: currency, description: Currency of the price.}
+  - {source: language, type: text, role: code, value_set: language_code, description: Language of the text.}
+  - {source: shelfCode, type: text, role: code, description: "Shelf the book is kept on. Codes such as 05 keep their leading zero."}
+  - {source: isReference, type: boolean, role: flag, description: True for books that cannot be borrowed.}

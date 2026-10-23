@@ -1,0 +1,12 @@
+# A tiny second dataset. It exists to prove that nothing in the engine is tied
+# to the reference (order-to-cash) package: different domain, different key
+# shapes, different codes.
+package_format: 1
+id: toy_library
+version: "1.0.0"
+name: Lending Library
+description: Books, their authors, the members who borrow them and the loans between them.
+locale: en
+source: {kind: jsonl_dir, default_subdir: toy-library}
+ingest: {empty_string_is_null: true, unknown_fields: warn, max_reject_rate: 0.05, on_duplicate_key: last_wins}
+includes: [tables/*.yaml, graph.yaml, semantics/*.yaml]

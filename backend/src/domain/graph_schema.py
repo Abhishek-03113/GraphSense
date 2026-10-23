@@ -3,8 +3,8 @@
 A dataset is a set of node types, edge types and flows.  Everything the graph
 layer needs - the product-facing metadata served by ``GET /api/graph/schema``
 as well as the table/column mapping the repository turns into SQL - lives in
-these definitions, so plugging in a new dataset means writing a definition
-module (see ``src/domain/datasets/o2c.py``) rather than editing repository SQL.
+these definitions, so plugging in a new dataset means writing its ``graph.yaml``
+(see ``src/datasets`` and ``dataset_packages/``) rather than editing repository SQL.
 
 Identifier-like fields (type keys, table and column names) are validated on
 construction because the repository interpolates them into SQL text.
@@ -14,7 +14,7 @@ from __future__ import annotations
 
 import re
 
-from pydantic import BaseModel, ConfigDict, field_validator, model_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.domain.graph_models import (
     AccentName,
@@ -26,10 +26,10 @@ from src.domain.graph_models import (
     SchemaNodeType,
 )
 
-# Records of these categories are shared reference data (one customer or product
-# is linked to a great many documents).  Graph traversal reaches them but does
-# not expand through them, otherwise a trace of one invoice would pull in every
-# other order of the same customer or product.
+# Records of these categories are shared reference data (one party or catalogue
+# item is linked to a great many documents).  Graph traversal reaches them but
+# does not expand through them, otherwise a trace of one document would pull in
+# every other document that refers to the same party or item.
 TERMINAL_CATEGORIES = frozenset({"party", "master"})
 
 _KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
@@ -44,7 +44,35 @@ def _check(pattern: re.Pattern, value: str, what: str) -> str:
 
 
 class _Frozen(BaseModel):
-    model_config = ConfigDict(frozen=True)
+    # forbid: a misspelt key in a dataset package must fail loudly, not be ignored.
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+
+class EntityRef(_Frozen):
+    """A single column that holds the id of a node type but is not part of a node or edge definition.
+
+    Example: ``orders.shipment_ref`` holds a Shipment id.  Used to
+    recognise entities in tabular query results.
+    """
+
+    table: str
+    column: str
+    node_type: str
+
+    @field_validator("table")
+    @classmethod
+    def _valid_table(cls, v: str) -> str:
+        return _check(_TABLE, v, "entity ref table")
+
+    @field_validator("column")
+    @classmethod
+    def _valid_column(cls, v: str) -> str:
+        return _check(_COLUMN, v, "entity ref column")
+
+    @field_validator("node_type")
+    @classmethod
+    def _valid_node_type(cls, v: str) -> str:
+        return _check(_KEY, v, "entity ref node type")
 
 
 class LabelLookup(_Frozen):
@@ -106,7 +134,7 @@ class NodeTypeDef(_Frozen):
     # Columns exposed as properties in addition to ``display_properties``.
     property_columns: tuple[str, ...] = ()
     # Column of ``table`` holding a natural name for the record (e.g. a
-    # customer's full name).  Becomes ``Node.label``; ``id`` is unaffected.
+    # party's full name).  Becomes ``Node.label``; ``id`` is unaffected.
     label_column: str | None = None
     # Alternative to ``label_column`` when the name lives in another table.
     label_lookup: LabelLookup | None = None
@@ -233,6 +261,13 @@ class GraphDataset(_Frozen):
     # Ordered (column-name substring, node type key) pairs used to recognise
     # entity references in tabular query results.  First match wins.
     entity_column_hints: tuple[tuple[str, str], ...] = ()
+    # Single columns that hold the id of a node type (see ``EntityRef``).
+    entity_refs: tuple[EntityRef, ...] = ()
+    # Package version, served as ``domain.version``.
+    version: str = ""
+    # Labels of coded values, ``table -> column -> code -> label``.  Supplied by the
+    # dataset package; only used to describe node properties to clients.
+    value_labels: dict[str, dict[str, dict[str, str]]] = Field(default_factory=dict)
 
     @field_validator("id")
     @classmethod
@@ -273,6 +308,10 @@ class GraphDataset(_Frozen):
             if node_key not in known:
                 raise ValueError(f"entity hint targets unknown node type {node_key}")
 
+        for ref in self.entity_refs:
+            if ref.node_type not in known:
+                raise ValueError(f"entity ref targets unknown node type {ref.node_type}")
+
         return self
 
     # ------------------------------------------------------------------
@@ -311,10 +350,19 @@ class GraphDataset(_Frozen):
     # Client-facing description
     # ------------------------------------------------------------------
 
+    def node_value_labels(self, node: NodeTypeDef) -> dict[str, dict[str, str]]:
+        """``property -> code -> label`` for the properties of ``node`` that are coded."""
+        by_column = self.value_labels.get(node.table, {})
+        return {
+            key: dict(by_column[key]) for key in node.detail_keys if key in by_column and by_column[key]
+        }
+
     def to_schema_response(self) -> GraphSchemaResponse:
         """The payload of ``GET /api/graph/schema`` (no SQL mapping, no counts)."""
         return GraphSchemaResponse(
-            domain=SchemaDomain(id=self.id, name=self.name, description=self.description),
+            domain=SchemaDomain(
+                id=self.id, name=self.name, description=self.description, version=self.version
+            ),
             node_types=[
                 SchemaNodeType(
                     key=n.key,
@@ -326,6 +374,7 @@ class GraphDataset(_Frozen):
                     icon=n.icon,
                     is_primary=n.is_primary,
                     display_properties=list(n.display_properties),
+                    value_labels=self.node_value_labels(n),
                 )
                 for n in self.node_types
             ],

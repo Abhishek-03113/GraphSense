@@ -1,0 +1,3 @@
+{"loanId": "L1", "memberId": "M1", "isbn": "9780000000011", "copyNumber": "0003", "loanedOn": "2025-01-10T00:00:00.000Z", "dueOn": "2025-01-31T00:00:00.000Z", "returnedAt": "2025-01-28T16:45:10.123Z", "status": "R", "lateFee": "0", "notes": ""}
+{"loanId": "L2", "memberId": "M2", "isbn": "9780000000028", "copyNumber": "1", "loanedOn": "2025-02-01T00:00:00.000Z", "dueOn": "2025-02-22T00:00:00.000Z", "returnedAt": "", "status": "O", "lateFee": "", "notes": ""}
+{"loanId": "L3", "memberId": "M1", "isbn": "9780000000028", "copyNumber": "0010", "loanedOn": "2025-02-03T00:00:00.000Z", "dueOn": "2025-02-24T00:00:00.000Z", "returnedAt": "2025-03-10T10:00:00.000Z", "status": "L", "lateFee": "3.5", "notes": ""}

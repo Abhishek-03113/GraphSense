@@ -1,0 +1,65 @@
+node_types:
+  - key: Author
+    label: Author
+    plural: Authors
+    description: A person who wrote one or more books.
+    category: party
+    accent: indigo
+    icon: user
+    is_primary: true
+    display_properties: [full_name, home_country, birth_date]
+    table: authors
+    id_columns: [author_id]
+    label_column: full_name
+  - key: Book
+    label: Book
+    plural: Books
+    description: A title in the collection.
+    category: master
+    accent: teal
+    icon: book-open
+    is_primary: true
+    display_properties: [title, published, page_count, language]
+    table: books
+    id_columns: [isbn]
+    property_columns: [price, price_currency, shelf_code, is_reference]
+    label_column: title
+  - key: Member
+    label: Member
+    plural: Members
+    description: A person registered to borrow books.
+    category: party
+    accent: blue
+    icon: user
+    is_primary: true
+    display_properties: [full_name, tier, joined_at]
+    table: members
+    id_columns: [member_id]
+    label_column: full_name
+  - key: Loan
+    label: Loan
+    plural: Loans
+    description: One time a member borrowed a book.
+    category: document
+    accent: orange
+    icon: file-text
+    is_primary: true
+    display_properties: [loaned_on, due_on, returned_at, status]
+    table: loans
+    id_columns: [loan_id]
+    property_columns: [copy_number, late_fee]
+edge_types:
+  - {key: WROTE, label: wrote, source: Author, target: Book, description: Author wrote the book.,
+     table: books, alias: b, source_columns: [author_id], target_columns: [isbn], not_null: [author_id]}
+  - {key: BORROWED, label: borrowed, source: Member, target: Loan, description: Member took out the loan.,
+     table: loans, alias: l, source_columns: [member_id], target_columns: [loan_id], not_null: [member_id]}
+  - {key: OF_BOOK, label: is for, source: Loan, target: Book, description: Loan is for the book.,
+     table: loans, alias: l, source_columns: [loan_id], target_columns: [isbn], not_null: [isbn]}
+flows:
+  - {id: lending, label: Lending Flow, description: Members borrowing books and the books' authors,
+     node_types: [Member, Loan, Book, Author], edge_types: [BORROWED, OF_BOOK, WROTE]}
+entity_column_hints:
+  - [isbn, Book]
+  - [author, Author]
+  - [member, Member]
+  - [loan, Loan]

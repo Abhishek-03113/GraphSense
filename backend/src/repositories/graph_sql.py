@@ -96,7 +96,7 @@ class GraphSqlBuilder:
     def traversal_expand_filter(self) -> str:
         """Extra WHERE terms for the traversal step: do not expand through terminal types.
 
-        The root is always expanded, so tracing from a customer still works.
+        The root is always expanded, so tracing from a party record still works.
         Empty when the dataset has no terminal types.
         """
         keys = self.dataset.terminal_node_keys
@@ -154,7 +154,7 @@ class GraphSqlBuilder:
 
         Every identifier comes from the validated dataset definition; ids and
         lookup filter values travel as bound parameters.  Tables may hold
-        several rows per id (e.g. journal line items), so one row per id is
+        several rows per id (e.g. line-item tables), so one row per id is
         kept, chosen deterministically.
         """
         alias = "t"

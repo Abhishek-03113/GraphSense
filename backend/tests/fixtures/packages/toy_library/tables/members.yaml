@@ -1,0 +1,11 @@
+table: members
+description: People registered to borrow books.
+grain: member
+source: {path: members}
+primary_key: [member_id]
+columns:
+  - {source: memberId, type: text, role: id, description: Membership number.}
+  - {source: fullName, type: text, role: name, description: Member name.}
+  - {source: email, type: text, role: text, sensitive: true, description: Contact address. Never shown to a language model.}
+  - {source: joinedAt, type: timestamp, role: datetime, description: When the membership started.}
+  - {source: tier, type: text, role: code, value_set: member_tier, description: Membership level.}

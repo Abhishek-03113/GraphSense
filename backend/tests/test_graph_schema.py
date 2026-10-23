@@ -194,11 +194,14 @@ def test_schema_endpoint_matches_contract(client):
     assert res.status_code == 200
     body = res.json()
     assert set(body) == {"domain", "node_types", "edge_types", "flows"}
-    assert body["domain"] == {
+    # Additive contract: everything the original payload had, plus new fields.
+    assert {
         "id": "o2c",
         "name": "Order to Cash",
         "description": "Sales orders through delivery, billing and payment.",
-    }
+    }.items() <= body["domain"].items()
+    assert {"version", "is_default"} <= set(body["domain"])
+    assert body["domain"]["is_default"] is False
 
     node_fields = {
         "key", "label", "plural", "description", "category",
@@ -206,7 +209,8 @@ def test_schema_endpoint_matches_contract(client):
     }
     assert body["node_types"]
     for n in body["node_types"]:
-        assert set(n) == node_fields
+        assert node_fields <= set(n)
+        assert set(n) - node_fields <= {"value_labels"}
         assert n["category"] in CATEGORIES
         assert n["accent"] is None or n["accent"] in ACCENTS
         assert isinstance(n["is_primary"], bool)
