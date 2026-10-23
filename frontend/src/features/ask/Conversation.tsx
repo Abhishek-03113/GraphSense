@@ -6,6 +6,7 @@ import { useSchema } from '../../lib/schema';
 import { useAsk, type RecordRef } from '../../store/ask';
 import { useWorkspace } from '../../store/workspace';
 import styles from './Ask.module.css';
+import { AiNotice } from './AiNotice';
 import { Composer } from './Composer';
 import { useSuggestedPrompts } from './prompts';
 import { TurnView } from './TurnView';
@@ -45,12 +46,13 @@ export function Conversation({ compact, onOpenRecord }: ConversationProps) {
     <div className={[styles.layout, compact ? styles.compact : ''].filter(Boolean).join(' ')}>
       <div className={styles.scroller}>
         <div className={styles.thread}>
+          <AiNotice />
           {turns.length === 0 && (
             <section className={styles.welcome} aria-label="Getting started">
               <div>
                 <h2 className={styles.welcomeTitle}>What would you like to know?</h2>
                 <p className={styles.welcomeText}>
-                  Ask a question about {status === 'ready' && schema.domain.name !== 'Your dataset' ? `the ${schema.domain.name.toLowerCase()} data` : 'your data'} in everyday language. You’ll get an answer, the rows behind it, and the records involved.
+                  Ask a question about {status === 'ready' && !schema.domain.isDefault ? `the ${schema.domain.name.toLowerCase()} data` : 'your data'} in everyday language. You’ll get an answer, the rows behind it, and the records involved.
                 </p>
               </div>
               {suggestions.length > 0 && (
