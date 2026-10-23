@@ -3,6 +3,7 @@
 import asyncio
 import hashlib
 import os
+import re
 import sys
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -13,6 +14,15 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent.parent / "migrations"
+
+# Stage-1 migrations that created the dataset tables (and the first embedding
+# table) in the ``public`` schema.  Dataset tables are generated from dataset
+# packages now, so on a database that never ran them they are recorded as
+# baselined instead of executed.  Databases that did run them keep their
+# record, and ``graphsense dataset adopt-legacy`` moves the tables.
+LEGACY_VERSIONS = frozenset({"20260325000001", "20260326000001"})
+
+_CREATE_EXTENSION = re.compile(r"CREATE\s+EXTENSION\s+(?:IF\s+NOT\s+EXISTS\s+)?\"?(\w+)\"?", re.IGNORECASE)
 
 
 @dataclass
@@ -126,8 +136,25 @@ async def get_status(engine: AsyncEngine) -> List[MigrationStatus]:
     return statuses
 
 
-async def apply_pending(engine: AsyncEngine) -> List[MigrationFile]:
-    """Apply all pending migrations in version order."""
+async def _missing_extensions(conn, content: str) -> list[str]:
+    """Extensions a migration creates that this server does not offer (for example pgvector)."""
+    wanted = {m.group(1).lower() for m in _CREATE_EXTENSION.finditer(content)}
+    if not wanted:
+        return []
+    result = await conn.execute(text("SELECT name FROM pg_available_extensions"))
+    available = {row[0].lower() for row in result}
+    return sorted(wanted - available)
+
+
+async def apply_pending(engine: AsyncEngine, skipped: Optional[List[str]] = None) -> List[MigrationFile]:
+    """Apply all pending migrations in version order.
+
+    A migration that needs a PostgreSQL extension the server does not provide is
+    not applied and stays pending (its version is appended to ``skipped``), so the
+    rest of the schema can still be created; it is applied by a later run once the
+    extension is installed.  Stage-1 data-table migrations are baselined, not run
+    (see ``LEGACY_VERSIONS``).
+    """
     local_migs = _get_local_migrations()
     applied_this_run = []
 
@@ -145,9 +172,34 @@ async def apply_pending(engine: AsyncEngine) -> List[MigrationFile]:
             if row:
                 continue  # already applied or baselined
 
-            print(f"Applying {m.version}__{m.name} ({m.category})...")
             content = m.filepath.read_text(encoding="utf-8")
             checksum = _get_checksum(content)
+
+            if m.version in LEGACY_VERSIONS:
+                print(f"Baselining legacy {m.version}__{m.name} (dataset tables are generated from packages).")
+                await conn.execute(
+                    text(
+                        """
+                        INSERT INTO _schema_migrations
+                        (version, name, category, status, checksum)
+                        VALUES (:v, :n, :c, 'baselined', :chk)
+                        """
+                    ),
+                    {"v": m.version, "n": m.name, "c": m.category, "chk": checksum},
+                )
+                continue
+
+            missing = await _missing_extensions(conn, content)
+            if missing:
+                print(
+                    f"Skipping {m.version}__{m.name}: PostgreSQL extension(s) {', '.join(missing)} "
+                    "not available on this server. It stays pending."
+                )
+                if skipped is not None:
+                    skipped.append(m.version)
+                continue
+
+            print(f"Applying {m.version}__{m.name} ({m.category})...")
 
             # Apply the SQL file — split by semicolons because asyncpg
             # does not support multiple statements in a single prepared stmt.
