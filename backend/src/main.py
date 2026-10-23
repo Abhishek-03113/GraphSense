@@ -44,7 +44,8 @@ app.add_middleware(
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
-    expose_headers=["X-Request-ID"],
+    # Browsers on another origin can only read these response headers.
+    expose_headers=["X-Request-ID", "Retry-After"],
 )
 # Added last so it is the outermost layer: every response, including CORS
 # preflights and errors, carries a request id.

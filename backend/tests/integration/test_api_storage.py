@@ -139,7 +139,11 @@ async def test_dataset_listing_and_status_follow_the_lifecycle(admin, toy_root, 
 async def test_status_is_loading_while_a_run_is_active(admin, toy_root, db):
     held = await asyncio.to_thread(prepare_run, "toy_library", IngestOptions(data_root=toy_root))
     try:
-        assert (await admin.get("/api/datasets/toy_library/status")).json()["status"] == "loading"
+        status = (await admin.get("/api/datasets/toy_library/status")).json()
+        assert status["status"] == "loading"
+        # enough for a client to show where the load is
+        assert status["last_run"]["status"] in ("queued", "running")
+        assert status["last_run"]["phase"] and status["last_run"]["started_at"]
     finally:
         held.release()
 

@@ -30,6 +30,8 @@ export interface TypeMeta {
   icon: string | null;
   isPrimary: boolean;
   displayProperties: string[];
+  /** Coded properties: property → { code → label }. Empty when the server sent none. */
+  valueLabels: Record<string, Record<string, string>>;
   /** False when the server did not describe this type and the UI derived everything. */
   described: boolean;
 }
@@ -55,6 +57,9 @@ export interface DomainMeta {
   id: string;
   name: string;
   description: string;
+  version: string;
+  /** True when the dataset has no name of its own and `name` is a generic placeholder. */
+  isDefault: boolean;
 }
 
 export interface ResolvedSchema {

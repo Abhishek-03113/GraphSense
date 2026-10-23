@@ -1,0 +1,101 @@
+.wrap {
+  display: flex;
+  justify-content: center;
+  padding: var(--gs-space-8) var(--gs-space-4);
+}
+
+.card {
+  width: min(560px, 100%);
+}
+
+.spin {
+  animation: spin 1.6s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.progress {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gs-space-4);
+  width: 280px;
+  max-width: 100%;
+  margin: var(--gs-space-2) auto 0;
+  text-align: left;
+}
+
+.bar {
+  position: relative;
+  height: 6px;
+  border-radius: var(--gs-radius-full);
+  background: var(--gs-surface-3);
+  overflow: hidden;
+}
+
+.fill {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: var(--gs-accent);
+  transition: width var(--gs-duration-slow) var(--gs-ease);
+}
+
+.indeterminate .fill {
+  width: 40%;
+  animation: slide 1.4s var(--gs-ease) infinite;
+}
+
+@keyframes slide {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(250%);
+  }
+}
+
+.steps {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gs-space-2);
+}
+
+.steps li {
+  display: flex;
+  align-items: center;
+  gap: var(--gs-space-3);
+  color: var(--gs-color-label-secondary);
+  font-size: var(--gs-fs-small);
+  line-height: var(--gs-lh-small);
+}
+
+.marker {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 22px;
+  height: 22px;
+  border-radius: var(--gs-radius-full);
+  background: var(--gs-surface-2);
+  font-size: var(--gs-fs-caption);
+  font-weight: var(--gs-weight-semibold);
+}
+
+.done .marker {
+  background: var(--gs-success-soft);
+  color: var(--gs-success-text);
+}
+
+.now {
+  color: var(--gs-color-label);
+  font-weight: var(--gs-weight-medium);
+}
+
+.now .marker {
+  background: var(--gs-accent-soft-strong);
+  color: var(--gs-accent-text);
+}

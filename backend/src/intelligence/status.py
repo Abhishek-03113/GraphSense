@@ -17,6 +17,7 @@ asked, the knowledge state is reported as ``missing``.
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import text
@@ -44,6 +45,45 @@ def configured_ai() -> dict[str, Any]:
         "llm_configured": is_configured(providers.llm),
         "embeddings_configured": is_configured(providers.embedder),
     }
+
+
+# The most recent run that finished and in which the knowledge hook ran.  Ingest runs count (the
+# hook runs after the swap) as do refresh runs; a run that was skipped or whose hook failed does not.
+_LAST_REFRESH_RUN = text(
+    """
+    SELECT max(r.finished_at)
+    FROM app.ingestion_runs r
+    WHERE r.dataset_id = :d
+      AND r.status IN ('succeeded', 'succeeded_with_warnings')
+      AND EXISTS (
+          SELECT 1
+          FROM jsonb_array_elements(
+              CASE WHEN jsonb_typeof(r.report -> 'hooks') = 'array' THEN r.report -> 'hooks' ELSE '[]'::jsonb END
+          ) AS h
+          WHERE h ->> 'name' = 'knowledge' AND h ->> 'status' IN ('ok', 'warning')
+      )
+    """
+)
+_LAST_ITEM_CREATED = text("SELECT max(created_at) FROM app.knowledge_items WHERE dataset_id = :d")
+
+
+async def last_refresh_time(engine: AsyncEngine, dataset_id: str) -> datetime | None:
+    """When the knowledge of ``dataset_id`` was last refreshed.
+
+    This is the finish time of the latest run (ingest or refresh) whose knowledge hook ran, which
+    moves forward even when a refresh finds nothing to change.  ``max(created_at)`` of the items
+    would not: unchanged items keep their old timestamp.  Knowledge built outside a recorded run
+    (``graphsense knowledge refresh``) has no run, so the newest item is the best answer left.
+    """
+    try:
+        async with engine.connect() as conn:
+            when = await conn.scalar(_LAST_REFRESH_RUN, {"d": dataset_id})
+        if when is not None:
+            return when
+    except Exception as exc:  # noqa: BLE001 - the run table may not exist yet; fall back below
+        logger.info("No refresh run history for %s (%s)", dataset_id, type(exc).__name__)
+    async with engine.connect() as conn:
+        return await conn.scalar(_LAST_ITEM_CREATED, {"d": dataset_id})
 
 
 async def ai_status(dataset_id: str, engine: AsyncEngine | None = None) -> dict[str, Any]:
@@ -83,10 +123,7 @@ async def ai_status(dataset_id: str, engine: AsyncEngine | None = None) -> dict[
             state=summary.state, items=summary.items, embedded=summary.embedded, text_only=summary.text_only
         )
         if rows:
-            async with engine.connect() as conn:
-                latest = await conn.scalar(
-                    text("SELECT max(created_at) FROM app.knowledge_items WHERE dataset_id = :d"), {"d": dataset_id}
-                )
+            latest = await last_refresh_time(engine, dataset_id)
             out["knowledge"]["last_refresh"] = latest.isoformat() if latest else None
     except Exception as exc:  # noqa: BLE001 - a status page must not fail because the knowledge store is down
         logger.warning("Could not read the knowledge state for %s (%s)", dataset_id, type(exc).__name__)

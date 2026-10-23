@@ -16,6 +16,7 @@ import { formatInteger } from '../../lib/format';
 import { useMediaQuery } from '../../lib/hooks';
 import { useSchema } from '../../lib/schema';
 import { RecordInspector } from '../inspector/RecordInspector';
+import { DatasetState } from '../onboarding/DatasetState';
 import styles from './Flows.module.css';
 
 const SAMPLE_SIZES = [
@@ -29,7 +30,7 @@ export default function FlowDetailPage() {
   const navigate = useNavigate();
   const [params, setParams] = useSearchParams();
   const selectedId = params.get('focus');
-  const { schema, status, typeLabel } = useSchema();
+  const { schema, status, typeLabel, isEmpty } = useSchema();
   const flow = schema.flows.find((candidate) => candidate.id === flowId);
   const order = flow?.nodeTypes ?? [];
 
@@ -40,7 +41,7 @@ export default function FlowDetailPage() {
   const [aboutPref, setAboutPref] = useState<boolean | null>(null);
   const aboutOpen = aboutPref ?? wide;
 
-  const graphQuery = useFlowGraph(flow ? flow.id : undefined, limit);
+  const graphQuery = useFlowGraph(flow && !isEmpty ? flow.id : undefined, limit);
   const graph = graphQuery.data;
 
   const select = useCallback(
@@ -79,6 +80,14 @@ export default function FlowDetailPage() {
           description="It may have been renamed or removed. Pick one from the list of flows."
           actions={<LinkButton variant="primary" to="/flows">See all flows</LinkButton>}
         />
+      </Page>
+    );
+  }
+
+  if (isEmpty) {
+    return (
+      <Page title={title} subtitle={flow?.description || 'Records in this flow, laid out step by step.'} actions={back}>
+        <DatasetState />
       </Page>
     );
   }

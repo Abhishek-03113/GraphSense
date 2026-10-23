@@ -7,6 +7,7 @@ from src.domain.graph_registry import get_dataset
 from src.domain.graph_schema import GraphDataset, NodeTypeDef
 from src.repositories import graph_sql
 from src.repositories.graph_sql import GraphSqlBuilder
+from src.storage.readiness import is_missing_relation
 from src.utils.logger import get_logger
 from src.utils.serialization import json_value
 
@@ -151,6 +152,10 @@ class GraphRepository:
                 result = await self.db.execute(text(self.sql.count_query(node)))
                 count = result.scalar()
             except Exception as exc:
+                if is_missing_relation(exc):
+                    # The data is not loaded. Say so instead of counting zeros: the failed
+                    # statement would also abort every later query of this transaction.
+                    raise
                 logger.error("get_summary | FAILED to count node_type=%s table=%s — %s", node.key, node.table, exc)
                 count = 0
             node_counts[node.key] = count

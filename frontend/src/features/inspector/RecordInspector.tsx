@@ -6,6 +6,7 @@ import { ErrorState } from '../../components/ui/EmptyState';
 import { Sheet } from '../../components/ui/Sheet';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { TypeBadge, TypeDot } from '../../components/ui/TypeBadge';
+import { ValueText } from '../../components/ui/ValueText';
 import { useSubgraph } from '../../lib/api/queries';
 import type { GraphNode } from '../../lib/api/schemas';
 import { currencyFor, formatValue, humanize, lowerFirst, parseRecordId, pluralize } from '../../lib/format';
@@ -36,11 +37,20 @@ interface Group {
 
 const INITIAL_VISIBLE = 5;
 
-function PropertyList({ entries, siblings }: { entries: [string, unknown][]; siblings: Record<string, unknown> }) {
+function PropertyList({
+  entries,
+  siblings,
+  valueLabels,
+}: {
+  entries: [string, unknown][];
+  siblings: Record<string, unknown>;
+  /** Meanings of coded properties: property → { code → label }. */
+  valueLabels: Record<string, Record<string, string>>;
+}) {
   return (
     <dl className={styles.facts}>
       {entries.map(([key, value]) => {
-        const formatted = formatValue(key, value, { currency: currencyFor(key, siblings) });
+        const formatted = formatValue(key, value, { currency: currencyFor(key, siblings), valueLabels: valueLabels[key] });
         return (
           <Fragment key={key}>
             <dt>{humanize(key)}</dt>
@@ -49,7 +59,7 @@ function PropertyList({ entries, siblings }: { entries: [string, unknown][]; sib
                 .filter(Boolean)
                 .join(' ')}
             >
-              {formatted.text}
+              <ValueText value={formatted} />
             </dd>
           </Fragment>
         );
@@ -207,7 +217,7 @@ export function RecordInspector({ recordId, node, onClose, onOpenRecord, onAsk, 
         {primaryEntries.length > 0 && (
           <section className={styles.section} aria-label="Key details">
             <h3 className={styles.sectionTitle}>Key details</h3>
-            <PropertyList entries={primaryEntries} siblings={properties} />
+            <PropertyList entries={primaryEntries} siblings={properties} valueLabels={meta.valueLabels} />
           </section>
         )}
 
@@ -216,16 +226,16 @@ export function RecordInspector({ recordId, node, onClose, onOpenRecord, onAsk, 
             {primaryEntries.length === 0 ? (
               <>
                 <h3 className={styles.sectionTitle}>Details</h3>
-                <PropertyList entries={otherEntries.slice(0, 8)} siblings={properties} />
+                <PropertyList entries={otherEntries.slice(0, 8)} siblings={properties} valueLabels={meta.valueLabels} />
                 {otherEntries.length > 8 && (
                   <Disclosure label="Show all details" meta={`${otherEntries.length} ${pluralize(otherEntries.length, 'field')}`}>
-                    <PropertyList entries={otherEntries.slice(8)} siblings={properties} />
+                    <PropertyList entries={otherEntries.slice(8)} siblings={properties} valueLabels={meta.valueLabels} />
                   </Disclosure>
                 )}
               </>
             ) : (
               <Disclosure label="More details" meta={`${otherEntries.length} ${pluralize(otherEntries.length, 'field')}`}>
-                <PropertyList entries={otherEntries} siblings={properties} />
+                <PropertyList entries={otherEntries} siblings={properties} valueLabels={meta.valueLabels} />
               </Disclosure>
             )}
           </section>

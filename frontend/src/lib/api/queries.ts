@@ -1,13 +1,14 @@
-import { keepPreviousData, queryOptions, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, queryOptions, useQuery } from '@tanstack/react-query';
 import { apiGet, apiPost } from './client';
 import {
   ChatResponseSchema,
   EntityListSchema,
   FlowListSchema,
   GraphDataSchema,
+  DatasetStatusSchema,
   HealthSchema,
-  IngestResponseSchema,
   SchemaPayloadSchema,
+  SuggestedQuestionsSchema,
   SummarySchema,
 } from './schemas';
 
@@ -20,6 +21,8 @@ export const queryKeys = {
   subgraph: (type: string, id: string, depth: number) => ['graph', 'subgraph', type, id, depth] as const,
   flow: (flowId: string, limit: number) => ['graph', 'flow', flowId, limit] as const,
   entities: (type: string, limit: number) => ['entities', type, limit] as const,
+  datasetStatus: (datasetId: string) => ['dataset', datasetId, 'status'] as const,
+  suggestedQuestions: (datasetId: string) => ['dataset', datasetId, 'suggested-questions'] as const,
 };
 
 export function useHealth() {
@@ -108,14 +111,40 @@ export function useEntities(type: string | undefined, limit = 100) {
   });
 }
 
-export function useIngest() {
-  const client = useQueryClient();
-  return useMutation({
-    mutationFn: (dataDir?: string) =>
-      apiPost('/ingest', IngestResponseSchema, dataDir ? { data_dir: dataDir } : {}),
-    onSuccess: () => {
-      void client.invalidateQueries({ queryKey: queryKeys.summary });
+/** How often to look again while a dataset is not ready, in milliseconds. */
+export const STATUS_POLL_LOADING_MS = 3000;
+export const STATUS_POLL_WAITING_MS = 15_000;
+
+/**
+ * Load state of a dataset and what the AI layer can do for it. Polls while a load is running (and,
+ * more slowly, while nothing is loaded yet) so the screen updates by itself. Older servers do not
+ * have this endpoint; the failure is expected and not retried.
+ */
+export function useDatasetStatus(datasetId: string | null | undefined) {
+  return useQuery({
+    queryKey: queryKeys.datasetStatus(datasetId ?? ''),
+    queryFn: ({ signal }) => apiGet(`/datasets/${encodeURIComponent(datasetId ?? '')}/status`, DatasetStatusSchema, undefined, signal),
+    enabled: Boolean(datasetId),
+    retry: false,
+    staleTime: 20_000,
+    refetchInterval: (query) => {
+      const status = query.state.data?.status;
+      if (status === 'loading') return STATUS_POLL_LOADING_MS;
+      if (status === 'empty' || status === 'failed') return STATUS_POLL_WAITING_MS;
+      return false;
     },
+  });
+}
+
+/** Starter questions written for the dataset. Older servers do not have them, so a failure is quiet. */
+export function useSuggestedQuestions(datasetId: string | null | undefined, enabled = true) {
+  return useQuery({
+    queryKey: queryKeys.suggestedQuestions(datasetId ?? ''),
+    queryFn: ({ signal }) =>
+      apiGet(`/datasets/${encodeURIComponent(datasetId ?? '')}/suggested-questions`, SuggestedQuestionsSchema, undefined, signal),
+    enabled: Boolean(datasetId) && enabled,
+    retry: false,
+    staleTime: 5 * 60_000,
   });
 }
 

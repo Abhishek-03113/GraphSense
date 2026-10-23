@@ -1,7 +1,9 @@
-import { useCallback, useMemo, type ReactNode } from 'react';
-import { useFlowList, useSchemaPayload, useSummary } from '../api/queries';
+import { useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { isDatasetNotReady } from '../api/client';
+import { useDatasetStatus, useFlowList, useSchemaPayload, useSummary } from '../api/queries';
 import { lowerFirst } from '../format';
-import { SchemaContext, type SchemaContextValue } from './context';
+import { SchemaContext, type AiState, type DatasetPhase, type SchemaContextValue } from './context';
 import { emptySchema, fallbackTypeMeta, hashSlot, resolveSchema, toCounts } from './resolve';
 import type { PaletteSlot, TypeMeta } from './types';
 
@@ -13,6 +15,26 @@ export function SchemaProvider({ children }: { children: ReactNode }) {
   const flowsQuery = useFlowList();
 
   const settled = !schemaQuery.isPending && !summaryQuery.isPending && !flowsQuery.isPending;
+
+  // The summary needs the data. A dataset that is not loaded answers 409, which is a state to show, not a failure.
+  const notReady = isDatasetNotReady(summaryQuery.error);
+  const datasetId = schemaQuery.data?.domain?.id?.trim() || undefined;
+  const datasetQuery = useDatasetStatus(datasetId);
+  const dataset = datasetQuery.data;
+
+  // When a load that was waiting or running finishes, every count and graph on screen is out of date.
+  const queryClient = useQueryClient();
+  const wasWaiting = useRef(false);
+  const datasetStatus = dataset?.status;
+  useEffect(() => {
+    if (!datasetStatus) return;
+    if (datasetStatus === 'empty' || datasetStatus === 'loading' || datasetStatus === 'failed') {
+      wasWaiting.current = true;
+    } else if (wasWaiting.current) {
+      wasWaiting.current = false;
+      void queryClient.invalidateQueries({ predicate: (query) => query.queryKey[0] !== 'dataset' });
+    }
+  }, [datasetStatus, queryClient]);
 
   const schema = useMemo(
     () =>
@@ -56,18 +78,40 @@ export function SchemaProvider({ children }: { children: ReactNode }) {
 
     const status: SchemaContextValue['status'] = !settled
       ? 'loading'
-      : summaryQuery.isError
+      : summaryQuery.isError && !notReady
         ? 'error'
         : 'ready';
+
+    const datasetPhase: DatasetPhase = !datasetStatus
+      ? 'unknown'
+      : datasetStatus === 'empty' || datasetStatus === 'loading' || datasetStatus === 'failed'
+        ? datasetStatus
+        : 'ready';
+    const aiMode = dataset?.ai?.mode;
+    const aiKnowledge = dataset?.ai?.knowledge?.state;
+    const ai: AiState = {
+      mode: aiMode === 'full' || aiMode === 'degraded' || aiMode === 'disabled' ? aiMode : 'unknown',
+      knowledge: aiKnowledge === 'ready' || aiKnowledge === 'stale' || aiKnowledge === 'missing' ? aiKnowledge : 'unknown',
+    };
 
     return {
       schema,
       status,
-      error: summaryQuery.error,
+      error: notReady ? null : summaryQuery.error,
       counts,
       totalRecords,
       totalRelationships,
-      isEmpty: Boolean(summaryQuery.data) && totalRecords === 0,
+      isEmpty: notReady || (Boolean(summaryQuery.data) && totalRecords === 0),
+      notReady,
+      datasetId,
+      dataset,
+      datasetPhase,
+      ai,
+      recheckDataset: () => {
+        void datasetQuery.refetch();
+        void summaryQuery.refetch();
+      },
+      isRecheckingDataset: datasetQuery.isFetching || summaryQuery.isFetching,
       isDerived: settled && schema.source === 'derived',
       headlineTypes: headline,
       otherTypes: others,
@@ -88,7 +132,7 @@ export function SchemaProvider({ children }: { children: ReactNode }) {
         void flowsQuery.refetch();
       },
     };
-  }, [schema, counts, settled, summaryQuery, schemaQuery, flowsQuery, getTypeMeta, typeIndex]);
+  }, [schema, counts, settled, notReady, datasetId, dataset, datasetStatus, datasetQuery, summaryQuery, schemaQuery, flowsQuery, getTypeMeta, typeIndex]);
 
   return <SchemaContext.Provider value={value}>{children}</SchemaContext.Provider>;
 }

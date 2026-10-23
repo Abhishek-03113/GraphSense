@@ -23,7 +23,7 @@ export default function AskPage() {
     }
   }, [prefill, setDraft, setParams]);
 
-  const subject = status === 'ready' && schema.domain.name !== 'Your dataset' ? schema.domain.name.toLowerCase() : 'your data';
+  const subject = status === 'ready' && !schema.domain.isDefault ? schema.domain.name.toLowerCase() : 'your data';
 
   return (
     <Page

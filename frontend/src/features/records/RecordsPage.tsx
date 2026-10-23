@@ -8,12 +8,13 @@ import { SearchInput, Select } from '../../components/ui/Field';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { DataTable, type Column } from '../../components/ui/Table';
 import { TypeDot } from '../../components/ui/TypeBadge';
+import { ValueText } from '../../components/ui/ValueText';
 import { useEntities } from '../../lib/api/queries';
-import { currencyFor, formatCompact, formatInteger, formatValue, humanize, makeRecordId, pluralize } from '../../lib/format';
+import { currencyFor, formatCompact, formatInteger, formatValue, humanize, labelFor, makeRecordId, pluralize } from '../../lib/format';
 import { naturalLabel } from '../../lib/graph';
 import { useSchema } from '../../lib/schema';
 import { RecordInspector } from '../inspector/RecordInspector';
-import { LoadDataEmpty } from '../onboarding/LoadDataEmpty';
+import { DatasetState } from '../onboarding/DatasetState';
 import styles from './Records.module.css';
 
 interface Row {
@@ -54,10 +55,14 @@ export default function RecordsPage() {
   const rows = useMemo<Row[]>(() => {
     const needle = query.trim().toLowerCase();
     if (!needle) return allRows;
+    const labels = getTypeMeta(type ?? '').valueLabels;
     return allRows.filter((row) =>
-      [row.id, row.name, ...Object.values(row.extra)].some((part) => !isBlank(part) && typeof part !== 'object' && String(part).toLowerCase().includes(needle)),
+      // A coded value matches on its meaning as well as on the code.
+      [row.id, row.name, ...Object.entries(row.extra).flatMap(([key, value]) => [value, labelFor(value, labels[key])])].some(
+        (part) => !isBlank(part) && typeof part !== 'object' && String(part).toLowerCase().includes(needle),
+      ),
     );
-  }, [allRows, query]);
+  }, [allRows, query, type, getTypeMeta]);
 
   const hasNames = allRows.some((row) => row.name);
 
@@ -66,7 +71,9 @@ export default function RecordsPage() {
     const extraKeys = [...new Set(allRows.flatMap((row) => Object.keys(row.extra)))].filter((key) => allRows.some((row) => !isBlank(row.extra[key])));
     // A separate name column only when no listed column already carries the same text.
     const nameRepeated = extraKeys.some((key) => allRows.every((row) => !row.name || row.extra[key] === row.name));
-    const cell = (key: string, row: Row) => formatValue(key, row.extra[key], { currency: currencyFor(key, row.extra) });
+    const labels = getTypeMeta(type ?? '').valueLabels;
+    const cell = (key: string, row: Row) =>
+      formatValue(key, row.extra[key], { currency: currencyFor(key, row.extra), valueLabels: labels[key] });
     return [
       { key: 'id', header: 'ID', value: (row) => row.id, mono: true, sortable: true },
       ...(hasNames && !nameRepeated
@@ -79,8 +86,9 @@ export default function RecordsPage() {
         return {
           key,
           header: humanize(key),
-          value: (row) => row.extra[key],
-          render: (row) => cell(key, row).text,
+          // Sort by what people read: the label when the value is a code.
+          value: (row) => (labels[key] ? cell(key, row).label ?? row.extra[key] : row.extra[key]),
+          render: (row) => <ValueText value={cell(key, row)} />,
           sortable: true,
           align: numeric ? 'right' : 'left',
           numeric,
@@ -101,12 +109,12 @@ export default function RecordsPage() {
         ),
       },
     ];
-  }, [allRows, hasNames, type]);
+  }, [allRows, hasNames, type, getTypeMeta]);
 
   if (isEmpty) {
     return (
       <Page title="Records" subtitle="Browse the records in your data, one type at a time.">
-        <LoadDataEmpty />
+        <DatasetState />
       </Page>
     );
   }

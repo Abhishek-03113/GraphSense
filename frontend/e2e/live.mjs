@@ -4,7 +4,11 @@
 //
 // Builds the app with VITE_API_BASE_URL pointing at the backend, serves the build,
 // picks sample records from the live data, and captures the main screens in light and dark.
-// Load data first (for example with backend/scripts/seed_demo_data.py).
+// Load data first: `graphsense ingest o2c --data-root <dir holding sap-o2c-data>`.
+//
+// Set GS_API_NOT_READY to a second backend whose default dataset is declared but has not been
+// loaded (for example DEFAULT_DATASET=toy_library with PACKAGES_DIR=backend/tests/fixtures/packages)
+// to also capture the "data not loaded yet" screen: requests are sent to that server instead.
 
 import { spawn, spawnSync } from 'node:child_process';
 import { mkdirSync } from 'node:fs';
@@ -14,6 +18,7 @@ import { chromium } from 'playwright';
 import { chatReply } from './fixtures.mjs';
 
 const API = (process.env.GS_API ?? 'http://localhost:8000/api').replace(/\/$/, '');
+const API_NOT_READY = process.env.GS_API_NOT_READY?.replace(/\/$/, '');
 const root = resolve(fileURLToPath(new URL('..', import.meta.url)));
 const outDir = resolve(process.argv[2] ?? resolve(root, 'e2e/screens-live'));
 const distDir = resolve(outDir, '..', '.gs-live-dist');
@@ -30,7 +35,7 @@ const get = async (path) => {
 // ── Sample records from the live data ─────────────────────
 const summary = await get('/graph/summary');
 if (Object.values(summary.nodes).every((n) => n === 0)) {
-  console.error('The backend has no data. Load some first (backend/scripts/seed_demo_data.py).');
+  console.error('The backend has no data. Load some first: graphsense ingest o2c --data-root <dir>.');
   process.exit(2);
 }
 const first = async (type) => (await get(`/graph/entities/${type}?limit=1`)).entities[0]?.id;
@@ -108,6 +113,7 @@ for (const scheme of ['light', 'dark']) {
   await open(page, `/explore?focus=${encodeURIComponent(`SalesOrder:${sample.salesOrder}`)}`);
   await settleGraph(page);
   await page.waitForSelector('text=Relationships');
+  await page.getByText(/Completely delivered|Not yet delivered/).first().waitFor();
   await page.waitForTimeout(500);
   await shot(page, name('explore-inspector'));
 
@@ -117,8 +123,10 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForTimeout(500);
   await shot(page, name('explore-inspector-customer'));
 
+  // Coded statuses read as words with the raw code beside them.
   await open(page, '/records/SalesOrder');
   await page.waitForSelector('role=table');
+  await page.getByRole('table').getByText(/Completely delivered|Not yet delivered/).first().waitFor();
   await shot(page, name('records'));
   await page.getByRole('row', { name: /Sales order .* open details/ }).first().click();
   await page.waitForSelector('text=Relationships');
@@ -143,7 +151,7 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForSelector('text=What would you like to know?');
   await page.locator('#ask-input').fill('Which customer has the most sales orders?');
   await page.locator('#ask-input').press('Enter');
-  await page.waitForSelector('[role="status"][aria-live="polite"]', { state: 'detached', timeout: 15000 });
+  await page.waitForSelector('text=Ask isn’t set up on this server yet', { timeout: 15000 });
   await page.waitForTimeout(600);
   await shot(page, name('ask-live'));
 
@@ -159,7 +167,32 @@ for (const scheme of ['light', 'dark']) {
   await page.waitForTimeout(400);
   await shot(page, name('ask-mocked'));
 
+  // A mocked answer with coded values and a result cut off at the row limit.
+  await page.getByRole('button', { name: 'New conversation' }).click();
+  await page.locator('#ask-input').fill('Which sales orders are delivered, with their status?');
+  await page.locator('#ask-input').press('Enter');
+  await page.waitForSelector('text=Showing the first');
+  await page.waitForTimeout(400);
+  await shot(page, name('ask-labels-truncated'));
+
   await context.close();
+
+  // A dataset that is declared but not loaded: the same screens say so instead of failing.
+  if (API_NOT_READY) {
+    const idle = await browser.newContext({ viewport: { width: 1440, height: 900 }, colorScheme: scheme, reducedMotion: 'reduce', deviceScaleFactor: 1 });
+    await idle.route(`${API}/**`, (route) => route.continue({ url: route.request().url().replace(API, API_NOT_READY) }));
+    const empty = await idle.newPage();
+    empty.on('pageerror', (error) => problems.push(`[${scheme}] pageerror: ${error.message}`));
+    await open(empty, '/');
+    await empty.waitForSelector('text=Your data hasn’t been loaded yet');
+    await empty.waitForTimeout(400);
+    await shot(empty, name('not-ready'));
+    await open(empty, '/explore');
+    await empty.waitForSelector('text=Your data hasn’t been loaded yet');
+    await open(empty, '/records/Book');
+    await empty.waitForSelector('text=Your data hasn’t been loaded yet');
+    await idle.close();
+  }
 }
 
 await browser.close();
