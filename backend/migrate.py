@@ -23,7 +23,7 @@ from src.db.migration_runner import (
 
 
 async def _cmd_apply() -> int:
-    print(f"Applying pending migrations to database ...")
+    print("Applying pending migrations to database ...")
     applied = await apply_pending(get_engine())
     if applied:
         print(f"\nDone. Applied {len(applied)} migration(s):")
@@ -48,7 +48,7 @@ async def _cmd_status() -> int:
         f"{'VERSION':<{ver_w}}  {'NAME':<{name_w}}  "
         f"{'STATUS':<{stat_w}}  APPLIED_AT"
     )
-    print(f"\nMigration status for database:\n")
+    print("\nMigration status for database:\n")
     print(header)
     print("-" * len(header))
     for s in statuses:

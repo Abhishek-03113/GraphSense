@@ -288,7 +288,7 @@ def build(seed: int = 7) -> dict[str, list[dict]]:
             rows["billing_document_headers"].append({**reversal, "cancelled_billing_document": invoice})
             rows["billing_document_cancellations"].append(reversal)
         for document in documents:
-            for d_item, item in zip(delivery_items, items):
+            for d_item, item in zip(delivery_items, items, strict=True):
                 rows["billing_document_items"].append({
                     "billing_document": document,
                     # Billing items are numbered without padding.
