@@ -95,6 +95,8 @@ class RelationshipInfo:
     description: str = ""
     # Share of rows of the from-table that find a match; None until measured.
     match_rate: float | None = None
+    # Share of rows of the to-table that some from-table row points at; None until measured.
+    coverage: float | None = None
 
 
 @dataclass(frozen=True)
@@ -161,6 +163,23 @@ class CatalogSnapshot:
 
     def golden_examples(self) -> tuple[ExampleInfo, ...]:
         return tuple(e for e in self.examples if e.role == "golden")
+
+    # --- sensitivity ------------------------------------------------------
+
+    def llm_safe_view(self) -> CatalogSnapshot:
+        """This snapshot with every value of a ``sensitive`` column removed (see ``src.catalog.safety``).
+
+        Anything put in a prompt, embedded or sent to a model provider must come from this view.
+        """
+        from src.catalog.safety import redact_for_llm
+
+        return redact_for_llm(self)
+
+    def sensitive_columns(self) -> frozenset[tuple[str, str]]:
+        """``(table, column)`` pairs flagged sensitive."""
+        from src.catalog.safety import sensitive_columns
+
+        return sensitive_columns(self)
 
     def sql_schema(self) -> dict[str, dict[str, str]]:
         """``{table: {column: type}}``, the shape SQL tooling (sqlglot) expects."""

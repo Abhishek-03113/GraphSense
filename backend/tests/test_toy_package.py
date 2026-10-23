@@ -123,6 +123,7 @@ GENERIC_SOURCES = [
     BACKEND_DIR / "src" / "api" / "ingest.py",
     BACKEND_DIR / "migrations" / "schema" / "V20261101000001__app_core.sql",
     BACKEND_DIR / "src" / "api" / "deps.py",
+    BACKEND_DIR / "src" / "api" / "catalog.py",
     BACKEND_DIR / "src" / "api" / "errors.py",
     BACKEND_DIR / "src" / "domain" / "graph_schema.py",
     BACKEND_DIR / "src" / "domain" / "graph_models.py",
