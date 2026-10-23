@@ -1,22 +1,24 @@
-"""Graph layer configuration loaded from environment variables."""
+"""Compatibility shim: graph settings now live in :mod:`src.config`.
 
-from pathlib import Path
+``graph_settings.GRAPH_DATASET`` is the default dataset id
+(``DEFAULT_DATASET`` / the old ``GRAPH_DATASET`` variable).  New code should
+use ``src.config.get_settings()``.
+"""
 
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from __future__ import annotations
 
-_BACKEND_DIR = Path(__file__).resolve().parents[2]
-_ENV_FILE = _BACKEND_DIR / ".env"
+from typing import Any
 
-
-class GraphSettings(BaseSettings):
-    model_config = SettingsConfigDict(
-        env_file=str(_ENV_FILE) if _ENV_FILE.exists() else None,
-        env_file_encoding="utf-8",
-        extra="ignore",
-    )
-
-    # Which dataset definition module in src/domain/datasets/ to load.
-    GRAPH_DATASET: str = "o2c"
+from src.config import get_settings
 
 
-graph_settings: GraphSettings = GraphSettings()
+class _GraphSettingsShim:
+    @property
+    def GRAPH_DATASET(self) -> str:
+        return get_settings().DEFAULT_DATASET
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(get_settings(), name)
+
+
+graph_settings = _GraphSettingsShim()

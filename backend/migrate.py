@@ -13,7 +13,7 @@ import argparse
 import asyncio
 import sys
 
-from src.db.engine import engine
+from src.db.engine import get_engine
 from src.db.migration_runner import (
     apply_pending,
     baseline,
@@ -24,7 +24,7 @@ from src.db.migration_runner import (
 
 async def _cmd_apply() -> int:
     print(f"Applying pending migrations to database ...")
-    applied = await apply_pending(engine)
+    applied = await apply_pending(get_engine())
     if applied:
         print(f"\nDone. Applied {len(applied)} migration(s):")
         for mf in applied:
@@ -35,7 +35,7 @@ async def _cmd_apply() -> int:
 
 
 async def _cmd_status() -> int:
-    statuses = await get_status(engine)
+    statuses = await get_status(get_engine())
     if not statuses:
         print("No migration files found in migrations/ directory.")
         return 0
@@ -75,7 +75,7 @@ async def _cmd_baseline(args: argparse.Namespace) -> int:
         f"Baselining up to {args.upto} "
         f"(marking as applied without executing) ..."
     )
-    baselined = await baseline(engine, args.upto)
+    baselined = await baseline(get_engine(), args.upto)
     if baselined:
         print(f"Baselined {len(baselined)} migration(s):")
         for mf in baselined:

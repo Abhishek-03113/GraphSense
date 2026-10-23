@@ -8,7 +8,7 @@ from sqlalchemy import text
 from pydantic import BaseModel
 import structlog
 
-from ..db.engine import engine
+from ..db.engine import get_engine
 from ..db.session import AsyncSessionLocal
 from ..db.base import Base
 from ..db import models
@@ -42,7 +42,7 @@ ENTITY_MAP = {
 async def init_db(ddl_path: str):
     """Initialize database using the provided DDL file."""
     logger.info("Initializing database with DDL", path=ddl_path)
-    async with engine.begin() as conn:
+    async with get_engine().begin() as conn:
         with open(ddl_path, "r") as f:
             ddl_sql = f.read()
             # Remove single-line comments

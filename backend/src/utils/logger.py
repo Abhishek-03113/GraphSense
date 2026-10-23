@@ -14,8 +14,13 @@ class _RequestIdFilter(logging.Filter):
 
 
 def _level() -> int:
-    """Log level from ``LOG_LEVEL`` (default INFO); unknown names fall back to INFO."""
-    name = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
+    """Log level from the ``LOG_LEVEL`` setting (default INFO); unknown names mean INFO."""
+    try:
+        from src.config import get_settings
+
+        name = get_settings().LOG_LEVEL
+    except Exception:  # noqa: BLE001  (logging must work even when the settings are invalid)
+        name = os.environ.get("LOG_LEVEL", "INFO").strip().upper()
     level = logging.getLevelName(name)
     return level if isinstance(level, int) else logging.INFO
 

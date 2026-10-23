@@ -15,13 +15,9 @@ from __future__ import annotations
 
 import asyncio
 import json
-import os
 import re
 import sys
 from typing import Any
-
-# The repository imports modules that read DATABASE_DSN at import time.
-os.environ.setdefault("DATABASE_DSN", "postgresql+asyncpg://u:p@localhost:5432/unused")
 
 from src.repositories.graph_repository import GraphRepository
 

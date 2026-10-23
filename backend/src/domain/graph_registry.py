@@ -13,7 +13,7 @@ import re
 from functools import lru_cache
 
 from src.domain import datasets as _datasets_pkg
-from src.domain.config import graph_settings
+from src.config import get_settings
 from src.domain.graph_schema import GraphDataset
 
 _NAME = re.compile(r"^[a-z][a-z0-9_]*$")
@@ -47,7 +47,7 @@ def load_dataset(name: str) -> GraphDataset:
 
 @lru_cache(maxsize=1)
 def _active() -> GraphDataset:
-    return load_dataset(graph_settings.GRAPH_DATASET)
+    return load_dataset(get_settings().DEFAULT_DATASET)
 
 
 def get_dataset(name: str | None = None) -> GraphDataset:
