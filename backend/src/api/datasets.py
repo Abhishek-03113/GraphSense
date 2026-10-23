@@ -137,6 +137,8 @@ async def dataset_status(dataset_id: str, db: AsyncSession = Depends(get_db_sess
             "id": summary["id"],
             "kind": summary["kind"],
             "status": summary["status"],
+            "phase": summary["phase"],
+            "started_at": summary["started_at"],
             "finished_at": summary["finished_at"],
             "summary": summary["summary"],
             "error_code": summary["error_code"],

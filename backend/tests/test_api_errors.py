@@ -316,6 +316,12 @@ def test_validation_errors_keep_the_framework_shape_and_gain_the_envelope():
     assert body["request_id"] == res.headers["X-Request-ID"]
 
 
+def test_browsers_may_read_the_request_id_and_retry_after_headers():
+    res = TestClient(app).get("/api/health", headers={"Origin": "http://localhost:5173"})
+    exposed = {h.strip().lower() for h in res.headers["access-control-expose-headers"].split(",")}
+    assert {"x-request-id", "retry-after"} <= exposed
+
+
 def test_health_has_a_request_id():
     res = TestClient(app).get("/api/health")
     assert res.json() == {"status": "ok"}
