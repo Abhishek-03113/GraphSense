@@ -1,7 +1,19 @@
-"""Load a small, realistic, synthetic Order-to-Cash dataset for local development.
+"""Write a small, realistic, synthetic Order-to-Cash dataset as raw source files.
 
-There is no sample data in the repository, so this fills the O2C tables with a
-deterministic dataset that exercises what the graph layer has to handle:
+There is no sample data in the repository, so this generates a deterministic
+dataset in the *raw export shape* of the real data: one directory per table with
+``part-0001.jsonl``, camelCase keys, every value a string, empty strings for
+missing values, ``2025-01-06T00:00:00.000Z`` dates, ``{"hours":..}`` time
+objects and zero-padded item numbers.  Loading it goes through the normal
+``graphsense ingest`` path, so demos and CI exercise the same coercion and
+normalisation as real data.
+
+Usage (from ``backend/``)::
+
+    python scripts/make_demo_data.py --out /tmp/demo-data      # writes /tmp/demo-data/sap-o2c-data/...
+    graphsense ingest o2c --data-root /tmp/demo-data
+
+The generated data covers what the graph layer has to handle:
 
 * 10 customers (one with an address on file, one blocked) and 24 products with
   English and German descriptions
@@ -9,31 +21,20 @@ deterministic dataset that exercises what the graph layer has to handle:
 * deliveries for most orders and invoices for most deliveries, journal entries
   with one or two line items, and payments for most invoices
 * item numbers zero-padded in the item tables (``000010``) but short in the
-  cross-document references (``10``), as in the real SAP export
-
-Usage (from ``backend/``)::
-
-    python scripts/seed_demo_data.py                  # uses DATABASE_DSN / backend/.env
-    python scripts/seed_demo_data.py --dsn postgresql://user:pass@localhost:5432/dbname
-    python scripts/seed_demo_data.py --reset          # wipe the O2C tables first
-
-The ``rag_embeddings`` table (pgvector) is not created; the chat pipeline needs
-it, the graph views do not.
+  cross-document references (``10``), as in the real export
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
-import os
+import json
 import random
 import sys
 from decimal import Decimal
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-
-from sqlalchemy import create_engine, text  # noqa: E402
 
 CUSTOMER_NAMES = [
     "Cardenas, Parker and Avila",
@@ -64,7 +65,7 @@ PRODUCT_NAMES = [
 ]
 GERMAN_NAMES = {0: "Trailrunning-Schuhe", 1: "Wasserdichte Jacke", 2: "Merino-Unterzieher"}
 CURRENCIES = ["USD"] * 6 + ["EUR"] * 3 + ["INR"]
-TABLES = [
+TABLES = [  # tables the demo fills
     "payments_accounts_receivable",
     "journal_entry_items_accounts_receivable",
     "billing_document_items",
@@ -181,7 +182,7 @@ def build(seed: int = 7) -> dict[str, list[dict]]:
             "sold_to_party": customer,
             "creation_date": created,
             "created_by_user": "SEEDUSER",
-            "last_change_datetime": dt.datetime.combine(created, dt.time(9, 30), dt.timezone.utc),
+            "last_change_datetime": dt.datetime.combine(created, dt.time(9, 30), dt.UTC),
             "total_net_amount": total,
             "overall_delivery_status": "C" if has_delivery else "A",
             "transaction_currency": currency,
@@ -244,7 +245,7 @@ def build(seed: int = 7) -> dict[str, list[dict]]:
             "fiscal_year": "2025",
             "accounting_document": str(accounting_no),
             "sold_to_party": customer,
-            "last_change_datetime": dt.datetime.combine(billed, dt.time(11, 0), dt.timezone.utc),
+            "last_change_datetime": dt.datetime.combine(billed, dt.time(11, 0), dt.UTC),
         })
         for d_item, item in zip(delivery_items, items):
             rows["billing_document_items"].append({
@@ -315,42 +316,50 @@ def build(seed: int = 7) -> dict[str, list[dict]]:
     return rows
 
 
-def sync_dsn(dsn: str) -> str:
-    for prefix in ("postgresql+asyncpg://", "postgresql://"):
-        if dsn.startswith(prefix):
-            return "postgresql+psycopg2://" + dsn[len(prefix):]
-    return dsn
+def raw_value(value):
+    """A value in the shape of the source export (everything a string, empty for missing)."""
+    if value is None:
+        return ""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, dt.datetime):
+        return value.astimezone(dt.UTC).strftime("%Y-%m-%dT%H:%M:%S.000Z")
+    if isinstance(value, dt.date):
+        return value.strftime("%Y-%m-%dT00:00:00.000Z")
+    if isinstance(value, dt.time):
+        return {"hours": value.hour, "minutes": value.minute, "seconds": value.second}
+    return str(value)
+
+
+def write(data: dict[str, list[dict]], out: Path, dataset_id: str = "o2c") -> dict[str, int]:
+    """Write ``data`` below ``out`` where the package expects its source files."""
+    from src.datasets.registry import get_package
+
+    package = get_package(dataset_id)
+    counts = {}
+    for table in package.tables:
+        rows = data.get(table.table, [])
+        directory = out / package.source.default_subdir / table.source.path
+        directory.mkdir(parents=True, exist_ok=True)
+        sources = {c.name: c.source for c in table.columns}
+        with (directory / "part-0001.jsonl").open("w", encoding="utf-8") as handle:
+            for row in rows:
+                record = {sources[name]: raw_value(value) for name, value in row.items() if name in sources}
+                handle.write(json.dumps(record) + "\n")
+        counts[table.table] = len(rows)
+    return counts
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
-    parser.add_argument("--dsn", help="PostgreSQL DSN (default: DATABASE_DSN or backend/.env)")
-    parser.add_argument("--reset", action="store_true", help="delete existing rows first")
+    parser.add_argument("--out", type=Path, required=True, help="data root to write into")
     parser.add_argument("--seed", type=int, default=7)
     args = parser.parse_args()
 
-    if args.dsn:
-        os.environ["DATABASE_DSN"] = args.dsn
-    # The settings module reads DATABASE_DSN from the environment or backend/.env.
-    from src.db.config import db_settings
-
-    engine = create_engine(sync_dsn(str(db_settings.DATABASE_DSN)))
-
-    from src.db import models  # noqa: F401  (registers the tables)
-    from src.db.base import Base
-
-    tables = [t for name, t in Base.metadata.tables.items() if name in TABLES]
-    Base.metadata.create_all(engine, tables=tables)
-
-    data = build(args.seed)
-    with engine.begin() as conn:
-        if args.reset:
-            conn.execute(text("TRUNCATE " + ", ".join(TABLES)))
-        for name in reversed(TABLES):  # parents (customers, products) first
-            if data[name]:
-                conn.execute(Base.metadata.tables[name].insert(), data[name])
-    summary = ", ".join(f"{len(rows)} {name}" for name, rows in data.items() if rows)
-    print(f"Seeded {summary}")
+    counts = write(build(args.seed), args.out)
+    summary = ", ".join(f"{n} {name}" for name, n in counts.items() if n)
+    print(f"Wrote {summary}")
+    print(f"Load it with: graphsense ingest o2c --data-root {args.out}")
 
 
 if __name__ == "__main__":

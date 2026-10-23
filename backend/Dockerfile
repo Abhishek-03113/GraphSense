@@ -24,5 +24,6 @@ ENV PYTHONUNBUFFERED=1 \
 # Railway sets PORT dynamically (typically 8080), default to 8000 for local dev
 EXPOSE 8000
 
-# Use shell form for proper $PORT variable expansion with fallback
-CMD uvicorn src.main:app --host 0.0.0.0 --port ${PORT:-8000}
+# Migrate, adopt a stage-1 database if present, then serve (see scripts/start.sh).
+# Loading data is an operator step: `graphsense ingest <dataset>`.
+CMD ["sh", "scripts/start.sh"]
