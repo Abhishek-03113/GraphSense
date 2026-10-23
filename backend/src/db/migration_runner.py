@@ -1,12 +1,9 @@
 """Database migration logic for PostgreSQL."""
 
-import asyncio
 import hashlib
-import os
 import re
-import sys
 from dataclasses import dataclass
-from datetime import datetime, timezone
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import List, Optional
 
@@ -205,7 +202,7 @@ async def apply_pending(engine: AsyncEngine, skipped: Optional[List[str]] = None
             # does not support multiple statements in a single prepared stmt.
             if content.strip():
                 # Strip comments and split on semicolons
-                lines = [l for l in content.splitlines() if not l.strip().startswith("--")]
+                lines = [line for line in content.splitlines() if not line.strip().startswith("--")]
                 clean_sql = "\n".join(lines)
                 for stmt in clean_sql.split(";"):
                     stmt = stmt.strip()
@@ -273,7 +270,7 @@ def create_migration(name: str, category: str) -> str:
     cat_dir = MIGRATIONS_DIR / category
     cat_dir.mkdir(parents=True, exist_ok=True)
     
-    version = datetime.now(timezone.utc).strftime("%Y%m%d%H%M%S")
+    version = datetime.now(UTC).strftime("%Y%m%d%H%M%S")
     clean_name = name.lower().replace(" ", "_").replace("-", "_")
     
     filename = f"V{version}__{clean_name}.sql"

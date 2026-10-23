@@ -5,52 +5,26 @@ Registered by dotted path ``src.catalog.hooks:refresh_catalog`` in
 schema, so the catalog describes exactly the data that is about to be
 published and both switch over together.
 
-The hook follows the ingestion engine's protocol (``name``, ``phase``,
-``async run(ctx)``).  The types are declared here as protocols so this module
-imports without the ingestion package; whatever context object the runner
-passes in works as long as it has the attributes below.
+The hook follows the ingestion engine's protocol (``src.ingestion.hooks``): ``name``,
+``phase`` and ``async run(ctx)`` returning a ``HookResult``.
 """
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
-from typing import TYPE_CHECKING, Any, Literal, Protocol
+from typing import Literal
 
 from src.catalog.refresh import profile_config, refresh_on_connection, run_on
+from src.ingestion.hooks import HookContext, HookResult
 from src.utils.logger import get_logger
 
-if TYPE_CHECKING:
-    from src.datasets.models import DatasetPackage
-
 logger = get_logger(__name__)
-
-
-class HookContext(Protocol):
-    """The part of the ingestion runner's context this hook reads."""
-
-    dataset_id: str
-    run_id: Any
-    package: DatasetPackage
-    schema: str
-    engine: Any
-    settings: Any
-
-
-@dataclass(frozen=True)
-class CatalogHookResult:
-    """Outcome of the hook.  ``status`` is ``ok``, ``warning`` (built, but with drift or gaps) or ``failed``."""
-
-    name: str
-    status: Literal["ok", "warning", "failed"]
-    message: str = ""
-    details: dict[str, Any] = field(default_factory=dict)
 
 
 class RefreshCatalogHook:
     name = "catalog"
     phase: Literal["pre_swap", "post_swap"] = "pre_swap"
 
-    async def run(self, ctx: HookContext) -> CatalogHookResult:
+    async def run(self, ctx: HookContext) -> HookResult:
         pkg = ctx.package
         run_id = str(ctx.run_id)
         cfg = profile_config(ctx.settings)
@@ -63,8 +37,11 @@ class RefreshCatalogHook:
             )
         except Exception as exc:  # a catalog failure must not discard loaded data
             logger.exception("catalog build failed for %s run %s", ctx.dataset_id, run_id)
-            return CatalogHookResult(
-                self.name, "failed", f"catalog build failed ({type(exc).__name__})", {"error": type(exc).__name__}
+            return HookResult(
+                name=self.name,
+                status="failed",
+                message=f"catalog build failed ({type(exc).__name__})",
+                details={"error": type(exc).__name__},
             )
         info = built.info
         details = {
@@ -80,7 +57,9 @@ class RefreshCatalogHook:
         message = f"catalog built: {info.table_count} tables, {info.column_count} columns in {info.duration_ms} ms"
         if problems:
             message += f"; {details['drift']} drift issue(s), {len(info.notes)} note(s)"
-        return CatalogHookResult(self.name, "warning" if problems else "ok", message, details)
+        return HookResult(
+            name=self.name, status="warning" if problems else "ok", message=message, details=details
+        )
 
 
 # The object the hook registry imports.

@@ -6,12 +6,30 @@ import json
 from collections.abc import Sequence
 from typing import Any
 
+from src.catalog import CatalogSnapshot
 from src.datasets.context import DatasetContext
 from src.datasets.models import DatasetPackage
-from src.intelligence.catalog_access import PackageCatalogSource
 from src.intelligence.models import ExecutionError, ExecutionResult, ValidatedSql
 from src.intelligence.providers import FakeEmbedder, FakeLLM, NullEmbedder
 from src.intelligence.service import AskService
+
+
+class PackageCatalogSource:
+    """Snapshots built from the package only (no row counts or profile statistics), cached per content hash.
+
+    Test-only: the application reads its catalog through the catalog service.
+    """
+
+    def __init__(self) -> None:
+        self._cache: dict[str, CatalogSnapshot] = {}
+
+    async def get_snapshot(self, ctx: DatasetContext) -> CatalogSnapshot:
+        key = ctx.package.content_hash
+        snap = self._cache.get(key)
+        if snap is None:
+            snap = CatalogSnapshot.from_package(ctx.package)
+            self._cache = {key: snap}
+        return snap
 
 
 def draft(sql: str | None, *, can_answer: bool = True, assumptions: Sequence[str] = (), reason: str | None = None) -> str:

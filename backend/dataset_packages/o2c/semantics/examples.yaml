@@ -369,3 +369,188 @@
     )
     GROUP BY bdh.transaction_currency
   expect: {min_rows: 1, columns_include: [unpaid_total]}
+
+# --- more golden questions: the document chain, cancellations, coded values, aggregates ------
+# Each was run against the sample data; the comment above it says what it returns there.
+
+# Cancellations: an S1 document points at the F2 invoice it reverses (80 pairs).
+- id: golden_cancelled_invoice_pairs
+  role: golden
+  question: Which invoices were cancelled, and which document cancelled each one?
+  tags: [billing, cancellation]
+  sql: |
+    SELECT inv.billing_document AS cancelled_invoice, cx.billing_document AS cancellation_document
+    FROM billing_document_headers inv
+    JOIN billing_document_headers cx ON cx.cancelled_billing_document = inv.billing_document
+    WHERE inv.billing_document_type = 'F2' AND cx.billing_document_type = 'S1'
+  expect: {min_rows: 1, columns_include: [cancelled_invoice, cancellation_document]}
+
+# 30079.43 INR.
+- id: golden_cancelled_invoice_value
+  role: golden
+  question: What is the combined value of all cancelled invoices?
+  tags: [billing, cancellation, aggregate]
+  sql: |
+    SELECT SUM(total_net_amount) AS cancelled_value, transaction_currency
+    FROM billing_document_headers
+    WHERE billing_document_type = 'F2' AND billing_document_is_cancelled = TRUE
+    GROUP BY transaction_currency
+  expect: {min_rows: 1, columns_include: [cancelled_value, transaction_currency]}
+
+# Four customers have cancelled invoices (71, 7, 1 and 1).
+- id: golden_cancellations_per_customer
+  role: golden
+  question: How many cancelled invoices does each customer have?
+  tags: [billing, cancellation, customer, aggregate]
+  sql: |
+    SELECT bp.business_partner_full_name AS customer_name, COUNT(*) AS cancelled_invoices
+    FROM billing_document_headers bdh
+    JOIN business_partners bp ON bp.customer = bdh.sold_to_party
+    WHERE bdh.billing_document_type = 'F2' AND bdh.billing_document_is_cancelled = TRUE
+    GROUP BY bp.business_partner_full_name
+  expect: {min_rows: 1, columns_include: [customer_name, cancelled_invoices]}
+
+# Sales order status C = completely delivered (86).
+- id: golden_fully_delivered_orders
+  role: golden
+  question: How many sales orders have been completely delivered?
+  tags: [sales-order, delivery, coded-value, counts]
+  sql: |
+    SELECT COUNT(*) AS delivered_orders
+    FROM sales_order_headers
+    WHERE overall_delivery_status = 'C'
+  expect: {min_rows: 1, max_rows: 1, columns_include: [delivered_orders]}
+
+# Status B = partially delivered never occurs in the sample data, so the count is 0.
+- id: golden_partially_delivered_orders
+  role: golden
+  question: How many sales orders are only partially delivered?
+  tags: [sales-order, delivery, coded-value, counts]
+  sql: |
+    SELECT COUNT(*) AS partially_delivered_orders
+    FROM sales_order_headers
+    WHERE overall_delivery_status = 'B'
+  expect: {min_rows: 1, max_rows: 1, columns_include: [partially_delivered_orders]}
+
+# Goods movement status C = completed (3 deliveries).
+- id: golden_goods_issued_deliveries
+  role: golden
+  question: Which deliveries have had their goods movement completed?
+  tags: [delivery, coded-value]
+  sql: |
+    SELECT delivery_document, actual_goods_movement_date
+    FROM outbound_delivery_headers
+    WHERE overall_goods_movement_status = 'C'
+  expect: {min_rows: 1, columns_include: [delivery_document, actual_goods_movement_date]}
+
+# The chain invoice line -> delivery line -> sales order (163 distinct pairs, cancellations included).
+- id: golden_invoice_source_orders
+  role: golden
+  question: Which sales order does each billing document trace back to?
+  tags: [flow, billing, sales-order]
+  sql: |
+    SELECT DISTINCT bdi.billing_document, odi.reference_sd_document AS sales_order
+    FROM billing_document_items bdi
+    JOIN outbound_delivery_items odi
+        ON odi.delivery_document = bdi.reference_sd_document
+        AND odi.delivery_document_item = bdi.reference_sd_document_item
+  expect: {min_rows: 1, columns_include: [billing_document, sales_order]}
+
+# Four customers have orders but no invoice at all.
+- id: golden_customers_never_invoiced
+  role: golden
+  question: Which customers have placed orders but were never invoiced?
+  tags: [customer, sales-order, billing, broken-flow]
+  sql: |
+    SELECT bp.customer, bp.business_partner_full_name
+    FROM business_partners bp
+    WHERE EXISTS (SELECT 1 FROM sales_order_headers soh WHERE soh.sold_to_party = bp.customer)
+    AND NOT EXISTS (SELECT 1 FROM billing_document_headers bdh WHERE bdh.sold_to_party = bp.customer)
+  expect: {min_rows: 1, columns_include: [customer, business_partner_full_name]}
+
+# Region KA is Karnataka (1 customer).
+- id: golden_customers_in_karnataka
+  role: golden
+  question: How many customers are located in Karnataka?
+  tags: [customer, address, coded-value, counts]
+  sql: |
+    SELECT COUNT(DISTINCT bp.customer) AS customers_in_region
+    FROM business_partners bp
+    JOIN business_partner_addresses bpa ON bpa.business_partner = bp.business_partner
+    WHERE bpa.region = 'KA'
+  expect: {min_rows: 1, max_rows: 1, columns_include: [customers_in_region]}
+
+# Six of the eight business partners are blocked.
+- id: golden_blocked_customers
+  role: golden
+  question: Which customers are currently blocked?
+  tags: [customer]
+  sql: |
+    SELECT customer, business_partner_full_name
+    FROM business_partners
+    WHERE business_partner_is_blocked = TRUE
+  expect: {min_rows: 1, columns_include: [customer, business_partner_full_name]}
+
+# Sixteen orders have more than two items.
+- id: golden_orders_with_many_items
+  role: golden
+  question: Which sales orders contain more than two items?
+  tags: [sales-order, aggregate]
+  sql: |
+    SELECT sales_order, COUNT(*) AS item_count
+    FROM sales_order_items
+    GROUP BY sales_order
+    HAVING COUNT(*) > 2
+  expect: {min_rows: 1, columns_include: [sales_order, item_count]}
+
+# Only two customers have payments, 9445.05 and 0.00 INR.
+- id: golden_payments_per_customer
+  role: golden
+  question: What is the total amount of payments recorded for each customer?
+  tags: [payment, customer, aggregate]
+  sql: |
+    SELECT bp.business_partner_full_name AS customer_name,
+        SUM(par.amount_in_transaction_currency) AS total_paid,
+        par.transaction_currency
+    FROM payments_accounts_receivable par
+    JOIN business_partners bp ON bp.customer = par.customer
+    GROUP BY bp.business_partner_full_name, par.transaction_currency
+  expect: {min_rows: 1, columns_include: [customer_name, total_paid]}
+
+# Seven plants appear on order lines (110, 19, 13, 12, 11, 1, 1).
+- id: golden_order_lines_per_plant
+  role: golden
+  question: How many sales order items are assigned to each production plant?
+  tags: [sales-order, plant, aggregate]
+  sql: |
+    SELECT soi.production_plant, pl.plant_name, COUNT(*) AS item_count
+    FROM sales_order_items soi
+    LEFT JOIN plants pl ON pl.plant = soi.production_plant
+    GROUP BY soi.production_plant, pl.plant_name
+  expect: {min_rows: 1, columns_include: [production_plant, plant_name, item_count]}
+
+# 424.42 per item.
+- id: golden_average_item_amount
+  role: golden
+  question: What is the average net amount of a sales order item?
+  tags: [sales-order, aggregate]
+  sql: |
+    SELECT AVG(net_amount) AS average_item_amount
+    FROM sales_order_items
+  expect: {min_rows: 1, max_rows: 1, columns_include: [average_item_amount]}
+
+# Chain order -> delivery -> invoice, then the cancelled flag (80 orders).
+- id: golden_orders_with_cancelled_invoices
+  role: golden
+  question: How many sales orders ended up with an invoice that was later cancelled?
+  tags: [flow, sales-order, billing, cancellation, counts]
+  sql: |
+    SELECT COUNT(DISTINCT soh.sales_order) AS orders_with_cancelled_invoice
+    FROM sales_order_headers soh
+    JOIN outbound_delivery_items odi ON odi.reference_sd_document = soh.sales_order
+    JOIN billing_document_items bdi
+        ON bdi.reference_sd_document = odi.delivery_document
+        AND bdi.reference_sd_document_item = odi.delivery_document_item
+    JOIN billing_document_headers bdh ON bdh.billing_document = bdi.billing_document
+    WHERE bdh.billing_document_type = 'F2' AND bdh.billing_document_is_cancelled = TRUE
+  expect: {min_rows: 1, max_rows: 1, columns_include: [orders_with_cancelled_invoice]}

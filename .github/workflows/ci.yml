@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # Fast feedback: lint and the unit tests. Tests that need PostgreSQL skip themselves here
+  # (TEST_DATABASE_DSN is not set); the next job runs them.
+  backend:
+    name: Backend (lint, unit tests)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Check the lock file is current
+        run: uv lock --check
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev
+      - name: Lint
+        run: uv run ruff check .
+      - name: Unit tests
+        run: uv run pytest -q
+
+  # PostgreSQL 16 with pgvector: integration tests, every dataset package, a demo ingest and the
+  # offline evaluation. Needs no model key and none of the real sample data (that lives on a
+  # separate branch): the O2C package is loaded from the demo generator and the toy package from
+  # its fixtures, so the tests that need the real data skip.
+  backend-integration:
+    name: Backend (PostgreSQL, packages, offline evaluation)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: postgres
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # A superuser: the integration tests create and drop their own databases and roles.
+      TEST_DATABASE_DSN: postgresql://postgres:postgres@localhost:5432/postgres
+      PGPASSWORD: postgres
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v6
+        with:
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: backend/uv.lock
+      - name: Install dependencies
+        run: uv sync --frozen --extra dev
+
+      - name: Lint every dataset package
+        run: |
+          for package in dataset_packages/*/ tests/fixtures/packages/*/; do
+            echo "::group::package lint $package"
+            uv run graphsense package lint "$package"
+            echo "::endgroup::"
+          done
+
+      - name: Tests (unit and integration)
+        run: uv run pytest -q
+
+      # Set only now, so the tests above run with the settings of a clean checkout.
+      - name: Point the application at its own database
+        run: |
+          {
+            echo "OWNER_DATABASE_DSN=postgresql+asyncpg://postgres:postgres@localhost:5432/graphsense"
+            echo "DATABASE_DSN=postgresql+asyncpg://graphsense_app:ci-app-password@localhost:5432/graphsense"
+            echo "READONLY_DATABASE_DSN=postgresql+asyncpg://graphsense_ro:ci-readonly-password@localhost:5432/graphsense"
+            echo "GRAPHSENSE_APP_PASSWORD=ci-app-password"
+            echo "GRAPHSENSE_READONLY_PASSWORD=ci-readonly-password"
+            # No model key: embeddings come from the deterministic offline embedder.
+            echo "EMBEDDING_PROVIDER=fake"
+            echo "GEMINI_API_KEY="
+            # The toy package lives with the test fixtures.
+            echo "PACKAGES_DIR=tests/fixtures/packages"
+          } >> "$GITHUB_ENV"
+
+      - name: Create and migrate the application database
+        run: |
+          psql -h localhost -U postgres -d postgres -c "CREATE DATABASE graphsense"
+          psql -h localhost -U postgres -d graphsense -c "CREATE EXTENSION IF NOT EXISTS vector"
+          uv run graphsense db migrate
+          uv run graphsense db provision-roles
+
+      - name: Ingest the demo data and the toy dataset
+        run: |
+          uv run python scripts/make_demo_data.py --out "$RUNNER_TEMP/demo"
+          uv run graphsense ingest o2c --data-root "$RUNNER_TEMP/demo"
+          uv run graphsense ingest toy_library --data-root tests/fixtures/sources
+
+      # The score is the lowest of the gated metrics (see `graphsense eval --help`); 0.9 is below
+      # what the code reaches today (about 0.98, set by table retrieval recall) and above a regression.
+      # A golden question that can be retrieved fails the run whatever the threshold.
+      - name: Offline evaluation
+        run: |
+          mkdir -p "$RUNNER_TEMP/eval"
+          uv run graphsense eval o2c --offline --fail-under 0.9 \
+            --json "$RUNNER_TEMP/eval/o2c.json" --markdown "$RUNNER_TEMP/eval/o2c.md"
+          uv run graphsense eval toy_library --offline --fail-under 0.9 \
+            --json "$RUNNER_TEMP/eval/toy_library.json" --markdown "$RUNNER_TEMP/eval/toy_library.md"
+
+      - name: Keep the evaluation reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-reports
+          path: ${{ runner.temp }}/eval
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend (lint, build)
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Lint
+        run: npm run lint
+      - name: Build
+        run: npm run build

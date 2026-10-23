@@ -89,7 +89,7 @@ def test_glossary_gets_a_generated_sentence_for_every_normalised_column(toy_pack
 def test_golden_examples_are_kept_apart_from_few_shot_examples(toy_package):
     snap = CatalogSnapshot.from_package(toy_package)
     assert {e.id for e in snap.few_shot_examples()} == {"most_borrowed_books", "books_by_author"}
-    assert {e.id for e in snap.golden_examples()} == {"open_loans"}
+    assert {e.id for e in snap.golden_examples()} == {"open_loans", "late_loans", "norwegian_books", "gold_members", "total_late_fees"}
 
 
 def test_sql_schema_is_what_sql_tooling_needs(toy_package):

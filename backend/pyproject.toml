@@ -1,7 +1,7 @@
 [project]
-name = "dodgeai-backend"
+name = "graphsense-backend"
 version = "0.1.0"
-description = "FastAPI backend for DodgeAI"
+description = "FastAPI backend for GraphSense"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
@@ -11,7 +11,6 @@ dependencies = [
     "pydantic-settings>=2.7.0",
     "structlog>=24.1.0",
     "sqlalchemy>=2.0.29",
-    "pgvector>=0.2.5",
     "asyncpg>=0.31.0",
     "psycopg2-binary>=2.9.11",
     "greenlet>=3.3.2",
@@ -40,6 +39,13 @@ build-backend = "hatchling.build"
 [tool.ruff]
 line-length = 100
 target-version = "py312"
+
+[tool.ruff.lint]
+# A rule set the code base passes as it is (no mass reformatting): syntax and logic errors,
+# unused names, bugbear, pylint errors and the datetime.UTC alias. B008 is left out because
+# FastAPI declares dependencies as call expressions in argument defaults.
+select = ["E4", "E7", "E9", "F", "B", "PLE", "UP017"]
+ignore = ["B008"]
 
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
