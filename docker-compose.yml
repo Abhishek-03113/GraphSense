@@ -1,7 +1,7 @@
 services:
   db:
     image: pgvector/pgvector:pg16
-    container_name: dodgeai_db
+    container_name: graphsense_db
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
