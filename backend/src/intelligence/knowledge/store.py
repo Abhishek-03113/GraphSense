@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import re
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -65,12 +66,17 @@ def tsquery_or(terms: list[str]) -> str:
 
 
 class KnowledgeStore:
-    def __init__(self, engine: AsyncEngine, table: str = "app.knowledge_items") -> None:
+    def __init__(self, engine: AsyncEngine | Callable[[], AsyncEngine], table: str = "app.knowledge_items") -> None:
         if not _TABLE.match(table):
             raise ValueError("invalid table name")
-        self.engine = engine
+        self._engine = engine
         self.table = table
         self._has_vector: bool | None = None
+
+    @property
+    def engine(self) -> AsyncEngine:
+        """The engine; a callable is resolved on every use so a disposed engine is never kept."""
+        return self._engine() if callable(self._engine) else self._engine
 
     # --- capabilities -------------------------------------------------------
 

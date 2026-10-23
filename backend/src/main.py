@@ -9,6 +9,7 @@ from src.api.graph import router as graph_router
 from src.api.ingest import router as ingest_router
 from src.config import get_settings
 from src.db.engine import dispose_engine
+from src.intelligence import runtime as ask_runtime
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -16,7 +17,9 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    ask_runtime.check_startup()
     yield
+    await ask_runtime.shutdown()
     await dispose_engine()
 
 

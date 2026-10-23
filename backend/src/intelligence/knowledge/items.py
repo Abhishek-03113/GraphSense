@@ -5,7 +5,7 @@ the live catalog is available).  They are always built from the *language-model-
 view of the snapshot, so a column marked ``sensitive`` contributes its name and
 description but never a value (no sample, no top value, no label, no range).
 
-``golden`` examples are evaluation material and are never turned into items.
+``golden`` examples are for evaluation only and are never turned into items.
 """
 
 from __future__ import annotations

@@ -12,7 +12,7 @@ STOPWORDS = frozenset(
 
 
 def stem(word: str) -> str:
-    """A very light plural stripper: ``invoices`` -> ``invoice``, ``companies`` -> ``company``."""
+    """A very light plural stripper: ``books`` -> ``book``, ``companies`` -> ``company``."""
     if len(word) > 4 and word.endswith("ies"):
         return word[:-3] + "y"
     if len(word) > 4 and word.endswith(("ses", "xes", "zes", "ches", "shes")):

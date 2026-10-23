@@ -129,7 +129,7 @@ async def refresh_knowledge(
         except Exception as exc:
             report.not_embedded_reason = type(exc).__name__
             report.warnings.append("embedding failed unexpectedly; items stored as text only")
-            logger.exception("Knowledge refresh could not embed items: %s", exc)
+            logger.exception("Knowledge refresh could not embed items")
     elif not model and pending:
         report.not_embedded_reason = "no embedding model configured"
 
