@@ -41,21 +41,30 @@ def _split(text: str) -> list[str]:
 
 @dataclass
 class ScopeVocabulary:
+    """Words that tie a question to the dataset.
+
+    ``strong`` words name the subject (the package's own terms and synonyms, table names,
+    node labels, glossary titles): one is enough.  ``weak`` words come from column names and
+    coded-value labels, which include everyday words (``weight``, ``good``, ``end``): two
+    different ones are needed, or one together with retrieval similarity.
+    """
+
     strong: set[str] = field(default_factory=set)
+    weak: set[str] = field(default_factory=set)
 
     @classmethod
     def build(cls, package: DatasetPackage, snapshot: CatalogSnapshot) -> ScopeVocabulary:
         safe = llm_safe(snapshot)
         vocab = cls()
 
-        def add(text: str, *, generic_ok: bool = False) -> None:
+        def add(text: str, *, generic_ok: bool = False, weak: bool = False) -> None:
             for w in _split(text):
                 s = stem(w)
                 if len(s) < 3 or w in STOPWORDS:
                     continue
                 if not generic_ok and (w in GENERIC_WORDS or s in GENERIC_WORDS):
                     continue
-                vocab.strong.add(s)
+                (vocab.weak if weak else vocab.strong).add(s)
 
         v = package.vocabulary
         for term in v.terms:
@@ -73,20 +82,33 @@ class ScopeVocabulary:
             add(table.name)
             for col in table.columns:
                 if not col.hidden:
-                    add(col.name)
+                    add(col.name, weak=True)
                 for label in col.value_labels.values():
-                    add(label)
+                    add(label, weak=True)
         for entry in safe.glossary:
             add(entry.title)
+        vocab.weak -= vocab.strong
         return vocab
 
-    def matches(self, question: str) -> list[str]:
+    def weak_hits(self, question: str) -> list[str]:
         found = []
         for w in words(question):
             s = stem(w)
-            if s in self.strong and s not in found or s in META_WORDS and s not in found:
+            if s in self.weak and s not in found:
                 found.append(s)
         return found
+
+    def matches(self, question: str) -> list[str]:
+        """Vocabulary words that put the question in scope on their own (empty if none do)."""
+        found = []
+        for w in words(question):
+            s = stem(w)
+            if (s in self.strong or s in META_WORDS) and s not in found:
+                found.append(s)
+        if found:
+            return found
+        weak = self.weak_hits(question)
+        return weak if len(weak) >= 2 else []
 
 
 @dataclass(frozen=True)
@@ -108,5 +130,5 @@ def decide(
     if matched:
         return ScopeDecision(True, "vocabulary", tuple(matched), best_similarity)
     if best_similarity is not None and best_similarity >= min_similarity:
-        return ScopeDecision(True, "similarity", (), best_similarity)
+        return ScopeDecision(True, "similarity", tuple(vocabulary.weak_hits(question)), best_similarity)
     return ScopeDecision(False, "out_of_scope", (), best_similarity)

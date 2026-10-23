@@ -11,7 +11,7 @@ Internal detail (SQL errors, provider messages) is logged, never returned.
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -99,8 +99,8 @@ def to_response(result: AskResult) -> ChatResponseModel:
 async def handle_chat(
     body: ChatRequest,
     request: Request,
-    ctx: DatasetContext = Depends(get_dataset_context),
-    service: AskService = Depends(get_ask_service),
+    ctx: Annotated[DatasetContext, Depends(get_dataset_context)],
+    service: Annotated[AskService, Depends(get_ask_service)],
 ):
     """Answer a natural-language question about the selected dataset."""
     address = client_address(request)
