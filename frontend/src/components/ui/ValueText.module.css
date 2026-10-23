@@ -1,0 +1,22 @@
+.coded {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: var(--gs-space-1);
+}
+
+.label {
+  min-width: 0;
+}
+
+.code {
+  color: var(--gs-color-label-secondary);
+  font-family: var(--gs-font-mono);
+  font-size: var(--gs-fs-caption);
+  white-space: nowrap;
+}
+
+.nowrap {
+  flex-wrap: nowrap;
+  white-space: nowrap;
+}

@@ -1,6 +1,6 @@
-import { AlertTriangle, RotateCw } from 'lucide-react';
+import { AlertTriangle, DatabaseZap, RotateCw } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { describeError } from '../../lib/api/client';
+import { describeError, isDatasetNotReady } from '../../lib/api/client';
 import { Button } from './Button';
 import styles from './EmptyState.module.css';
 
@@ -42,13 +42,15 @@ interface ErrorStateProps {
 
 /** A failed load, with a plain-language reason and a retry. */
 export function ErrorState({ title = 'This didn’t load', error, onRetry, retrying, compact }: ErrorStateProps) {
+  // Data that has not been loaded yet is a state to wait out, not a fault.
+  const notReady = isDatasetNotReady(error);
   return (
     <div role="alert">
       <EmptyState
         compact={compact}
-        tone="danger"
-        icon={<AlertTriangle size={22} />}
-        title={title}
+        tone={notReady ? 'neutral' : 'danger'}
+        icon={notReady ? <DatabaseZap size={22} /> : <AlertTriangle size={22} />}
+        title={notReady ? 'The data isn’t loaded yet' : title}
         description={error ? describeError(error) : 'Something went wrong while loading this.'}
         actions={
           onRetry && (

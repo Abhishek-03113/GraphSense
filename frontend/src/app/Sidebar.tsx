@@ -7,10 +7,22 @@ import { Tooltip } from '../components/ui/Tooltip';
 import { useHealth } from '../lib/api/queries';
 import { useMediaQuery } from '../lib/hooks';
 import { SHORTCUT_LABEL } from '../lib/platform';
-import { useSchema } from '../lib/schema';
+import { summariseAi, summariseData, useSchema, type StatusLine } from '../lib/schema';
 import { useWorkspace } from '../store/workspace';
 import { NAV } from './nav';
 import styles from './Sidebar.module.css';
+
+/** One quiet line in the footer: a marker whose shape (not only colour) says how things stand, then a few words. */
+function StatusRow({ line, label }: { line: StatusLine; label: string }) {
+  const marker = line.tone === 'ok' ? styles.dotOk : line.tone === 'wait' ? styles.dotWait : line.tone === 'limited' ? styles.dotLimited : styles.dotOff;
+  return (
+    <div className={styles.status} role="status" title={line.detail}>
+      <span className={[styles.dot, marker].join(' ')} aria-hidden="true" />
+      <span className={styles.statusText}>{line.text}</span>
+      <span className="gs-sr-only">{`${label}: ${line.text}. ${line.detail}`}</span>
+    </div>
+  );
+}
 
 function ConnectionStatus() {
   const health = useHealth();
@@ -33,7 +45,9 @@ export function Sidebar() {
   const setPaletteOpen = useWorkspace((s) => s.setPaletteOpen);
   const narrow = useMediaQuery('(max-width: 900px)');
   const collapsed = collapsedPref || narrow;
-  const { schema, status } = useSchema();
+  const { schema, status, ai, datasetPhase } = useSchema();
+  const dataLine = summariseData(datasetPhase);
+  const aiLine = datasetPhase === 'ready' || datasetPhase === 'unknown' ? summariseAi(ai) : null;
 
   return (
     <aside className={[styles.sidebar, collapsedPref ? styles.collapsed : ''].filter(Boolean).join(' ')} aria-label="Sidebar">
@@ -84,6 +98,8 @@ export function Sidebar() {
           <span className={styles.datasetName} title={schema.domain.name}>{status === 'error' ? 'Not available' : schema.domain.name}</span>
         )}
         <ConnectionStatus />
+        {dataLine && <StatusRow line={dataLine} label="Data" />}
+        {aiLine && <StatusRow line={aiLine} label="Ask" />}
       </div>
     </aside>
   );

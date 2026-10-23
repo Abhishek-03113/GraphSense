@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { lazy, useState } from 'react';
 import { BrowserRouter, Route, Routes } from 'react-router-dom';
+import { ApiError } from '../lib/api/client';
 import { SchemaProvider } from '../lib/schema';
 import { NotFound } from './NotFound';
 import { Shell } from './Shell';
@@ -19,7 +20,13 @@ export function App() {
     () =>
       new QueryClient({
         defaultOptions: {
-          queries: { retry: 1, refetchOnWindowFocus: false, staleTime: 30_000 },
+          queries: {
+            // A 4xx answer will not change on a second try (a dataset that is not loaded, an unknown record).
+            retry: (failureCount, error) =>
+              !(error instanceof ApiError && error.status >= 400 && error.status < 500) && failureCount < 1,
+            refetchOnWindowFocus: false,
+            staleTime: 30_000,
+          },
         },
       }),
   );

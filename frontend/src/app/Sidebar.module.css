@@ -167,6 +167,17 @@
   background: transparent;
 }
 
+/* Limited: half-filled, so it reads differently from both ready (solid) and off (hollow). */
+.dotLimited {
+  border: 2px solid var(--gs-warning-text);
+  background: linear-gradient(to right, var(--gs-warning-text) 50%, transparent 50%);
+}
+
+.dotOff {
+  border: 2px solid var(--gs-color-label-secondary);
+  background: transparent;
+}
+
 /* Collapsed rail */
 .collapsed {
   width: var(--gs-sidebar-rail);
