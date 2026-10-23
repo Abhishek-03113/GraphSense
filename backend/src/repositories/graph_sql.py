@@ -128,8 +128,11 @@ class GraphSqlBuilder:
         return f"SELECT COUNT(*) FROM {source} AS _t"
 
     def entities_query(self, node: NodeTypeDef) -> str:
-        return f"SELECT DISTINCT {self.id_expression(node)}::text FROM {node.table} LIMIT :limit"
-
+        # ORDER BY makes the sample (and so the listing) the same on every call.
+        return (
+            f"SELECT DISTINCT {self.id_expression(node)}::text FROM {node.table} "
+            f"ORDER BY 1 LIMIT :limit"
+        )
 
     # ------------------------------------------------------------------
     # Record details
