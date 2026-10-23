@@ -21,11 +21,11 @@ from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from src.config import get_settings
 from src.datasets.errors import PackageError, UnknownDatasetError
 from src.datasets.models import DatasetPackage
 from src.datasets.registry import get_package, list_packages
 from src.db.session import get_db_session
+from src.intelligence.status import ai_status
 from src.storage.app_tables import RUN_ACTIVE, ingestion_runs
 from src.storage.runs import DatasetRow, fetch_dataset_rows, run_summary
 
@@ -110,23 +110,6 @@ async def list_datasets(db: AsyncSession = Depends(get_db_session)) -> list[dict
     return out
 
 
-def _ai_status() -> dict[str, Any]:
-    """What the question-answering layer can do, from configuration alone.
-
-    The intelligence layer reports the real knowledge state; until it does, this
-    only says whether a language model is configured.
-    """
-    settings = get_settings()
-    configured = settings.LLM_PROVIDER.lower() not in ("", "none") and bool(
-        settings.GEMINI_API_KEY.get_secret_value()
-    )
-    return {
-        "mode": "full" if configured else "disabled",
-        "llm_configured": configured,
-        "knowledge": {"state": "missing", "items": 0, "embed_model": None},
-    }
-
-
 @router.get("/{dataset_id}/status")
 async def dataset_status(dataset_id: str, db: AsyncSession = Depends(get_db_session)) -> dict[str, Any]:
     """Load status of one dataset, its last run and what the AI layer can do."""
@@ -162,7 +145,7 @@ async def dataset_status(dataset_id: str, db: AsyncSession = Depends(get_db_sess
         "status": status,
         "package_version": pkg.version,
         "last_run": last_run,
-        "ai": _ai_status(),
+        "ai": await ai_status(dataset_id),
     }
     if active is not None and active.table_counts:
         body["record_counts"] = dict(active.table_counts)

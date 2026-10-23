@@ -33,11 +33,11 @@ from src.intelligence.models import (
     ExecutionResult,
     ValidatedSql,
 )
+from src.storage.schema_names import is_dataset_schema
+from src.storage.schema_names import search_path_for as storage_search_path
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
-
-_SCHEMA = re.compile(r"^[a-z][a-z0-9_]*$")
 
 # SQLSTATE -> what went wrong.
 _CATEGORY_BY_STATE: dict[str, ExecutionCategory] = {
@@ -69,17 +69,11 @@ _CATEGORY_BY_STATE: dict[str, ExecutionCategory] = {
 def search_path_for(schema_name: str | None) -> str:
     """The ``search_path`` for generated SQL: the dataset schema, then ``public``.
 
-    ``public`` stays on the path so a database whose tables are not yet moved into the dataset
-    schema (a legacy layout) works unchanged.  Uses the storage layer's helper when it exists, so
-    both agree.
+    The storage layer owns the format, so the executor and the graph sessions always agree.
     """
     if schema_name is None:
         return "public"
-    try:
-        from src.storage.schema_names import search_path_for as storage_path
-    except ImportError:
-        return f"{schema_name}, public"
-    return storage_path(schema_name)
+    return storage_search_path(schema_name)
 
 
 def asyncpg_dsn(dsn: str) -> str:
@@ -175,7 +169,7 @@ class ReadOnlyExecutor:
 
     async def execute(self, schema_name: str | None, validated: ValidatedSql) -> ExecutionResult:
         """Run the query.  Raises :class:`ExecutionError`."""
-        if schema_name is not None and not _SCHEMA.match(schema_name):
+        if schema_name is not None and not is_dataset_schema(schema_name):
             raise ExecutionError("other", "invalid schema name")
         search_path = search_path_for(schema_name)
         timeout_ms = self.settings.SQL_STATEMENT_TIMEOUT_MS

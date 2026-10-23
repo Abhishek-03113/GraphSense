@@ -218,7 +218,8 @@ async def test_the_post_ingest_hook_refreshes_and_never_raises(pg, store, snap, 
     with override_settings(DATABASE_DSN=pg.app_dsn_sqlalchemy, EMBEDDING_PROVIDER="fake", EMBEDDING_DIMS=48):
         result = await hook.run(Ctx())
     assert result.status == "ok" and result.name == "knowledge"
-    assert result.details["items"] == len(build_items(snap))
+    # The hook reads the live catalog, which adds profile-derived items to the package-only ones.
+    assert result.details["items"] >= len(build_items(snap))
     assert hook.phase == "post_swap" and hook() is hook
     assert await store.count(DATASET) == result.details["items"]
     if pg.has_vector:

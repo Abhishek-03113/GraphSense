@@ -68,9 +68,13 @@ def test_a_fresh_database_gets_the_app_schema_and_no_stage_one_tables(empty_db):
         "20260325000001": "baselined",
         "20260326000001": "baselined",
         "20261101000001": "applied",
+        "20261101000002": "applied",
+        "20261101000003": "applied",
+        "20261101000004": "applied",
     }
     present = tables(empty_db)
     assert {"app.datasets", "app.ingestion_runs", "app.ingestion_issues"} <= present
+    assert {"app.catalog_builds", "app.knowledge_items", "app.query_log", "app.eval_runs"} <= present
     assert "public.sales_order_headers" not in present and "public.rag_embeddings" not in present
 
 

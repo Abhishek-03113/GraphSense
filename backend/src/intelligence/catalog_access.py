@@ -1,10 +1,9 @@
 """Where the Ask pipeline gets its catalog snapshot.
 
-The pipeline depends on the one-method :class:`CatalogSource`.  Until the
-semantic catalog service (workstream C) is merged the source is built from the
-dataset package alone (:class:`PackageCatalogSource`: no row counts or profile
-statistics).  Switching to the live catalog is a one-line change in
-:func:`build_catalog_source`; nothing else in ``src/intelligence`` changes.
+The pipeline depends on the one-method :class:`CatalogSource`.  The application uses the
+catalog service (stored build, live profile or package fallback, see ``src.catalog.service``).
+:class:`PackageCatalogSource` (package only: no row counts or profile statistics) is kept for
+tests and tools that run without a database.
 """
 
 from __future__ import annotations
@@ -73,7 +72,7 @@ def llm_safe(snapshot: CatalogSnapshot) -> CatalogSnapshot:
 
 
 class ServiceCatalogSource:
-    """Adapter for ``get_catalog_service().get_snapshot(dataset_id)`` (workstream C); sync or async."""
+    """Adapter for ``get_catalog_service().get_snapshot(dataset_id)``; sync or async."""
 
     def __init__(self, service: Any) -> None:
         self._service = service
@@ -86,11 +85,22 @@ class ServiceCatalogSource:
 
 
 def build_catalog_source() -> CatalogSource:
-    """The source used by the application.
+    """The source used by the application: the catalog service."""
+    from src.catalog.service import get_catalog_service
 
-    At merge with workstream C, replace the body with::
+    return ServiceCatalogSource(get_catalog_service())
 
-        from src.catalog.service import get_catalog_service
-        return ServiceCatalogSource(get_catalog_service())
+
+def catalog_source_for(engine: Any, package: Any = None) -> CatalogSource:
+    """A catalog source that reads through ``engine`` instead of the process-wide one.
+
+    ``package`` (when given) is used as the dataset's package instead of looking it up by id.
+
+    For code that runs on its own event loop (an ingestion hook runs in a worker thread): the
+    process-wide application engine must only ever be created on the server's loop.
     """
-    return PackageCatalogSource()
+    from src.catalog.service import CatalogService
+
+    if package is None:
+        return ServiceCatalogSource(CatalogService(engine=engine))
+    return ServiceCatalogSource(CatalogService(engine=engine, package_resolver=lambda _dataset_id: package))

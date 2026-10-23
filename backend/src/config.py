@@ -28,6 +28,13 @@ from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 BACKEND_DIR = Path(__file__).resolve().parents[1]
 _ENV_FILE = BACKEND_DIR / ".env"
 
+# Hooks run around the dataset swap when POST_INGEST_HOOKS is not set: the catalog is built
+# from the staged data (pre_swap), knowledge items are refreshed once the data is live (post_swap).
+DEFAULT_POST_INGEST_HOOKS: tuple[str, ...] = (
+    "src.catalog.hooks:refresh_catalog",
+    "src.intelligence.knowledge.hooks:refresh_knowledge",
+)
+
 
 def _csv(value: object) -> object:
     """Accept ``a,b`` as well as a JSON list for list settings."""
@@ -106,8 +113,11 @@ class Settings(BaseSettings):
     CHAT_RATE_LIMIT_PER_MIN: int = Field(default=0, ge=0)
 
     # --- ingestion / catalog --------------------------------------------
-    # Dotted paths ("module:attr") of hooks run around the dataset swap.
-    POST_INGEST_HOOKS: Annotated[list[str], NoDecode] = Field(default_factory=list)
+    # Dotted paths ("module:attr") of hooks run around the dataset swap: the catalog is built
+    # before the swap (against the staged data), knowledge items are refreshed after it.
+    POST_INGEST_HOOKS: Annotated[list[str], NoDecode] = Field(
+        default_factory=lambda: list(DEFAULT_POST_INGEST_HOOKS)
+    )
     PROFILE_SAMPLE_ROWS: int = Field(default=50000, ge=1)
     ENUM_MAX_DISTINCT: int = Field(default=50, ge=1)
 

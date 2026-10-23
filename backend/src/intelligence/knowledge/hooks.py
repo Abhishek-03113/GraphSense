@@ -20,7 +20,7 @@ from sqlalchemy.pool import NullPool
 
 from src.config import get_settings
 from src.datasets.context import DatasetContext
-from src.intelligence.catalog_access import build_catalog_source
+from src.intelligence.catalog_access import catalog_source_for
 from src.intelligence.knowledge.refresh import refresh_knowledge as run_refresh
 from src.intelligence.knowledge.store import KnowledgeStore
 from src.intelligence.providers.factory import build_providers
@@ -78,10 +78,12 @@ class RefreshKnowledgeHook:
     async def run(self, ctx: HookContextLike) -> KnowledgeHookResult:
         try:
             dataset = DatasetContext(id=ctx.dataset_id, schema_name=ctx.schema, package=ctx.package)
-            snapshot = await build_catalog_source().get_snapshot(dataset)
             providers = build_providers()
             options = getattr(ctx, "options", None) or {}
             async with knowledge_engine(getattr(ctx, "engine", None)) as engine:
+                # Read the catalog through this hook's engine: a hook runs on its own event loop,
+                # where the process-wide application engine must not be created.
+                snapshot = await catalog_source_for(engine, ctx.package).get_snapshot(dataset)
                 report = await run_refresh(
                     KnowledgeStore(engine), snapshot, providers.embedder, force=bool(options.get("force"))
                 )
