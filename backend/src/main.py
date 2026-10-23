@@ -3,12 +3,14 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from src.api.admin import mount_admin
 from src.api.chat import router as chat_router
+from src.api.datasets import router as datasets_router
 from src.api.errors import install_error_handling
 from src.api.graph import router as graph_router
 from src.api.ingest import router as ingest_router
 from src.config import get_settings
-from src.db.engine import dispose_engine
+from src.storage.engines import dispose_all
 from src.utils.logger import get_logger
 
 logger = get_logger(__name__)
@@ -17,7 +19,7 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     yield
-    await dispose_engine()
+    await dispose_all()
 
 
 _settings = get_settings()
@@ -48,6 +50,9 @@ install_error_handling(app)
 app.include_router(graph_router)
 app.include_router(ingest_router)
 app.include_router(chat_router)
+app.include_router(datasets_router)
+# Operator routes exist only when ADMIN_TOKEN is set.
+mount_admin(app)
 
 
 @app.get("/api/health")

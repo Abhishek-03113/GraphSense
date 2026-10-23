@@ -13,7 +13,7 @@ from tests.conftest import TOY_DIR
 async def test_default_dataset():
     ctx = await get_dataset_context(None, None)
     assert ctx.id == "o2c" and ctx.package.id == "o2c"
-    assert ctx.schema_name is None  # legacy public schema until a database is adopted
+    assert ctx.schema_name == "ds_o2c"  # the dataset schema; public stays on the search path
 
 
 async def test_header_wins_over_query_and_default(tmp_path):
