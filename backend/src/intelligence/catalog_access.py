@@ -9,6 +9,7 @@ statistics).  Switching to the live catalog is a one-line change in
 
 from __future__ import annotations
 
+import dataclasses
 import inspect
 from typing import Any, Protocol
 
@@ -35,8 +36,44 @@ class PackageCatalogSource:
         return snap
 
 
+def sensitive_columns(snapshot: CatalogSnapshot) -> frozenset[tuple[str, str]]:
+    """``(table, column)`` of every column marked ``sensitive``.
+
+    Uses ``snapshot.sensitive_columns()`` when the catalog provides it, otherwise reads the flags.
+    """
+    method = getattr(snapshot, "sensitive_columns", None)
+    if callable(method):
+        return frozenset(method())
+    return frozenset((t.name, c.name) for t in snapshot.tables for c in t.columns if c.sensitive)
+
+
+def llm_safe(snapshot: CatalogSnapshot) -> CatalogSnapshot:
+    """A copy of the snapshot that may be shown to a language model.
+
+    Sensitive columns keep their name, type and description (the model needs the schema to write
+    queries) but lose every value: min, max, top values, samples and value labels.  Every prompt,
+    knowledge item and provider payload is built from this view, never from the raw snapshot.
+    Prefers ``snapshot.llm_safe_view()`` when the catalog provides it.
+    """
+    method = getattr(snapshot, "llm_safe_view", None)
+    if callable(method):
+        return method()
+    tables = []
+    for table in snapshot.tables:
+        columns = tuple(
+            dataclasses.replace(
+                c, min_value=None, max_value=None, top_values=(), sample_values=(), value_labels={}
+            )
+            if c.sensitive
+            else c
+            for c in table.columns
+        )
+        tables.append(dataclasses.replace(table, columns=columns))
+    return dataclasses.replace(snapshot, tables=tuple(tables))
+
+
 class ServiceCatalogSource:
-    """Adapter for ``CatalogService.get_snapshot(dataset_id)`` (workstream C); sync or async."""
+    """Adapter for ``get_catalog_service().get_snapshot(dataset_id)`` (workstream C); sync or async."""
 
     def __init__(self, service: Any) -> None:
         self._service = service
@@ -53,7 +90,7 @@ def build_catalog_source() -> CatalogSource:
 
     At merge with workstream C, replace the body with::
 
-        from src.catalog.service import CatalogService
-        return ServiceCatalogSource(CatalogService())
+        from src.catalog.service import get_catalog_service
+        return ServiceCatalogSource(get_catalog_service())
     """
     return PackageCatalogSource()

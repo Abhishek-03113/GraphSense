@@ -113,6 +113,13 @@ class Projection:
     aggregate: bool = False
     # The expression is a literal or has no column inputs.
     constant: bool = False
+    # Lower-case name of the outermost aggregate function (``count``, ``sum``, ``max`` ...), if any.
+    agg: str | None = None
+
+    @property
+    def reveals_input(self) -> bool:
+        """False when the output cannot show a stored value (a constant or a plain count)."""
+        return not (self.constant or self.agg == "count")
 
 
 @dataclass(frozen=True)
