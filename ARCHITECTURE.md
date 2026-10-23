@@ -21,8 +21,8 @@ This document provides a detailed explanation of the architectural decisions, da
 ┌─────────────────────────────────────────────────────────────────┐
 │                        React Frontend                           │
 │  ┌──────────────────┐  ┌──────────────────┐  ┌──────────────┐  │
-│  │  Knowledge Graph  │  │  Chat Panel      │  │  Inspector   │  │
-│  │  (Cytoscape.js)   │  │  (NL queries)    │  │  (metadata)  │  │
+│  │  Explore / Flows  │  │  Ask             │  │  Inspector   │  │
+│  │  / Trace (graph)  │  │  (NL queries)    │  │  (metadata)  │  │
 │  └────────┬─────────┘  └────────┬─────────┘  └──────────────┘  │
 └───────────┼─────────────────────┼──────────────────────────────┘
             │ REST                │ REST
@@ -48,7 +48,7 @@ This document provides a detailed explanation of the architectural decisions, da
 
 The system follows a **three-tier architecture**:
 
-1. **Presentation Layer** — React frontend with Cytoscape.js graph visualization and chat interface
+1. **Presentation Layer** — React frontend (Overview, Explore, Ask, Flows, Trace, Records) with Cytoscape.js graph visualization and a conversational query interface
 2. **Application Layer** — FastAPI backend with graph traversal and text-to-SQL pipelines
 3. **Data Layer** — PostgreSQL 16 with pgvector for both relational data and vector embeddings
 
@@ -83,6 +83,14 @@ WITH RECURSIVE graph_traversal AS (
 )
 SELECT * FROM graph_traversal WHERE depth <= :max_depth;
 ```
+
+#### Declarative graph schema
+
+The graph model is data, not code. A dataset definition module (`backend/src/domain/datasets/<name>.py`) lists `NodeTypeDef`s (table, id columns, label, plural, description, category, accent, icon, `is_primary`, `display_properties`), `EdgeTypeDef`s (key, verb-phrase label, source, target, description, and the join mapping) and flows. `GraphDataset` validates the definition when it is constructed: every edge endpoint, flow node type and flow edge type must be registered. `graph_registry.get_dataset()` returns the dataset named by `GRAPH_DATASET` (default `o2c`).
+
+`GraphSqlBuilder` (`repositories/graph_sql.py`) turns the definition into SQL: one SELECT per edge definition, combined with `UNION ALL` for counts and traversal, filtered and sampled per flow, per-node counting and entity listing queries, and one batched query per node type that fetches the properties and natural name of the records in a response (`NodeTypeDef.property_columns`, `label_column`, `label_lookup`). Composite item ids (`doc-item`) always pass through the same zero-stripping normalisation, so cross-document references match whatever their padding. `GET /api/graph/schema` serves the presentation half of the definition so clients can discover entity types, labels, colours and flows without hard-coding them.
+
+Adding a dataset means adding a definition module; the repository, the API and the chat pipeline's entity highlighting follow it. What remains dataset-specific is the RAG training data, the guardrail vocabulary, the synthesis prompt's entity mapping, ingestion and the ORM models.
 
 ### 2. Five-Stage Text-to-SQL Pipeline
 

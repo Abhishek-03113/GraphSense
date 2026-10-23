@@ -1,4 +1,4 @@
-from typing import Dict, List, Optional, Any
+from typing import Dict, List, Literal, Optional, Any
 from pydantic import BaseModel, Field
 
 
@@ -36,4 +36,50 @@ class GraphSubgraphResponse(BaseModel):
 
 class GraphEntityResponse(BaseModel):
     type: str
-    entities: List[Dict[str, str]]  # List of {"id": "...", "label": "..."}
+    # Each entity is {"id": "...", "label": "...", <display property>: value, ...}.
+    entities: List[Dict[str, Any]]
+
+
+# ---------------------------------------------------------------------------
+# GET /api/graph/schema — dataset description for clients
+# ---------------------------------------------------------------------------
+
+NodeCategory = Literal["party", "document", "item", "master", "finance", "other"]
+
+AccentName = Literal[
+    "red", "orange", "yellow", "green", "mint", "teal", "cyan",
+    "blue", "indigo", "purple", "pink", "brown", "gray",
+]
+
+
+class SchemaDomain(BaseModel):
+    id: str
+    name: str
+    description: str
+
+
+class SchemaNodeType(BaseModel):
+    key: str
+    label: str
+    plural: str
+    description: str
+    category: NodeCategory
+    accent: Optional[AccentName] = None
+    icon: Optional[str] = None
+    is_primary: bool
+    display_properties: List[str] = Field(default_factory=list)
+
+
+class SchemaEdgeType(BaseModel):
+    key: str
+    label: str
+    source: str
+    target: str
+    description: str
+
+
+class GraphSchemaResponse(BaseModel):
+    domain: SchemaDomain
+    node_types: List[SchemaNodeType]
+    edge_types: List[SchemaEdgeType]
+    flows: List[FlowDefinition]

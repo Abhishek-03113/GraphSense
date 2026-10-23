@@ -1,0 +1,63 @@
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gs-space-3);
+  padding: var(--gs-space-10) var(--gs-space-6);
+  text-align: center;
+  margin: 0 auto;
+  max-width: 460px;
+}
+
+.compact {
+  padding: var(--gs-space-6) var(--gs-space-4);
+}
+
+.icon {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--gs-radius-lg);
+  background: var(--gs-surface-2);
+  color: var(--gs-color-label-secondary);
+}
+
+.danger .icon {
+  background: var(--gs-danger-soft);
+  color: var(--gs-danger-text);
+}
+
+.accent .icon {
+  background: var(--gs-accent-soft);
+  color: var(--gs-accent-text);
+}
+
+.title {
+  font-size: var(--gs-fs-title-3);
+  line-height: var(--gs-lh-title-3);
+  font-weight: var(--gs-weight-semibold);
+}
+
+.description {
+  color: var(--gs-color-label-secondary);
+  font-size: var(--gs-fs-body);
+  line-height: var(--gs-lh-body);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--gs-space-2);
+  margin-top: var(--gs-space-2);
+}
+
+.detail {
+  max-width: 100%;
+  margin-top: var(--gs-space-1);
+  color: var(--gs-color-label-secondary);
+  font-size: var(--gs-fs-small);
+  line-height: var(--gs-lh-small);
+}

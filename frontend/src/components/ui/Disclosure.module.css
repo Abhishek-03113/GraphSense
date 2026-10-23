@@ -1,0 +1,42 @@
+.root {
+  min-width: 0;
+}
+
+.trigger {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gs-space-1);
+  min-height: var(--gs-control-sm);
+  padding: 0 var(--gs-space-2) 0 var(--gs-space-1);
+  margin-left: calc(var(--gs-space-1) * -1);
+  border: 0;
+  border-radius: var(--gs-radius-sm);
+  background: transparent;
+  color: var(--gs-color-label-secondary);
+  font-size: var(--gs-fs-small);
+  line-height: var(--gs-lh-small);
+  font-weight: var(--gs-weight-medium);
+}
+
+.trigger:hover {
+  color: var(--gs-color-label);
+  background: var(--gs-surface-2);
+}
+
+.chevron {
+  transition: transform var(--gs-duration-fast) var(--gs-ease);
+}
+
+.open .chevron {
+  transform: rotate(90deg);
+}
+
+.panel {
+  margin-top: var(--gs-space-2);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .chevron {
+    transition: none;
+  }
+}

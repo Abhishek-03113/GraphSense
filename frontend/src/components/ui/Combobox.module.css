@@ -1,0 +1,51 @@
+.root {
+  position: relative;
+}
+
+.list {
+  position: absolute;
+  z-index: var(--gs-z-overlay);
+  top: calc(100% + var(--gs-space-1));
+  left: 0;
+  right: 0;
+  max-height: 260px;
+  overflow-y: auto;
+  padding: var(--gs-space-1);
+  border-radius: var(--gs-radius-md);
+  background: var(--gs-surface-1);
+  box-shadow: var(--gs-shadow-lg);
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gs-space-3);
+  min-height: var(--gs-control-md);
+  padding: 0 var(--gs-space-3);
+  border-radius: var(--gs-radius-sm);
+  cursor: pointer;
+}
+
+.active {
+  background: var(--gs-accent-soft);
+}
+
+.optionValue {
+  font-family: var(--gs-font-mono);
+  font-size: var(--gs-fs-small);
+}
+
+.optionHint {
+  color: var(--gs-color-label-secondary);
+  font-size: var(--gs-fs-caption);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.note {
+  padding: var(--gs-space-2) var(--gs-space-3);
+  color: var(--gs-color-label-secondary);
+  font-size: var(--gs-fs-small);
+}

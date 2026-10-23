@@ -1,0 +1,35 @@
+.toolbar {
+  position: absolute;
+  z-index: 6;
+  top: var(--gs-space-3);
+  left: var(--gs-space-3);
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gs-space-1);
+  max-width: calc(100% - var(--gs-space-6));
+  padding: var(--gs-space-1);
+  border-radius: var(--gs-radius-lg);
+  background: var(--gs-surface-1);
+  box-shadow: var(--gs-shadow-md);
+}
+
+.divider {
+  width: 1px;
+  align-self: stretch;
+  margin: var(--gs-space-1);
+  background: var(--gs-separator);
+}
+
+.layout {
+  width: 140px;
+}
+
+@media (max-width: 640px) {
+  .layout {
+    width: 104px;
+  }
+  .divider {
+    display: none;
+  }
+}

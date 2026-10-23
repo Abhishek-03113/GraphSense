@@ -1,0 +1,35 @@
+.wrap {
+  display: inline-flex;
+}
+
+.fill {
+  display: flex;
+  width: 100%;
+}
+
+.fill > * {
+  flex: 1;
+  min-width: 0;
+}
+
+.tip {
+  position: fixed;
+  z-index: var(--gs-z-tooltip);
+  max-width: 260px;
+  padding: var(--gs-space-1) var(--gs-space-2);
+  border-radius: var(--gs-radius-sm);
+  background: var(--gs-color-label);
+  color: var(--gs-surface-1);
+  font-size: var(--gs-fs-caption);
+  line-height: var(--gs-lh-caption);
+  font-weight: var(--gs-weight-medium);
+  pointer-events: none;
+  white-space: nowrap;
+  animation: fade var(--gs-duration-fast) var(--gs-ease);
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
