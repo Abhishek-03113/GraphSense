@@ -111,6 +111,23 @@ class Settings(BaseSettings):
     PROFILE_SAMPLE_ROWS: int = Field(default=50000, ge=1)
     ENUM_MAX_DISTINCT: int = Field(default=50, ge=1)
 
+    # --- conversational query (Ask) -------------------------------------
+    # Vector size to request from the embedding model; None keeps the model's default.
+    # The size actually returned is stored with every embedded item.
+    EMBEDDING_DIMS: int | None = Field(default=None, ge=1)
+    LLM_TIMEOUT_S: float = Field(default=30.0, gt=0)
+    # Times a failed query is sent back to the model for repair (syntax, unknown column/table, type).
+    SQL_REPAIR_ATTEMPTS: int = Field(default=2, ge=0, le=5)
+    # Result rows shown to the model when it writes the answer (never more than SQL_MAX_ROWS).
+    SYNTHESIS_MAX_ROWS: int = Field(default=50, ge=1)
+    # Size budget of the retrieved context in a prompt, in characters.
+    RETRIEVAL_CONTEXT_CHARS: int = Field(default=14000, ge=1000)
+    # Questions and generated SQL are kept in app.query_log this long (see ``graphsense knowledge purge-log``).
+    QUERY_LOG_ENABLED: bool = True
+    QUERY_LOG_RETENTION_DAYS: int = Field(default=90, ge=1)
+    # Behind a gateway the client address is in X-Forwarded-For; only trust it when the gateway sets it.
+    CHAT_RATE_LIMIT_TRUST_FORWARDED: bool = False
+
     @field_validator("CORS_ALLOW_ORIGINS", "POST_INGEST_HOOKS", mode="before")
     @classmethod
     def _split_csv(cls, v: object) -> object:

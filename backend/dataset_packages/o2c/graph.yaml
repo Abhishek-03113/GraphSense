@@ -323,3 +323,4 @@ entity_refs:
   - {table: journal_entry_items_accounts_receivable, column: reference_document, node_type: Invoice}
   - {table: journal_entry_items_accounts_receivable, column: customer, node_type: Customer}
   - {table: payments_accounts_receivable, column: customer, node_type: Customer}
+  - {table: business_partners, column: customer, node_type: Customer}

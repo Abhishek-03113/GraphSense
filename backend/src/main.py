@@ -11,6 +11,7 @@ from src.api.errors import install_error_handling
 from src.api.graph import router as graph_router
 from src.api.ingest import router as ingest_router
 from src.config import get_settings
+from src.intelligence import runtime as ask_runtime
 from src.storage.engines import dispose_all
 from src.utils.logger import get_logger
 
@@ -19,7 +20,9 @@ logger = get_logger(__name__)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    ask_runtime.check_startup()
     yield
+    await ask_runtime.shutdown()
     await dispose_all()
 
 
