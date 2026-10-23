@@ -8,7 +8,7 @@ setting is read from, in priority order, the process environment and
 Tests override values with :func:`override_settings`, or call
 :func:`reset_settings` after changing the environment.
 
-Secrets (``GEMINI_API_KEY``, ``GRAPHSENSE_ADMIN_TOKEN``) are ``SecretStr`` and
+Secrets (``GEMINI_API_KEY``, ``ADMIN_TOKEN``) are ``SecretStr`` and
 must be unwrapped explicitly with ``get_secret_value()``; ``repr`` and logs
 never show them.  Use :func:`dsn_host` when a DSN has to appear in a log line.
 """
@@ -58,6 +58,9 @@ class Settings(BaseSettings):
     )
     # Role used for LLM-generated SQL only (SELECT-only).
     READONLY_DATABASE_DSN: PostgresDsn | None = None
+    # Role that creates schemas and loads data (ingestion, migrations, role setup).
+    # Defaults to DATABASE_DSN, so a single-role deployment needs no extra setting.
+    OWNER_DATABASE_DSN: PostgresDsn | None = None
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT: int = 30
@@ -76,7 +79,11 @@ class Settings(BaseSettings):
     DATA_ROOT: Path | None = None
 
     # --- operator access ------------------------------------------------
-    GRAPHSENSE_ADMIN_TOKEN: SecretStr | None = None
+    # Bearer token of the operator API.  Without it the admin routes do not exist.
+    # ADMIN_TOKEN is the documented name; GRAPHSENSE_ADMIN_TOKEN is accepted too.
+    GRAPHSENSE_ADMIN_TOKEN: SecretStr | None = Field(
+        default=None, validation_alias=AliasChoices("ADMIN_TOKEN", "GRAPHSENSE_ADMIN_TOKEN")
+    )
 
     # --- models ---------------------------------------------------------
     LLM_PROVIDER: str = "gemini"
@@ -109,7 +116,13 @@ class Settings(BaseSettings):
     def _split_csv(cls, v: object) -> object:
         return _csv(v)
 
-    @field_validator("DATABASE_DSN", "READONLY_DATABASE_DSN", mode="before")
+    @field_validator("GRAPHSENSE_ADMIN_TOKEN", "PACKAGES_DIR", "DATA_ROOT", mode="before")
+    @classmethod
+    def _blank_is_unset(cls, v: object) -> object:
+        """``ADMIN_TOKEN=`` in an env file means "not set", not an empty secret."""
+        return None if isinstance(v, str) and not v.strip() else v
+
+    @field_validator("DATABASE_DSN", "READONLY_DATABASE_DSN", "OWNER_DATABASE_DSN", mode="before")
     @classmethod
     def _asyncpg_driver(cls, v: object) -> object:
         """Plain ``postgresql://`` (as Railway and Heroku provide) means the asyncpg driver here."""
@@ -143,6 +156,17 @@ class Settings(BaseSettings):
         if self.is_production:
             return [o for o in origins if o != "*"]
         return origins or ["*"]
+
+    @property
+    def admin_enabled(self) -> bool:
+        """True when an operator token is configured (and so the admin routes are mounted)."""
+        return self.GRAPHSENSE_ADMIN_TOKEN is not None
+
+    def require_owner_dsn(self) -> str:
+        """The DSN of the role that owns the schemas: ``OWNER_DATABASE_DSN``, else the application DSN."""
+        if self.OWNER_DATABASE_DSN is not None:
+            return str(self.OWNER_DATABASE_DSN)
+        return self.require_database_dsn()
 
     def require_database_dsn(self) -> str:
         """The application DSN, or a clear error when it is not configured."""

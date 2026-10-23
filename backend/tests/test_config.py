@@ -15,7 +15,7 @@ def test_importing_the_app_without_any_database_setting_does_not_raise(tmp_path)
     """Run in a clean process: no DSN in the environment, neutral working directory."""
     env = {"PATH": "/usr/bin:/bin", "PYTHONPATH": str(BACKEND), "HOME": str(tmp_path)}
     code = (
-        "import src.main, src.db.session, src.db.engine, src.ingestion.jsonl_loader\n"
+        "import src.main, src.db.session, src.db.engine, src.ingestion.runner, src.storage.session\n"
         "from src.config import get_settings\n"
         "print('ok', get_settings().DEFAULT_DATASET)\n"
     )

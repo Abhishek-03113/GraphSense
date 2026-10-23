@@ -44,6 +44,7 @@ target-version = "py312"
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
+markers = ["integration: needs a PostgreSQL server (set TEST_DATABASE_DSN)"]
 pythonpath = ["."]
 
 [tool.hatch.build.targets.wheel]
