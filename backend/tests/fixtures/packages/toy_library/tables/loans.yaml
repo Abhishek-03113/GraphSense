@@ -1,0 +1,18 @@
+table: loans
+description: One row per time a member borrowed a book.
+grain: loan
+source: {path: loans}
+primary_key: [loan_id]
+indexes: [[isbn]]
+columns:
+  - {source: loanId, type: text, role: id, description: Loan number.}
+  - {source: memberId, type: text, role: reference, refs: members.member_id, description: Member who borrowed the book.}
+  - {source: isbn, type: text, role: reference, refs: books.isbn, description: Book that was borrowed.}
+  - {source: copyNumber, type: text, role: item_number, normalize: [strip_leading_zeros],
+     description: "Which physical copy of the title was lent, stored without leading zeros."}
+  - {source: loanedOn, type: date, role: date, required: true, description: Day the book left the library.}
+  - {source: dueOn, type: date, role: date, description: Day the book was due back.}
+  - {source: returnedAt, type: timestamp, role: datetime, description: "When the book came back, empty while it is out."}
+  - {source: status, type: text, role: status, value_set: loan_status, description: Where the loan stands.}
+  - {source: lateFee, type: "decimal(8,2)", role: amount, description: Fee charged for a late return.}
+ignore: [notes]

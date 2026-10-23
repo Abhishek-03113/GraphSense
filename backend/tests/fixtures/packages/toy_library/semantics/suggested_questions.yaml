@@ -1,0 +1,3 @@
+- {text: "Which books are borrowed most often?", category: popularity, requires: [Book, Loan]}
+- {text: "How many loans are overdue?", category: lending, requires: [Loan]}
+- {text: "Which authors have the most books?", category: collection, requires: [Author]}

@@ -1,20 +1,22 @@
-from fastapi import APIRouter, BackgroundTasks, HTTPException
-from pydantic import BaseModel
-import os
-from ..ingestion.jsonl_loader import ingest_data
-import structlog
+"""``POST /api/ingest`` is gone.
+
+It used to accept a directory path from the client and load it into the
+database without authentication.  Loading data is an operator task now: use
+``graphsense ingest <dataset>`` on the server, or the token-protected
+``POST /api/admin/datasets/{id}/ingest``.  The route stays only to answer
+clearly (410) instead of 404.
+"""
+
+from fastapi import APIRouter, HTTPException
 
 router = APIRouter(prefix="/api/ingest", tags=["ingestion"])
-logger = structlog.get_logger()
 
-class IngestRequest(BaseModel):
-    data_dir: str = "/Users/techverito/DodgeAI/data/sap-o2c-data"
+GONE_DETAIL = (
+    "Loading data from the API with a client-supplied path was removed. "
+    "Operators run `graphsense ingest <dataset>` or use POST /api/admin/datasets/{id}/ingest."
+)
 
-@router.post("")
-async def trigger_ingestion(request: IngestRequest, background_tasks: BackgroundTasks):
-    """Trigger data ingestion as a background task."""
-    if not os.path.exists(request.data_dir):
-        raise HTTPException(status_code=400, detail=f"Data directory not found: {request.data_dir}")
-    
-    background_tasks.add_task(ingest_data, request.data_dir)
-    return {"message": "Ingestion started in background"}
+
+@router.post("", include_in_schema=False)
+async def ingestion_removed():
+    raise HTTPException(status_code=410, detail=GONE_DETAIL)

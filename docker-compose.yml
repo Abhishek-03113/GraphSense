@@ -10,6 +10,8 @@ services:
       - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
+      # First start only: pgvector and the graphsense_app / graphsense_ro roles.
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
 
 volumes:
   postgres_data:

@@ -1,0 +1,11 @@
+table: authors
+description: People who wrote the books in the collection.
+grain: author
+source: {path: authors}
+primary_key: [author_id]
+columns:
+  - {source: authorId, type: text, role: id, description: Author number.}
+  - {source: fullName, type: text, role: name, description: Name as printed on the cover.}
+  - {source: homeCountry, type: text, role: code, value_set: country_code, description: Country the author is from.}
+  - {source: birthDate, type: date, role: date, description: "Date of birth, empty when unknown."}
+ignore: [pseudonym]

@@ -12,20 +12,37 @@ Usage in a FastAPI route:
 from collections.abc import AsyncGenerator
 
 import structlog
-from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
 
-from .engine import engine
+from .engine import get_engine
 
 logger = structlog.get_logger(__name__)
 
-# Session factory bound to the shared engine.
-# expire_on_commit=False keeps ORM instances usable after commit without re-querying.
-AsyncSessionLocal: async_sessionmaker[AsyncSession] = async_sessionmaker(
-    bind=engine,
-    class_=AsyncSession,
-    expire_on_commit=False,
-    autoflush=False,
-)
+_sessionmaker: async_sessionmaker[AsyncSession] | None = None
+_bound_engine: AsyncEngine | None = None
+
+
+def get_sessionmaker() -> async_sessionmaker[AsyncSession]:
+    """Session factory bound to the shared engine (rebuilt if the engine was disposed).
+
+    expire_on_commit=False keeps ORM instances usable after commit without re-querying.
+    """
+    global _sessionmaker, _bound_engine
+    engine = get_engine()
+    if _sessionmaker is None or _bound_engine is not engine:
+        _sessionmaker = async_sessionmaker(
+            bind=engine,
+            class_=AsyncSession,
+            expire_on_commit=False,
+            autoflush=False,
+        )
+        _bound_engine = engine
+    return _sessionmaker
+
+
+def AsyncSessionLocal() -> AsyncSession:
+    """Open a new session; the factory is created on first use."""
+    return get_sessionmaker()()
 
 
 async def get_db_session() -> AsyncGenerator[AsyncSession, None]:

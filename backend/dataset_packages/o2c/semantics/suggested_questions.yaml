@@ -1,0 +1,11 @@
+# Starter questions shown to users. `requires` hides a question when a node type has no records.
+- {text: "How many sales orders, deliveries, invoices and payments are there?", category: Overview, requires: [SalesOrder]}
+- {text: "Which customers have placed the most sales orders?", category: Customers, requires: [SalesOrder, Customer]}
+- {text: "What is the total revenue by customer?", category: Customers, requires: [Invoice, Customer]}
+- {text: "Which products appear on the most billing documents?", category: Products, requires: [InvoiceItem, Product]}
+- {text: "Which sales orders were delivered but never billed?", category: Broken flows, requires: [SalesOrder, Delivery]}
+- {text: "Show the invoices that have not been paid yet.", category: Finance, requires: [Invoice]}
+- {text: "Trace the full flow of one sales order from order to payment.", category: Flows, requires: [SalesOrder, Invoice]}
+- {text: "Show the monthly sales trend.", category: Trends, requires: [SalesOrder]}
+- {text: "How many invoices were cancelled?", category: Billing, requires: [Invoice]}
+- {text: "Show the addresses of our customers.", category: Customers, requires: [Customer, Address]}

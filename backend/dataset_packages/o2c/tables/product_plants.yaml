@@ -1,0 +1,18 @@
+table: product_plants
+description: "Planning and availability settings of a product in each plant it is kept in."
+grain: "(product, plant)"
+source: {path: product_plants}
+primary_key: [product, plant]
+columns:
+  - {source: product, type: text, role: id, refs: products.product,
+     description: "Product."}
+  - {source: plant, type: text, role: id, refs: plants.plant,
+     description: "Plant the settings apply to."}
+  - {source: availabilityCheckType, type: text, role: code, value_set: availability_check_type,
+     description: "Type of availability check applied to the product in the plant."}
+  - {source: profitCenter, type: text, role: reference,
+     description: "Profit center the product is assigned to in the plant."}
+  - {source: mrpType, type: text, role: code, value_set: mrp_type,
+     description: "Material requirements planning type of the product in the plant."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [countryOfOrigin, regionOfOrigin, productionInvtryManagedLoc, fiscalYearVariant]

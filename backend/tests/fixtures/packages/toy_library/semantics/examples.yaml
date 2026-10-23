@@ -1,0 +1,26 @@
+- id: most_borrowed_books
+  role: example
+  question: Which books have been borrowed the most?
+  tags: [books, loans]
+  sql: |
+    SELECT b.title, COUNT(*) AS times_borrowed
+    FROM loans l
+    JOIN books b ON l.isbn = b.isbn
+    GROUP BY b.title
+    ORDER BY times_borrowed DESC
+    LIMIT 10
+- id: books_by_author
+  role: example
+  question: List the books written by each author.
+  tags: [books, authors]
+  sql: |
+    SELECT a.full_name AS author, b.title
+    FROM authors a
+    JOIN books b ON b.author_id = a.author_id
+    ORDER BY a.full_name, b.title
+- id: open_loans
+  role: golden
+  question: How many loans are still open?
+  tags: [loans]
+  sql: SELECT COUNT(*) AS open_loans FROM loans WHERE returned_at IS NULL
+  expect: {min_rows: 1, columns_include: [open_loans]}

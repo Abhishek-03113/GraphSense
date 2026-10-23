@@ -1,0 +1,20 @@
+table: customer_company_assignments
+description: "Finance settings of a customer for each company code (payment terms, reconciliation account)."
+grain: "(customer, company_code)"
+source: {path: customer_company_assignments}
+primary_key: [customer, company_code]
+columns:
+  - {source: customer, type: text, role: reference, refs: business_partners.customer,
+     description: "Customer number."}
+  - {source: companyCode, type: text, role: reference,
+     description: "Company code (legal entity) the settings apply to."}
+  - {source: paymentTerms, type: text, role: code,
+     description: "Payment terms key agreed with the customer for this company code, empty when none."}
+  - {source: reconciliationAccount, type: text, role: reference,
+     description: "General ledger account that receivables of this customer are posted to."}
+  - {source: deletionIndicator, type: boolean, role: flag,
+     description: "True when the customer is flagged for deletion in this company code."}
+  - {source: customerAccountGroup, type: text, role: code,
+     description: "Account group of the customer (local codes Y101 and Y102)."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [accountingClerk, accountingClerkFaxNumber, accountingClerkInternetAddress, accountingClerkPhoneNumber, alternativePayerAccount, paymentBlockingReason, paymentMethodsList]

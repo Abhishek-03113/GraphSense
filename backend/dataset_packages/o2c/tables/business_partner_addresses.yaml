@@ -1,0 +1,32 @@
+table: business_partner_addresses
+description: "Postal addresses of business partners. One row per address."
+grain: "(business_partner, address_id)"
+source: {path: business_partner_addresses}
+primary_key: [business_partner, address_id]
+columns:
+  - {source: businessPartner, type: text, role: id, refs: business_partners.business_partner,
+     description: "Business partner the address belongs to."}
+  - {source: addressId, type: text, role: id,
+     description: "Address number, unique within the business partner."}
+  - {source: validityStartDate, type: date, role: date,
+     description: "First day the address is valid."}
+  - {source: validityEndDate, type: date, role: date,
+     description: "Last day the address is valid. 9999-12-31 means open ended."}
+  - {source: addressUuid, type: text, role: text, hidden: true,
+     description: "Technical unique identifier of the address."}
+  - {source: addressTimeZone, type: text, role: code,
+     description: "Time zone of the address."}
+  - {source: cityName, type: text, role: text,
+     description: "City."}
+  - {source: country, type: text, role: code, value_set: country_code,
+     description: "Country of the address (ISO 3166 alpha-2)."}
+  - {source: poBoxIsWithoutNumber, type: boolean, role: flag,
+     description: "True when the address uses a post office box without a number."}
+  - {source: postalCode, type: text, role: text,
+     description: "Postal code, empty when not recorded."}
+  - {source: region, type: text, role: code, value_set: region_in,
+     description: "Region (state) of the address."}
+  - {source: streetName, type: text, role: text, sensitive: true,
+     description: "Street and house number, empty when not recorded."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [poBox, poBoxDeviatingCityName, poBoxDeviatingCountry, poBoxDeviatingRegion, poBoxLobbyName, poBoxPostalCode, taxJurisdiction, transportZone]

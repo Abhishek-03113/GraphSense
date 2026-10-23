@@ -1,0 +1,32 @@
+table: plants
+description: "Plants: the locations goods are produced, stored and shipped from."
+grain: "plant"
+source: {path: plants}
+primary_key: [plant]
+columns:
+  - {source: plant, type: text, role: id,
+     description: "Plant code."}
+  - {source: plantName, type: text, role: name,
+     description: "Name of the plant."}
+  - {source: valuationArea, type: text, role: reference,
+     description: "Valuation area the plant belongs to (equals the plant code here)."}
+  - {source: plantCustomer, type: text, role: reference,
+     description: "Customer number that represents the plant when it receives stock transfers."}
+  - {source: plantSupplier, type: text, role: reference,
+     description: "Supplier number that represents the plant, empty when none."}
+  - {source: factoryCalendar, type: text, role: code,
+     description: "Factory calendar that defines working days (IN is the Indian calendar)."}
+  - {source: salesOrganization, type: text, role: reference,
+     description: "Sales organisation the plant is assigned to."}
+  - {source: addressId, type: text, role: reference,
+     description: "Address number of the plant."}
+  - {source: distributionChannel, type: text, role: code,
+     description: "Distribution channel the plant is assigned to."}
+  - {source: division, type: text, role: reference,
+     description: "Division the plant is assigned to."}
+  - {source: language, type: text, role: code, value_set: language_code,
+     description: "Language of the plant master record."}
+  - {source: isMarkedForArchiving, type: boolean, role: flag,
+     description: "True when the plant is marked for archiving."}
+# Source fields that are empty in every record of the sample data; not stored.
+ignore: [defaultPurchasingOrganization, plantCategory]
