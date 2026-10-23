@@ -65,7 +65,7 @@ def test_toy_catalog_snapshot_has_no_order_to_cash_vocabulary(toy_package):
     assert _has_o2c(json.dumps(dataclasses.asdict(snap), default=str)) == []
     assert snap.table_names == ("authors", "books", "loans", "members")
     assert [e.id for e in snap.few_shot_examples()] == ["most_borrowed_books", "books_by_author"]
-    assert [e.id for e in snap.golden_examples()] == ["open_loans"]
+    assert [e.id for e in snap.golden_examples()] == ["open_loans", "late_loans", "norwegian_books", "gold_members", "total_late_fees"]
 
 
 def test_toy_codes_and_labels(toy_package):
@@ -142,6 +142,13 @@ def test_generic_engine_code_names_no_dataset(path):
     """No dataset names, table names or business vocabulary in the generic engine."""
     found = _has_o2c(path.read_text(encoding="utf-8"))
     assert found == [], f"{path.name} mentions {found}"
+
+
+def test_the_evaluation_harness_is_scanned_like_the_rest_of_the_engine():
+    scanned = {Path(p).relative_to(BACKEND_DIR).as_posix() for p in GENERIC_SOURCES}
+    for name in ("compare", "metrics", "models", "replay", "report", "runner", "graph_ids"):
+        assert f"src/intelligence/eval/{name}.py" in scanned
+    assert "src/cli/commands/eval.py" in scanned
 
 
 def test_the_only_default_dataset_name_lives_in_the_settings():

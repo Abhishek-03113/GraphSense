@@ -29,6 +29,9 @@ const AUTO_SLOTS: PaletteSlot[] = [
 
 const CATEGORIES: TypeCategory[] = ['party', 'document', 'item', 'master', 'finance', 'other'];
 
+/** Shown when the server gives the dataset no name of its own. */
+export const DEFAULT_DATASET_NAME = 'Your dataset';
+
 /** Stable string hash (FNV-1a). */
 export function hashString(value: string): number {
   let hash = 2166136261;
@@ -60,13 +63,14 @@ export function fallbackTypeMeta(key: string): TypeMeta {
     icon: null,
     isPrimary: false,
     displayProperties: [],
+    valueLabels: {},
     described: false,
   };
 }
 
 export function emptySchema(): ResolvedSchema {
   return {
-    domain: { id: 'dataset', name: 'Your dataset', description: '' },
+    domain: { id: 'dataset', name: DEFAULT_DATASET_NAME, description: '', version: '', isDefault: true },
     nodeTypes: [],
     edgeTypes: [],
     flows: [],
@@ -136,6 +140,7 @@ export function resolveSchema({ payload, summary, flows }: ResolveInput): Resolv
       icon: raw.icon ?? null,
       isPrimary: Boolean(raw.is_primary),
       displayProperties: raw.display_properties ?? [],
+      valueLabels: raw.value_labels ?? {},
       described: true,
     });
   }
@@ -183,11 +188,14 @@ export function resolveSchema({ payload, summary, flows }: ResolveInput): Resolv
     }
   }
 
+  const domainName = payload?.domain?.name?.trim();
   return {
     domain: {
       id: payload?.domain?.id?.trim() || 'dataset',
-      name: payload?.domain?.name?.trim() || 'Your dataset',
+      name: domainName || DEFAULT_DATASET_NAME,
       description: payload?.domain?.description?.trim() ?? '',
+      version: payload?.domain?.version?.trim() ?? '',
+      isDefault: Boolean(payload?.domain?.is_default) || !domainName,
     },
     nodeTypes: primaryFirst,
     edgeTypes,

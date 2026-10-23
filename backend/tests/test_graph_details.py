@@ -134,7 +134,7 @@ def test_json_value():
     assert json_value(Decimal("100.0000")) == 100
     assert isinstance(json_value(Decimal("100.0000")), int)
     assert json_value(dt.date(2025, 4, 3)) == "2025-04-03"
-    assert json_value(dt.datetime(2025, 4, 3, 10, 30, tzinfo=dt.timezone.utc)) == "2025-04-03T10:30:00+00:00"
+    assert json_value(dt.datetime(2025, 4, 3, 10, 30, tzinfo=dt.UTC)) == "2025-04-03T10:30:00+00:00"
     assert json_value(dt.time(9, 5)) == "09:05:00"
     assert json_value(True) is True
     assert json_value(None) is None

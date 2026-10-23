@@ -8,7 +8,7 @@ import { TypeDot } from '../../components/ui/TypeBadge';
 import { formatInteger } from '../../lib/format';
 import { useSchema } from '../../lib/schema';
 import { FlowStepsLine } from '../flows/FlowStepsLine';
-import { LoadDataEmpty } from '../onboarding/LoadDataEmpty';
+import { DatasetState } from '../onboarding/DatasetState';
 import styles from './Overview.module.css';
 
 function OverviewSkeleton() {
@@ -36,7 +36,7 @@ function OverviewSkeleton() {
 export default function OverviewPage() {
   const { schema, status, error, refetch, isEmpty, counts, headlineTypes, otherTypes, totalRecords, totalRelationships, getTypeMeta, edgeLabel, typeLabel } = useSchema();
   const name = schema.domain.name;
-  const hasName = status === 'ready' && name !== 'Your dataset';
+  const hasName = status === 'ready' && !schema.domain.isDefault;
 
   const relationships = Object.entries(counts.edges)
     .map(([key, count]) => {
@@ -62,7 +62,7 @@ export default function OverviewPage() {
             <h2 className={styles.heroTitle}>{hasName ? name : 'Welcome to GraphSense'}</h2>
             <p className={styles.heroText}>{schema.domain.description || 'Explore your data as connected records, ask questions in plain language, and follow any record from start to finish.'}</p>
           </div>
-          <LoadDataEmpty />
+          <DatasetState />
         </div>
       )}
 

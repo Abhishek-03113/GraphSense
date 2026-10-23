@@ -19,7 +19,7 @@ import { naturalLabel } from '../../lib/graph';
 import { useMediaQuery } from '../../lib/hooks';
 import { orderTypesByFlow, useSchema } from '../../lib/schema';
 import { RecordInspector } from '../inspector/RecordInspector';
-import { LoadDataEmpty } from '../onboarding/LoadDataEmpty';
+import { DatasetState } from '../onboarding/DatasetState';
 import { Timeline } from './Timeline';
 import styles from './Trace.module.css';
 
@@ -99,7 +99,7 @@ export default function TracePage() {
   if (isEmpty) {
     return (
       <Page title="Trace" subtitle="Follow one record from start to finish.">
-        <LoadDataEmpty />
+        <DatasetState />
       </Page>
     );
   }

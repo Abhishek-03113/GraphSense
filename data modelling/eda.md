@@ -2,7 +2,7 @@
 
 ## Validation
 
-- **19 tables** defined in `ddl.sql`, all 19 have corresponding JSONL data in `data/sap-o2c-data/`
+- **19 tables** (now declared by the dataset package `backend/dataset_packages/o2c`; `graphsense package ddl o2c` prints the DDL), all 19 have corresponding JSONL data in `data/sap-o2c-data/`
 - DDL uses relaxed `VARCHAR(255)` and `NUMERIC(18,4)` — suitable for PostgreSQL
 - Schema migrations applied: baseline consolidated migration `V20260325000001__baseline_consolidated.sql`
 - All data transformations handled by ingestion pipeline in `src/ingestion/schemas.py`:

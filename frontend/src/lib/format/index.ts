@@ -51,6 +51,13 @@ const dateTimeFormat = new Intl.DateTimeFormat(undefined, {
   minute: '2-digit',
 });
 
+/** "3 Nov 2026, 10:42" for an ISO timestamp; undefined when it is missing or not a date. */
+export function formatDateTime(iso: string | null | undefined): string | undefined {
+  if (!iso) return undefined;
+  const time = Date.parse(iso);
+  return Number.isNaN(time) ? undefined : dateTimeFormat.format(new Date(time));
+}
+
 export const formatNumber = (value: number): string => numberFormat.format(value);
 export const formatInteger = (value: number): string => integerFormat.format(value);
 export const formatCompact = (value: number): string => (Math.abs(value) >= 10_000 ? compactFormat.format(value) : integerFormat.format(value));
@@ -111,7 +118,7 @@ export function formatMoney(value: number, currency?: string): string {
   return moneyFormat.format(value);
 }
 
-export type ValueKind = 'text' | 'date' | 'number' | 'identifier' | 'boolean' | 'empty';
+export type ValueKind = 'text' | 'date' | 'number' | 'identifier' | 'boolean' | 'label' | 'empty';
 
 export interface FormattedValue {
   text: string;
@@ -120,16 +127,45 @@ export interface FormattedValue {
   numeric: boolean;
   /** Render in the monospace face. */
   mono: boolean;
+  /** For a coded value: its meaning ("Completely delivered"). `text` then reads "Completely delivered · C". */
+  label?: string;
+  /** For a coded value: the raw code ("C"), kept visible next to the label. */
+  code?: string;
 }
 
 export interface FormatOptions {
   /** Currency code for amounts in this value's record or row. */
   currency?: string;
+  /** Meanings of the codes this value can take (code → label), from the dataset's schema or a query result column. */
+  valueLabels?: Record<string, string> | null;
+}
+
+/** Separates a label from its raw code in plain text. */
+export const CODE_SEPARATOR = ' · ';
+
+/** The label for a coded value, or undefined when the value is not a known code. */
+export function labelFor(value: unknown, valueLabels: Record<string, string> | null | undefined): string | undefined {
+  if (!valueLabels || value === null || value === undefined || typeof value === 'object') return undefined;
+  const raw = String(value).trim();
+  if (Object.hasOwn(valueLabels, raw)) return valueLabels[raw];
+  if (typeof value === 'boolean') {
+    const cased = raw.charAt(0).toUpperCase() + raw.slice(1);
+    if (Object.hasOwn(valueLabels, cased)) return valueLabels[cased];
+  }
+  return undefined;
 }
 
 export function formatValue(key: string, value: unknown, options: FormatOptions = {}): FormattedValue {
   if (value === null || value === undefined || value === '') {
     return { text: '—', kind: 'empty', numeric: false, mono: false };
+  }
+  const meaning = labelFor(value, options.valueLabels);
+  if (meaning !== undefined) {
+    const code = String(value).trim();
+    // A label that only repeats the code adds nothing to show twice.
+    if (meaning.trim() !== code) {
+      return { text: `${meaning}${CODE_SEPARATOR}${code}`, kind: 'label', numeric: false, mono: false, label: meaning, code };
+    }
   }
   if (typeof value === 'boolean') {
     return { text: value ? 'Yes' : 'No', kind: 'boolean', numeric: false, mono: false };

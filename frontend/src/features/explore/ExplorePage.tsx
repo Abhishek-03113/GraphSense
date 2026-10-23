@@ -19,7 +19,7 @@ import { useAsk, type RecordRef } from '../../store/ask';
 import { useWorkspace } from '../../store/workspace';
 import { AskPanel } from '../ask/AskPanel';
 import { RecordInspector } from '../inspector/RecordInspector';
-import { LoadDataEmpty } from '../onboarding/LoadDataEmpty';
+import { DatasetState } from '../onboarding/DatasetState';
 import styles from './ExplorePage.module.css';
 import { FilterPanel } from './FilterPanel';
 
@@ -135,7 +135,7 @@ export default function ExplorePage() {
   if (isEmpty) {
     return (
       <Page title="Explore" subtitle="A map of your records and how they connect.">
-        <LoadDataEmpty />
+        <DatasetState />
       </Page>
     );
   }

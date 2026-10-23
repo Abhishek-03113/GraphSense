@@ -5,7 +5,6 @@ from sqlalchemy import text
 
 from src.catalog import CatalogSnapshot
 from src.config import override_settings
-from src.intelligence.catalog_access import PackageCatalogSource
 from src.intelligence.entities import EntityExtractor
 from src.intelligence.knowledge.refresh import refresh_knowledge
 from src.intelligence.knowledge.store import KnowledgeStore
@@ -18,7 +17,7 @@ from src.intelligence.sql.executor import ReadOnlyExecutor, search_path_for
 from src.intelligence.sql.guard import SqlGuard
 from src.intelligence.status import ai_status
 from src.repositories.graph_sql import GraphSqlBuilder
-from tests.ask_support import answer, draft
+from tests.ask_support import PackageCatalogSource, answer, draft
 
 pytestmark = pytest.mark.integration
 
