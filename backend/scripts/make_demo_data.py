@@ -15,11 +15,12 @@ Usage (from ``backend/``)::
 
 The generated data covers what the graph layer has to handle:
 
-* 10 customers (one with an address on file, one blocked) and 24 products with
-  English and German descriptions
+* 10 customers (six with an address on file, one blocked, one that is never invoiced) and
+  24 products with English and German descriptions, produced at two plants
 * 100 sales orders with 1-4 items, in USD, EUR and INR
 * deliveries for most orders and invoices for most deliveries, journal entries
   with one or two line items, and payments for most invoices
+* a few cancelled invoices, each reversed by an S1 cancellation document that names it
 * item numbers zero-padded in the item tables (``000010``) but short in the
   cross-document references (``10``), as in the real export
 """
@@ -65,7 +66,11 @@ PRODUCT_NAMES = [
 ]
 GERMAN_NAMES = {0: "Trailrunning-Schuhe", 1: "Wasserdichte Jacke", 2: "Merino-Unterzieher"}
 CURRENCIES = ["USD"] * 6 + ["EUR"] * 3 + ["INR"]
+PLANTS = [("1710", "Main Plant"), ("1720", "North Plant")]
+NEVER_INVOICED = 8  # index of the customer whose orders are delivered but never invoiced
 TABLES = [  # tables the demo fills
+    "billing_document_cancellations",
+    "plants",
     "payments_accounts_receivable",
     "journal_entry_items_accounts_receivable",
     "billing_document_items",
@@ -123,6 +128,17 @@ def build(seed: int = 7) -> dict[str, list[dict]]:
                 "address_time_zone": "UTC",
             })
 
+    for plant, name in PLANTS:
+        rows["plants"].append({
+            "plant": plant,
+            "plant_name": name,
+            "sales_organization": "1710",
+            "distribution_channel": "10",
+            "division": "00",
+            "language": "EN",
+            "is_marked_for_archiving": False,
+        })
+
     products = []
     for index, name in enumerate(PRODUCT_NAMES):
         code = f"S89073670{index + 1:05d}"
@@ -148,11 +164,12 @@ def build(seed: int = 7) -> dict[str, list[dict]]:
                 {"product": code, "language": "DE", "product_description": GERMAN_NAMES[index]}
             )
 
-    delivery_no, billing_no, accounting_no = 80738000, 90504200, 9400000000
+    delivery_no, billing_no, accounting_no, cancel_no = 80738000, 90504200, 9400000000, 91150200
     for n in range(100):
         order = str(740500 + n)
         customer = rows["business_partners"][rng.randrange(len(CUSTOMER_NAMES))]["customer"]
         currency = rng.choice(CURRENCIES)
+        plant = PLANTS[n % len(PLANTS)][0]
         created = base + dt.timedelta(days=n * 2 + rng.randint(0, 1))
         items = []
         for line in range(rng.randint(1, 4)):
@@ -168,7 +185,7 @@ def build(seed: int = 7) -> dict[str, list[dict]]:
                 "transaction_currency": currency,
                 "net_amount": net,
                 "material_group": "ZMG1",
-                "production_plant": "1710",
+                "production_plant": plant,
                 "storage_location": "171A",
             })
         total = sum((item["net_amount"] for item in items), Decimal(0))
@@ -216,7 +233,7 @@ def build(seed: int = 7) -> dict[str, list[dict]]:
                 "delivery_document_item": item["sales_order_item"],
                 "actual_delivery_quantity": item["requested_quantity"],
                 "delivery_quantity_unit": "PC",
-                "plant": "1710",
+                "plant": plant,
                 "storage_location": "171A",
                 # Cross-document references use the short item number.
                 "reference_sd_document": order,
@@ -226,12 +243,14 @@ def build(seed: int = 7) -> dict[str, list[dict]]:
         rows["outbound_delivery_items"].extend(delivery_items)
         if rng.random() > 0.8:
             continue
+        if customer == rows["business_partners"][NEVER_INVOICED]["customer"]:
+            continue
 
         billing_no += 1
         accounting_no += 1
         invoice = str(billing_no)
         billed = shipped + dt.timedelta(days=rng.randint(1, 5))
-        cancelled = rng.random() < 0.03
+        cancelled = rng.random() < 0.08
         invoice_total = sum((i["net_amount"] for i in items), Decimal(0))
         rows["billing_document_headers"].append({
             "billing_document": invoice,
@@ -247,19 +266,41 @@ def build(seed: int = 7) -> dict[str, list[dict]]:
             "sold_to_party": customer,
             "last_change_datetime": dt.datetime.combine(billed, dt.time(11, 0), dt.UTC),
         })
-        for d_item, item in zip(delivery_items, items):
-            rows["billing_document_items"].append({
-                "billing_document": invoice,
-                # Billing items are numbered without padding.
-                "billing_document_item": str(int(d_item["delivery_document_item"])),
-                "material": item["material"],
-                "billing_quantity": item["requested_quantity"],
-                "billing_quantity_unit": "PC",
-                "net_amount": item["net_amount"],
+        documents = [invoice]
+        if cancelled:
+            # The cancellation is a document of its own (type S1) that names the invoice it reverses.
+            cancel_no += 1
+            documents.append(str(cancel_no))
+            reversal = {
+                "billing_document": str(cancel_no),
+                "billing_document_type": "S1",
+                "creation_date": billed + dt.timedelta(days=1),
+                "billing_document_date": billed + dt.timedelta(days=1),
+                "billing_document_is_cancelled": False,
+                "total_net_amount": invoice_total,
                 "transaction_currency": currency,
-                "reference_sd_document": delivery,
-                "reference_sd_document_item": str(int(d_item["delivery_document_item"])),
-            })
+                "company_code": "ABCD",
+                "fiscal_year": "2025",
+                "accounting_document": str(accounting_no + 500000),
+                "sold_to_party": customer,
+                "last_change_datetime": dt.datetime.combine(billed, dt.time(12, 0), dt.UTC),
+            }
+            rows["billing_document_headers"].append({**reversal, "cancelled_billing_document": invoice})
+            rows["billing_document_cancellations"].append(reversal)
+        for document in documents:
+            for d_item, item in zip(delivery_items, items):
+                rows["billing_document_items"].append({
+                    "billing_document": document,
+                    # Billing items are numbered without padding.
+                    "billing_document_item": str(int(d_item["delivery_document_item"])),
+                    "material": item["material"],
+                    "billing_quantity": item["requested_quantity"],
+                    "billing_quantity_unit": "PC",
+                    "net_amount": item["net_amount"],
+                    "transaction_currency": currency,
+                    "reference_sd_document": delivery,
+                    "reference_sd_document_item": str(int(d_item["delivery_document_item"])),
+                })
 
         paid = rng.random() < 0.65
         payment_doc = str(accounting_no + 1000000)
