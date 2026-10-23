@@ -1,11 +1,16 @@
-// Fails when the SCHEMA fixture no longer matches what a running backend serves at /graph/schema,
-// so screenshots built on the fixtures keep representing the real product.
+// Fails when the fixtures no longer match what a running backend serves, so screenshots built on
+// them keep representing the real product:
+//
+//   - SCHEMA must equal GET /graph/schema (value for value)
+//   - the dataset status, suggested questions and chat fixtures must have the same fields
+//     (keys, not values) as GET /datasets/{id}/status, GET /datasets/{id}/suggested-questions
+//     and POST /chat
 //
 //   node e2e/check-schema.mjs [http://localhost:8000/api]
 //
 // Regenerate the fixture's TYPES / EDGES / FLOWS from `curl <api>/graph/schema` when it reports drift.
 
-import { SCHEMA } from './fixtures.mjs';
+import { SCHEMA, SUGGESTED_QUESTIONS, chatReply, datasetStatus } from './fixtures.mjs';
 
 const api = (process.argv[2] ?? process.env.GS_API ?? 'http://localhost:8000/api').replace(/\/$/, '');
 
@@ -59,6 +64,62 @@ for (const id of new Set([...fixtureFlows.keys(), ...liveFlows.keys()])) {
   else if (!liveFlows.has(id)) problems.push(`flow ${id}: not served by the backend`);
   else compare(`flows[${id}]`, fixtureFlows.get(id), liveFlows.get(id));
 }
+
+// ── Response shapes ───────────────────────────────────────
+// Compares the nested key sets of objects. Arrays are compared by their first element when both
+// sides have one, and values never are.
+const shapeOf = (value) => {
+  if (Array.isArray(value)) return value.length > 0 ? [shapeOf(value[0])] : [];
+  if (value && typeof value === 'object') return Object.fromEntries(Object.keys(value).sort().map((key) => [key, shapeOf(value[key])]));
+  return null;
+};
+const compareShape = (label, fixture, actual, path = '') => {
+  const fixtureIsObject = fixture && typeof fixture === 'object' && !Array.isArray(fixture);
+  const actualIsObject = actual && typeof actual === 'object' && !Array.isArray(actual);
+  if (fixtureIsObject && actualIsObject) {
+    for (const key of new Set([...Object.keys(fixture), ...Object.keys(actual)])) {
+      if (!(key in fixture)) problems.push(`${label}${path}.${key}: served by the backend but missing from the fixture`);
+      else if (!(key in actual)) problems.push(`${label}${path}.${key}: in the fixture but not served by the backend`);
+      else compareShape(label, fixture[key], actual[key], `${path}.${key}`);
+    }
+  } else if (Array.isArray(fixture) && Array.isArray(actual) && fixture.length > 0 && actual.length > 0) {
+    compareShape(label, fixture[0], actual[0], `${path}[]`);
+  }
+};
+
+const tryJson = async (path, init) => {
+  try {
+    const response = await fetch(`${api}${path}`, init);
+    return response.ok ? await response.json() : null;
+  } catch {
+    return null;
+  }
+};
+
+const datasetId = live.domain?.id;
+const status = datasetId ? await tryJson(`/datasets/${encodeURIComponent(datasetId)}/status`) : null;
+if (status) {
+  // A dataset that has not run yet has no last run; compare the run fields only when there is one.
+  const fixture = datasetStatus(status.status === 'empty' ? 'empty' : 'ready', 'full');
+  const comparable = status.last_run ? fixture : { ...fixture, last_run: null };
+  const served = status.last_run ? status : { ...status, last_run: null };
+  if (served.record_counts == null) delete comparable.record_counts;
+  if (comparable.record_counts == null && served.record_counts) delete served.record_counts;
+  compareShape('status', { ...comparable, record_counts: undefined, last_run: comparable.last_run ? { ...comparable.last_run, summary: {} } : null },
+    { ...served, record_counts: undefined, last_run: served.last_run ? { ...served.last_run, summary: {} } : null });
+  compareShape('status.ai', datasetStatus('ready', 'full').ai, status.ai);
+} else {
+  console.warn(`Skipped the status check: ${api}/datasets/${datasetId}/status is not served.`);
+}
+
+const suggestions = datasetId ? await tryJson(`/datasets/${encodeURIComponent(datasetId)}/suggested-questions`) : null;
+if (suggestions) compareShape('suggested-questions', SUGGESTED_QUESTIONS, suggestions);
+else console.warn('Skipped the suggested questions check: the endpoint is not served.');
+
+// Any answer has the same fields. A refusal is enough to see them (no model key is needed).
+const chat = await tryJson('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'How many records are there?' }) });
+if (chat) compareShape('chat', chatReply('Which customer has the most orders?'), chat);
+else console.warn('Skipped the chat check: POST /chat did not answer.');
 
 if (problems.length > 0) {
   console.error(`The schema fixture has drifted from ${api}/graph/schema:`);

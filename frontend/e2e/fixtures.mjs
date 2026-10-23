@@ -8,17 +8,17 @@
 //   node e2e/check-schema.mjs [http://localhost:8000/api]
 
 const TYPES = [
-  {"key": "SalesOrder", "label": "Sales order", "plural": "Sales orders", "description": "A customer's request to buy products.", "category": "document", "accent": "blue", "icon": "file-text", "is_primary": true, "display_properties": ["sold_to_party", "creation_date", "total_net_amount", "transaction_currency", "overall_delivery_status"]},
-  {"key": "SalesOrderItem", "label": "Sales order item", "plural": "Sales order items", "description": "One product line on a sales order.", "category": "item", "accent": "cyan", "icon": "list", "is_primary": false, "display_properties": ["material", "requested_quantity", "requested_quantity_unit", "net_amount", "transaction_currency"]},
-  {"key": "Delivery", "label": "Delivery", "plural": "Deliveries", "description": "An outbound shipment of goods to a customer.", "category": "document", "accent": "orange", "icon": "truck", "is_primary": true, "display_properties": ["creation_date", "overall_goods_movement_status", "overall_picking_status", "shipping_point"]},
-  {"key": "DeliveryItem", "label": "Delivery item", "plural": "Delivery items", "description": "One product line on a delivery.", "category": "item", "accent": "yellow", "icon": "package", "is_primary": false, "display_properties": ["actual_delivery_quantity", "delivery_quantity_unit", "plant", "storage_location"]},
-  {"key": "Invoice", "label": "Invoice", "plural": "Invoices", "description": "A billing document charging a customer for delivered goods.", "category": "document", "accent": "green", "icon": "receipt", "is_primary": true, "display_properties": ["billing_document_date", "total_net_amount", "transaction_currency", "billing_document_is_cancelled", "accounting_document"]},
-  {"key": "InvoiceItem", "label": "Invoice item", "plural": "Invoice items", "description": "One billed line on an invoice.", "category": "item", "accent": "mint", "icon": "list", "is_primary": false, "display_properties": ["material", "billing_quantity", "billing_quantity_unit", "net_amount", "transaction_currency"]},
-  {"key": "JournalEntry", "label": "Journal entry", "plural": "Journal entries", "description": "The accounting document posted when an invoice is booked.", "category": "finance", "accent": "purple", "icon": "book-open", "is_primary": true, "display_properties": ["posting_date", "amount_in_transaction_currency", "transaction_currency", "gl_account", "clearing_date"]},
-  {"key": "Payment", "label": "Payment", "plural": "Payments", "description": "A customer payment that clears an open receivable.", "category": "finance", "accent": "pink", "icon": "credit-card", "is_primary": true, "display_properties": ["posting_date", "amount_in_transaction_currency", "transaction_currency", "clearing_date", "customer"]},
-  {"key": "Product", "label": "Product", "plural": "Products", "description": "A material or product that can be sold.", "category": "master", "accent": "teal", "icon": "box", "is_primary": true, "display_properties": ["product_description", "product_type", "product_group", "base_unit", "gross_weight"]},
-  {"key": "Customer", "label": "Customer", "plural": "Customers", "description": "A business partner who buys from you.", "category": "party", "accent": "indigo", "icon": "user", "is_primary": true, "display_properties": ["business_partner_full_name", "business_partner_category", "creation_date", "business_partner_is_blocked"]},
-  {"key": "Address", "label": "Address", "plural": "Addresses", "description": "A postal address on file for a customer.", "category": "master", "accent": "gray", "icon": "map-pin", "is_primary": false, "display_properties": ["street_name", "city_name", "postal_code", "country"]},
+  {"key": "SalesOrder", "label": "Sales order", "plural": "Sales orders", "description": "A customer's request to buy products.", "category": "document", "accent": "blue", "icon": "file-text", "is_primary": true, "display_properties": ["sold_to_party", "creation_date", "total_net_amount", "transaction_currency", "overall_delivery_status"], "value_labels": {"overall_delivery_status": {"A": "Not yet delivered", "B": "Partially delivered", "C": "Completely delivered"}, "sales_order_type": {"OR": "Standard order"}, "incoterms_classification": {"FOR": "Free on rail"}}},
+  {"key": "SalesOrderItem", "label": "Sales order item", "plural": "Sales order items", "description": "One product line on a sales order.", "category": "item", "accent": "cyan", "icon": "list", "is_primary": false, "display_properties": ["material", "requested_quantity", "requested_quantity_unit", "net_amount", "transaction_currency"], "value_labels": {"requested_quantity_unit": {"PC": "Piece", "KG": "Kilogram"}, "sales_order_item_category": {"TAN": "Standard item"}}},
+  {"key": "Delivery", "label": "Delivery", "plural": "Deliveries", "description": "An outbound shipment of goods to a customer.", "category": "document", "accent": "orange", "icon": "truck", "is_primary": true, "display_properties": ["creation_date", "overall_goods_movement_status", "overall_picking_status", "shipping_point"], "value_labels": {"overall_goods_movement_status": {"A": "Not started", "B": "Partially processed", "C": "Completed"}, "overall_picking_status": {"A": "Not started", "B": "Partially processed", "C": "Completed"}, "hdr_general_incompletion_status": {"A": "Not complete", "B": "Partly complete", "C": "Complete"}}},
+  {"key": "DeliveryItem", "label": "Delivery item", "plural": "Delivery items", "description": "One product line on a delivery.", "category": "item", "accent": "yellow", "icon": "package", "is_primary": false, "display_properties": ["actual_delivery_quantity", "delivery_quantity_unit", "plant", "storage_location"], "value_labels": {"delivery_quantity_unit": {"PC": "Piece", "KG": "Kilogram"}}},
+  {"key": "Invoice", "label": "Invoice", "plural": "Invoices", "description": "A billing document charging a customer for delivered goods.", "category": "document", "accent": "green", "icon": "receipt", "is_primary": true, "display_properties": ["billing_document_date", "total_net_amount", "transaction_currency", "billing_document_is_cancelled", "accounting_document"], "value_labels": {"billing_document_type": {"F2": "Invoice", "S1": "Cancellation"}}},
+  {"key": "InvoiceItem", "label": "Invoice item", "plural": "Invoice items", "description": "One billed line on an invoice.", "category": "item", "accent": "mint", "icon": "list", "is_primary": false, "display_properties": ["material", "billing_quantity", "billing_quantity_unit", "net_amount", "transaction_currency"], "value_labels": {"billing_quantity_unit": {"PC": "Piece", "KG": "Kilogram"}}},
+  {"key": "JournalEntry", "label": "Journal entry", "plural": "Journal entries", "description": "The accounting document posted when an invoice is booked.", "category": "finance", "accent": "purple", "icon": "book-open", "is_primary": true, "display_properties": ["posting_date", "amount_in_transaction_currency", "transaction_currency", "gl_account", "clearing_date"], "value_labels": {"accounting_document_type": {"RV": "Billing document transfer to accounting"}, "financial_account_type": {"D": "Customer (accounts receivable)"}}},
+  {"key": "Payment", "label": "Payment", "plural": "Payments", "description": "A customer payment that clears an open receivable.", "category": "finance", "accent": "pink", "icon": "credit-card", "is_primary": true, "display_properties": ["posting_date", "amount_in_transaction_currency", "transaction_currency", "clearing_date", "customer"], "value_labels": {"financial_account_type": {"D": "Customer (accounts receivable)"}}},
+  {"key": "Product", "label": "Product", "plural": "Products", "description": "A material or product that can be sold.", "category": "master", "accent": "teal", "icon": "box", "is_primary": true, "display_properties": ["product_description", "product_type", "product_group", "base_unit", "gross_weight"], "value_labels": {"base_unit": {"PC": "Piece", "KG": "Kilogram"}, "weight_unit": {"PC": "Piece", "KG": "Kilogram"}, "industry_sector": {"M": "Mechanical engineering"}}},
+  {"key": "Customer", "label": "Customer", "plural": "Customers", "description": "A business partner who buys from you.", "category": "party", "accent": "indigo", "icon": "user", "is_primary": true, "display_properties": ["business_partner_full_name", "business_partner_category", "creation_date", "business_partner_is_blocked"], "value_labels": {"business_partner_category": {"1": "Person", "2": "Organization", "3": "Group"}, "form_of_address": {"0003": "Company"}}},
+  {"key": "Address", "label": "Address", "plural": "Addresses", "description": "A postal address on file for a customer.", "category": "master", "accent": "gray", "icon": "map-pin", "is_primary": false, "display_properties": ["street_name", "city_name", "postal_code", "country"], "value_labels": {"country": {"IN": "India"}, "region": {"KA": "Karnataka", "MH": "Maharashtra", "OD": "Odisha", "RJ": "Rajasthan", "TN": "Tamil Nadu", "TS": "Telangana", "WB": "West Bengal"}}},
 ];
 
 const EDGES = [
@@ -45,7 +45,7 @@ const FLOWS = [
 ];
 
 export const SCHEMA = {
-  domain: {"id": "o2c", "name": "Order to Cash", "description": "Sales orders through delivery, billing and payment."},
+  domain: {"id": "o2c", "name": "Order to Cash", "description": "Sales orders through delivery, billing and payment.", "version": "2.0.0", "is_default": false},
   node_types: TYPES,
   edge_types: EDGES,
   flows: FLOWS,
@@ -176,6 +176,7 @@ soItems.slice(0, 6).forEach(({ item, customer }, index) => {
 
 deliveries.slice(0, 3).forEach(({ customer, deliveryItem }, index) => {
   const invoice = addNode('Invoice', `${(invNumber += 1)}`, {
+    billing_document_type: 'F2',
     billing_document_date: `2025-03-0${index + 2}`,
     total_net_amount: 980 + index * 210,
     transaction_currency: 'USD',
@@ -321,19 +322,122 @@ export const SAMPLE_IDS = {
   invoice: byType.Invoice[0].id.split(':')[1],
 };
 
+// ── Dataset status and suggestions ─────────────────────────
+// Shapes follow GET /api/datasets/{id}/status and GET /api/datasets/{id}/suggested-questions.
+// check-schema.mjs compares their keys with a running backend.
+export const DATASET_ID = SCHEMA.domain.id;
+
+const KNOWLEDGE = { state: 'ready', items: 123, embed_model: 'text-embedding-004', embedded: 123, text_only: 0, last_refresh: '2026-10-23T12:38:24.744341+00:00' };
+
+export const AI = {
+  full: { mode: 'full', llm_configured: true, embeddings_configured: true, knowledge: KNOWLEDGE },
+  degraded: { mode: 'degraded', llm_configured: true, embeddings_configured: false, knowledge: { ...KNOWLEDGE, embed_model: null, embedded: 0, text_only: 123 } },
+  disabled: { mode: 'disabled', llm_configured: false, embeddings_configured: true, knowledge: KNOWLEDGE },
+  missing: { mode: 'full', llm_configured: true, embeddings_configured: true, knowledge: { ...KNOWLEDGE, state: 'missing', items: 0, embedded: 0, last_refresh: null } },
+};
+
+const RUN = {
+  id: '88822319-8fbf-4d63-bbc0-ae5bde34e68f',
+  kind: 'ingest',
+  status: 'succeeded',
+  phase: 'done',
+  started_at: '2026-10-23T12:38:22.960901+00:00',
+  finished_at: '2026-10-23T12:38:24.744341+00:00',
+  summary: { tables: 19, rows: 21393, rejected: 0, duplicates: 0, warnings: 0 },
+  error_code: null,
+  error_message: null,
+};
+
+/** `kind`: ready | empty | loading | failed. `ai`: a key of AI. */
+export function datasetStatus(kind = 'ready', ai = 'full') {
+  const base = { id: DATASET_ID, name: SCHEMA.domain.name, package_version: SCHEMA.domain.version, ai: AI[ai] };
+  if (kind === 'ready') return { ...base, status: 'ready', last_run: RUN, record_counts: { sales_order_headers: 100, billing_document_headers: 163 } };
+  if (kind === 'empty') return { ...base, status: 'empty', last_run: null, ai: { ...AI[ai], knowledge: { ...KNOWLEDGE, state: 'missing', items: 0, embedded: 0, last_refresh: null } } };
+  if (kind === 'loading') {
+    return { ...base, status: 'loading', last_run: { ...RUN, status: 'running', phase: 'load', finished_at: null, summary: { tables: 0, rows: 0, rejected: 0, duplicates: 0, warnings: 0 } } };
+  }
+  return {
+    ...base,
+    status: 'failed',
+    last_run: { ...RUN, status: 'failed', phase: 'done', error_code: 'validation_failed', error_message: 'The load did not pass its checks.', summary: { tables: 0, rows: 0, rejected: 0, duplicates: 0, warnings: 0 } },
+  };
+}
+
+export const NOT_READY = { detail: "This dataset's data hasn't been loaded yet.", code: 'dataset_not_ready', request_id: '8b748bba787d405184d9d9242e41e7fd' };
+
+export const SUGGESTED_QUESTIONS = {
+  dataset_id: DATASET_ID,
+  questions: [
+    { text: 'How many sales orders, deliveries, invoices and payments are there?', category: 'Overview' },
+    { text: 'Which customers have placed the most sales orders?', category: 'Customers' },
+    { text: 'What is the total revenue by customer?', category: 'Customers' },
+    { text: 'Which products appear on the most billing documents?', category: 'Products' },
+    { text: 'Which sales orders were delivered but never billed?', category: 'Broken flows' },
+    { text: 'Show the invoices that have not been paid yet.', category: 'Finance' },
+  ],
+};
+
 // ── Chat ───────────────────────────────────────────────────
+const CHAT_BASE = {
+  answer: '',
+  sql: null,
+  data: null,
+  entities: [],
+  graph_nodes: [],
+  error: null,
+  row_count: 0,
+  summary: '',
+  query_id: '6350155e-3a03-4707-928a-e5dab9d61c24',
+  mode: 'full',
+  columns: [],
+  truncated: false,
+  warnings: [],
+  assumptions: [],
+  suggestions: [],
+};
+
+/** A failed answer, as the backend reports it: `error` is a stable code and `answer` a short explanation. */
+export function chatError(code, extra = {}) {
+  return { ...CHAT_BASE, error: code, mode: code === 'not_configured' ? 'disabled' : 'full', suggestions: SUGGESTED_QUESTIONS.questions.slice(0, 4).map((q) => q.text), ...extra };
+}
+
+export const CHAT_ERROR_CODES = ['not_configured', 'sql_rejected', 'provider_unavailable', 'dataset_not_ready', 'sql_generation_failed', 'sql_execution_error: timeout'];
+
+const DELIVERY_STATUSES = SCHEMA.node_types.find((type) => type.key === 'SalesOrder').value_labels.overall_delivery_status;
+
 export function chatReply(message) {
   const text = message.toLowerCase();
   if (/poem|weather|joke|recipe/.test(text)) {
-    return {
+    return chatError('guardrail', {
       answer: 'This system is designed to answer questions about the loaded dataset only. Please ask about customers, orders, deliveries, invoices, payments or products.',
-      sql: null,
-      data: null,
-      entities: [],
-      graph_nodes: [],
-      error: 'guardrail',
-      row_count: 0,
-      summary: '',
+    });
+  }
+  if (/status|delivered/.test(text)) {
+    const orders = byType.SalesOrder.map((order) => ({
+      sales_order: order.id.split(':')[1],
+      creation_date: order.properties.creation_date,
+      overall_delivery_status: order.properties.overall_delivery_status,
+      total_net_amount: order.properties.total_net_amount,
+      transaction_currency: order.properties.transaction_currency,
+    }));
+    return {
+      ...CHAT_BASE,
+      answer: `There are **${orders.length}** sales orders in the sample. **${orders.filter((o) => o.overall_delivery_status === 'C').length}** are completely delivered and the rest are not yet delivered.\n\nThe list below is cut off at the server's row limit.`,
+      sql: 'SELECT sales_order, creation_date, overall_delivery_status, total_net_amount, transaction_currency\nFROM sales_order_headers\nORDER BY sales_order\nLIMIT 200;',
+      data: orders,
+      row_count: orders.length,
+      summary: 'Sales orders with their delivery status.',
+      truncated: true,
+      columns: [
+        { name: 'sales_order', label: 'Sales order', role: 'identifier', value_labels: null },
+        { name: 'creation_date', label: 'Created', role: 'date', value_labels: null },
+        { name: 'overall_delivery_status', label: 'Delivery status', role: 'category', value_labels: DELIVERY_STATUSES },
+        { name: 'total_net_amount', label: 'Net amount', role: 'amount', value_labels: null },
+        { name: 'transaction_currency', label: 'Currency', role: 'category', value_labels: null },
+      ],
+      assumptions: ['“Delivered” means the overall delivery status of the order is Completely delivered.'],
+      warnings: ['Only the first 200 orders are listed.'],
+      graph_nodes: orders.slice(0, 3).map((row) => ({ id: `SalesOrder:${row.sales_order}`, type: 'SalesOrder', label: row.sales_order })),
     };
   }
   const topCustomers = byType.Customer.map((customer) => {
@@ -341,13 +445,18 @@ export function chatReply(message) {
     return { customer: customer.id.split(':')[1], name: customer.properties.business_partner_full_name, sales_orders: orders, total_net_amount: (orders * 1840.25).toFixed(2) };
   }).sort((a, b) => b.sales_orders - a.sales_orders);
   return {
+    ...CHAT_BASE,
     answer: `**${topCustomers[0].name}** has the most sales orders with **${topCustomers[0].sales_orders}**, followed by ${topCustomers[1].name} (${topCustomers[1].sales_orders}) and ${topCustomers[2].name} (${topCustomers[2].sales_orders}).\n\nTogether the four customers placed ${topCustomers.reduce((sum, row) => sum + row.sales_orders, 0)} orders in the sample.`,
     sql: 'SELECT c.business_partner AS customer,\n       c.business_partner_name AS name,\n       COUNT(DISTINCT so.sales_order) AS sales_orders\nFROM business_partners c\nJOIN sales_order_headers so ON so.sold_to_party = c.business_partner\nGROUP BY c.business_partner, c.business_partner_name\nORDER BY sales_orders DESC\nLIMIT 10;',
     data: topCustomers,
-    entities: [],
     graph_nodes: topCustomers.slice(0, 3).map((row) => ({ id: `Customer:${row.customer}`, type: 'Customer', label: row.customer })),
-    error: null,
     row_count: topCustomers.length,
     summary: 'Customers ranked by number of sales orders.',
+    columns: [
+      { name: 'customer', label: 'Customer', role: 'identifier', value_labels: null },
+      { name: 'name', label: 'Name', role: null, value_labels: null },
+      { name: 'sales_orders', label: 'Sales orders', role: 'measure', value_labels: null },
+      { name: 'total_net_amount', label: 'Total net amount', role: 'amount', value_labels: null },
+    ],
   };
 }
