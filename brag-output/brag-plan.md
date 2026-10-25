@@ -48,17 +48,7 @@ Turned a pile of SAP tables into a graph you can explore and interrogate in plai
 - SFX posture: sparse; music carries it
 - Restraint rule: no text change faster than reading floor
 
-## Storyboard (v5: Brik design system, 43.6s)
-Design system: Brik (grey-on-white instrument panel, Geist + Geist Mono, square corners, two-tone headlines, one electric-blue action). Chosen over the earlier dark looks so this launch reads fresh; the product's colourful graph carries the colour.
-Footage: re-recorded in the app's light theme. Pacing: ~4s per feature, 0.4s crossfades, scene starts snapped to the beat grid of Business Moves vol. 11; an electric-blue progress bar fills across the tour with a mono step counter.
-- Intro: GraphSense / Your order-to-cash, connected.
-- [01] Overview: Your business, / at a glance.
-- [02] Connections: Every record, / connected.
-- [03] Record details: Open any record. / See all it touches.
-- [04] Views: Your data, / your view.
-- [05] Ask: Just ask, / in plain English.
-- [06] Trust: Stays on your data. / Nothing else.
-- [07] Action: Answer to records, / in one click.
-- [08] Flows: Follow the process, / order to cash.
-- [09] Trace: Trace any order / to payment.
-- Outro: GraphSense / Know your business, end to end. / [ SEE IT IN ACTION ]
+## Storyboard (v6: Brik, 35.2s, original music)
+Same Brik look as v5, tightened to 35.2s: 2.5s intro, 2.5-4.6s per feature, 3s outro, cuts snapped to the music's beat grid (`hyperframes beats`, 117 BPM).
+Music: original track generated locally with MusicGen (facebook/musicgen-small), "funky indie electronic, slap bass groove, crisp drum machine, catchy bright synth arpeggio hook" (option C). Its short break at about 11.5s lands on the Views cut. Options A (minimal electronic) and B (UK garage with a breakdown and drop near 23s) are in `music-options/`.
+- Intro / [01] Overview / [02] Connections / [03] Record details / [04] Views / [05] Ask / [06] Trust / [07] Action / [08] Flows / [09] Trace / Outro
