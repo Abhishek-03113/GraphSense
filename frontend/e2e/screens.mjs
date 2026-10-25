@@ -49,6 +49,29 @@ const state = { ...defaults };
 const resetState = () => Object.assign(state, defaults);
 
 async function installApi(context) {
+  // The chat socket: same frames as the server's /api/chat/ws, with a short streamed answer.
+  await context.routeWebSocket('**/api/chat/ws', (ws) => {
+    if (state.offline) return ws.close({ code: 1011 });
+    ws.onMessage(async (raw) => {
+      const frame = JSON.parse(String(raw));
+      if (frame.type === 'ping') return ws.send(JSON.stringify({ type: 'pong' }));
+      if (frame.type !== 'ask') return;
+      const send = (body) => ws.send(JSON.stringify({ id: frame.id, ...body }));
+      const pause = (ms) => new Promise((r) => setTimeout(r, ms));
+      if (state.chatError === 'rate_limited') {
+        const reply = chatError('rate_limited', { answer: "You're asking questions faster than they can be answered. Please wait a moment and try again.", suggestions: [] });
+        return send({ type: 'result', result: reply, retry_after: 30 });
+      }
+      if (state.chatError) return send({ type: 'result', result: chatError(state.chatError, { answer: '' }) });
+      for (const stage of ['retrieving', 'writing_query', 'running_query', 'answering']) {
+        send({ type: 'status', stage });
+        await pause(110);
+      }
+      const reply = chatReply(frame.message ?? '');
+      for (const word of String(reply.answer ?? '').split(/(?<= )/)) send({ type: 'delta', text: word });
+      send({ type: 'result', result: reply });
+    });
+  });
   await context.route('**/api/**', async (route) => {
     if (state.offline) return route.abort('connectionrefused');
     const request = route.request();

@@ -98,7 +98,7 @@ for (const scheme of ['light', 'dark']) {
     if (message.type() === 'error' && !/Failed to load resource|net::ERR/.test(message.text())) problems.push(`[${scheme}] console: ${message.text()}`);
   });
   page.on('response', (response) => {
-    if (response.url().startsWith(API) && response.status() >= 400 && !response.url().endsWith('/chat')) problems.push(`[${scheme}] ${response.status()} ${response.url()}`);
+    if (response.url().startsWith(API) && response.status() >= 400 && !response.url().endsWith('/chat/messages')) problems.push(`[${scheme}] ${response.status()} ${response.url()}`);
   });
   const name = (base) => `${base}-${scheme}`;
 
