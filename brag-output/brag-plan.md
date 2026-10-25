@@ -48,19 +48,11 @@ Turned a pile of SAP tables into a graph you can explore and interrogate in plai
 - SFX posture: sparse; music carries it
 - Restraint rule: no text change faster than reading floor
 
-## Storyboard
-### Scene 1 - Hook - 3.2s (0-3.2)
-ROWS. (0.0) COLUMNS. (0.8) JOINS? (1.6) -> NOPE. GRAPH. (2.4) over blurred explore footage.
-### Scene 2 - Reveal - 3.2s (3.2-6.4)
-Overview footage in app frame. Title "GRAPHSENSE" + "Order to Cash - 1,226 records".
-### Scene 3 - Explore - 6.4s (6.4-12.8)
-Explore footage. Caption "SEE EVERY CONNECTION" then "1,612 relationships. Zero JOINs."
-### Scene 4 - Ask - 6.4s (12.8-19.2)
-Ask footage. Caption "OR JUST ASK" then "Plain English in. SQL + answer out."
-### Scene 5 - Flows + Trace - 6.4s (19.2-25.6)
-Flow footage 3.2s "FOLLOW THE FLOW", Trace footage 3.2s "TRACE ANY RECORD".
-### Scene 6 - Outro - 4.4s (25.6-30)
-"GRAPHSENSE" slam, tagline "Ask your data. See the connections."
-
-**Music mood:** loud, driving hard rock.
-**Audio summary:** crash-in on frame 0, riff drives every cut, fill into each bar-line cut, ring-out fade.
+## Storyboard (v2: AI + physics + layouts)
+- 0-3.2 Hook: Rows. Columns. Joins? Nope. Graph.
+- 3.2-6.4 Overview reveal
+- 6.4-9.6 Physics: drag a record, neighbours follow
+- 9.6-14.4 Five layouts: Physics, Clusters, Circle, Horizontal, Vertical
+- 14.4-16.0 Flow graph; 16.0-17.6 Trace graph
+- 17.6-27.2 AI Ask: typed question and answer, SQL shown, off-topic refusal, jump to the graph with records highlighted
+- 27.2-30 Outro: GraphSense, Ask your data. See the connections.

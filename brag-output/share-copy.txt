@@ -1,5 +1,5 @@
 Rows. Columns. Joins? Nope. Graph.
 
-GraphSense turns a relational dataset into a graph you can explore and a chat you can ask in plain English. Footage is the real app, recorded with Playwright on dummy SAP order-to-cash data.
+GraphSense turns a relational dataset into a physics-driven graph you can explore in five layouts, plus an AI Ask that writes the SQL, shows its work and refuses off-topic questions. Real app footage, recorded with Playwright on dummy SAP order-to-cash data.
 
 #GraphSense #dataviz #textToSQL #buildinpublic
