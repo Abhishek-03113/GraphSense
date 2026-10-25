@@ -108,17 +108,17 @@ def test_execution_errors_carry_a_category_not_database_text(toy_client):
 
 def test_without_a_key_the_app_answers_not_configured_end_to_end(toy_client):
     """No dependency override: the real service is built from settings with no key."""
-    with override_settings(GEMINI_API_KEY=SecretStr(""), QUERY_LOG_ENABLED=False):
+    with override_settings(OPENROUTER_API_KEY=SecretStr(""), QUERY_LOG_ENABLED=False):
         response = ask(toy_client, "Which books have been borrowed the most?")
     body = response.json()
     assert response.status_code == 200
     assert body["error"] == "not_configured" and body["mode"] == "disabled"
-    assert "GEMINI_API_KEY" in body["answer"] and body["suggestions"]
+    assert "OPENROUTER_API_KEY" in body["answer"] and body["suggestions"]
     assert set(body) == ORIGINAL_FIELDS | ADDED_FIELDS
 
 
 def test_the_service_is_built_once(toy_client):
-    with override_settings(GEMINI_API_KEY=SecretStr(""), QUERY_LOG_ENABLED=False):
+    with override_settings(OPENROUTER_API_KEY=SecretStr(""), QUERY_LOG_ENABLED=False):
         assert get_ask_service() is get_ask_service()
         assert isinstance(get_ask_service().llm, NullLLM)
 

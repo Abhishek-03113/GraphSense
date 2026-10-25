@@ -75,6 +75,7 @@ def test_no_key_means_disabled_mode():
 
 def test_key_means_full_mode_and_the_models_come_from_settings():
     with override_settings(
+        LLM_PROVIDER="gemini", EMBEDDING_PROVIDER="gemini",
         GEMINI_API_KEY=SecretStr("k"), GEMINI_MODEL="m-llm", EMBEDDING_MODEL="m-embed", EMBEDDING_DIMS=64
     ):
         providers = build_providers()
@@ -83,8 +84,28 @@ def test_key_means_full_mode_and_the_models_come_from_settings():
     assert "k" not in repr(vars(providers.llm).get("_api_key"))  # SecretStr never shows its value
 
 
+def test_openrouter_is_the_default_and_uses_one_key_for_both_models():
+    with override_settings(
+        OPENROUTER_API_KEY=SecretStr("k"), OPENROUTER_MODEL="vendor/llm", EMBEDDING_MODEL="vendor/embed"
+    ):
+        providers = build_providers()
+    assert providers.mode == "full"
+    assert (providers.llm.model, providers.embedder.model) == ("vendor/llm", "vendor/embed")
+    assert providers.llm._base_url == "https://openrouter.ai/api/v1"
+
+
+def test_any_openai_compatible_server_can_be_used():
+    with override_settings(
+        LLM_PROVIDER="openai_compatible", EMBEDDING_PROVIDER="none", LLM_BASE_URL="http://localhost:11434/v1/",
+        LLM_API_KEY=SecretStr("k"), LLM_MODEL="llama3",
+    ):
+        providers = build_providers()
+    assert providers.mode == "degraded"
+    assert (providers.llm.model, providers.llm._base_url) == ("llama3", "http://localhost:11434/v1")
+
+
 def test_llm_without_embeddings_is_degraded():
-    with override_settings(GEMINI_API_KEY=SecretStr("k"), EMBEDDING_PROVIDER="none"):
+    with override_settings(LLM_PROVIDER="gemini", GEMINI_API_KEY=SecretStr("k"), EMBEDDING_PROVIDER="none"):
         assert build_providers().mode == "degraded"
     assert compute_mode(FakeLLM(["x"]), NullEmbedder()) == "degraded"
     assert compute_mode(NullLLM(), FakeEmbedder()) == "disabled"

@@ -100,7 +100,7 @@ async def test_hostile_questions_are_stopped(ctx, question):
 async def test_without_a_model_key_the_answer_is_not_configured(ctx):
     result = await make_service(NullLLM(), StubExecutor(books_result())).ask(ctx, QUESTION)
     assert result.error == "not_configured" and result.mode == "disabled"
-    assert "GEMINI_API_KEY" in result.answer
+    assert "OPENROUTER_API_KEY" in result.answer
     assert result.suggestions  # something to try meanwhile
 
 

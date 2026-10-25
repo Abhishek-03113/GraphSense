@@ -55,7 +55,7 @@ def _context(dataset: str) -> DatasetContext:
 )
 @click.argument("dataset")
 @click.option("--offline", "mode", flag_value="offline", default=True, help="Replay the reference queries; no key, no network (default).")
-@click.option("--live", "mode", flag_value="live", help="Ask the configured model (needs GEMINI_API_KEY).")
+@click.option("--live", "mode", flag_value="live", help="Ask the configured model (needs an LLM API key, e.g. OPENROUTER_API_KEY).")
 @click.option("--fail-under", type=click.FloatRange(0.0, 1.0), default=None, help="Exit 1 when the score (lowest gated metric) is below this.")
 @click.option("--json", "json_path", type=click.Path(path_type=Path, dir_okay=False), default=None, help="Write the full report as JSON.")
 @click.option("--markdown", "markdown_path", type=click.Path(path_type=Path, dir_okay=False), default=None, help="Write a Markdown summary.")
@@ -81,7 +81,7 @@ def command(
     if run_mode == "live":
         providers = build_providers(get_settings())
         if not is_configured(providers.llm):
-            raise click.UsageError("--live needs a language model: set GEMINI_API_KEY (see backend/.env.example).")
+            raise click.UsageError("--live needs a language model: set OPENROUTER_API_KEY (see backend/.env.example).")
         llm, embedder, scope_embedder = providers.llm, providers.embedder, providers.embedder
     else:
         llm, embedder, scope_embedder = GoldenReplayLLM(), FakeEmbedder(), NullEmbedder("offline evaluation: lexical scope")

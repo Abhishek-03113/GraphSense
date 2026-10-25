@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import re
 import time
+from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Protocol
 
@@ -65,10 +66,72 @@ logger = get_logger(__name__)
 
 NOT_CONFIGURED_MESSAGE = (
     "Questions can't be answered yet because the language model isn't set up on this server. "
-    "Add a Gemini API key (GEMINI_API_KEY) to the backend configuration and restart it."
+    "Add an API key for the configured provider (for example OPENROUTER_API_KEY) to the backend configuration and restart it."
 )
 MAX_SUGGESTIONS = 4
 MAX_REFUSAL_CHARS = 240
+
+
+# Progress of one question, sent to clients that listen: ``{"type": "status", "stage": ...}``
+# and ``{"type": "delta", "text": ...}`` (a piece of the answer as it is written).
+Emit = Callable[[dict[str, Any]], Awaitable[None]]
+
+
+class _AnswerStreamer:
+    """Pulls the text of the ``answer`` string out of a JSON reply as it streams in."""
+
+    _KEY = re.compile(r'"answer"\s*:\s*"')
+    _ESCAPES = {"n": "\n", "t": "\t", "r": "\r", "b": "\b", "f": "\f", "/": "/", '"': '"', "\\": "\\"}
+
+    def __init__(self, emit: Callable[[str], Awaitable[None]]) -> None:
+        self._emit = emit
+        self._buffer = ""
+        self._open = False
+        self._done = False
+        self._pending_escape = ""
+
+    async def feed(self, chunk: str) -> None:
+        if self._done:
+            return
+        self._buffer += chunk
+        if not self._open:
+            match = self._KEY.search(self._buffer)
+            if not match:
+                return
+            self._buffer = self._buffer[match.end():]
+            self._open = True
+        text, self._buffer = self._buffer, ""
+        out: list[str] = []
+        i = 0
+        text = self._pending_escape + text
+        self._pending_escape = ""
+        while i < len(text):
+            ch = text[i]
+            if ch == '"':
+                self._done = True
+                break
+            if ch == "\\":
+                if i + 1 >= len(text):
+                    self._pending_escape = ch
+                    break
+                nxt = text[i + 1]
+                if nxt == "u":
+                    if i + 6 > len(text):
+                        self._pending_escape = text[i:]
+                        break
+                    try:
+                        out.append(chr(int(text[i + 2 : i + 6], 16)))
+                    except ValueError:
+                        pass
+                    i += 6
+                    continue
+                out.append(self._ESCAPES.get(nxt, nxt))
+                i += 2
+                continue
+            out.append(ch)
+            i += 1
+        if out:
+            await self._emit("".join(out))
 
 
 class SqlExecutor(Protocol):
@@ -87,6 +150,7 @@ class _Run:
     validated_ok: bool = False
     attempts: list[dict[str, Any]] | None = None
     suggestions: list[str] = field(default_factory=list)
+    emit: Emit | None = None
 
 
 def _ms(since: float) -> int:
@@ -148,13 +212,17 @@ class AskService:
         *,
         trace: bool = False,
         client_id: str | None = None,
+        emit: Emit | None = None,
     ) -> AskResult:
         """Answer ``question`` about the dataset ``ctx``.
 
         Never raises for expected failures; ``trace=True`` adds retrieval and attempt
-        detail for evaluation.  ``client_id`` is only used for logging.
+        detail for evaluation.  ``client_id`` is only used for logging.  ``emit`` receives
+        progress events while the question is worked on (see :data:`Emit`); its failures are ignored.
         """
-        run = _Run(question=question, result=AskResult(answer="", mode=self.mode), started=time.perf_counter())
+        run = _Run(
+            question=question, result=AskResult(answer="", mode=self.mode), started=time.perf_counter(), emit=emit
+        )
         if trace:
             run.result.trace = {"attempts": [], "prompt_version": render.PROMPT_VERSION}
             run.attempts = run.result.trace["attempts"]
@@ -170,6 +238,15 @@ class AskService:
         result.timings.total_ms = _ms(run.started)
         await self._log(ctx, run)
         return result
+
+    async def _event(self, run: _Run, **event: Any) -> None:
+        if run.emit is None:
+            return
+        try:
+            await run.emit(event)
+        except Exception:  # noqa: BLE001 - a listener that went away must not stop the answer
+            logger.debug("Progress listener failed", exc_info=True)
+            run.emit = None
 
     # --- pipeline -----------------------------------------------------------
 
@@ -227,6 +304,7 @@ class AskService:
             return
 
         # 4. retrieval
+        await self._event(run, type="status", stage="retrieving")
         t = time.perf_counter()
         if retrieval is None:
             retrieval = await self.retriever.retrieve(safe, question, query)
@@ -267,6 +345,7 @@ class AskService:
         cap = settings.SQL_MAX_ROWS
         extra = tuple(ctx.package.sql.extra_functions)
 
+        await self._event(run, type="status", stage="writing_query")
         t = time.perf_counter()
         prompt = render.render_sql_generation(
             dataset_name=snapshot.name,
@@ -312,6 +391,7 @@ class AskService:
                 problem = checked.message
             else:
                 run.sql = checked.sql
+                await self._event(run, type="status", stage="running_query")
                 t = time.perf_counter()
                 try:
                     execution = await self._get_executor().execute(ctx.schema_name, checked)
@@ -394,6 +474,7 @@ class AskService:
             sees_rows=sees_rows,
             max_rows=min(self.settings.SYNTHESIS_MAX_ROWS, validated.row_cap),
         )
+        await self._event(run, type="status", stage="answering")
         t = time.perf_counter()
         answer = await self._synthesise(run, validated, view)
         result.timings.synthesis_ms = _ms(t)
@@ -418,7 +499,15 @@ class AskService:
             rows_shown=view.rows_shown,
         )
         try:
-            response = await self._generate(run, prompt, render.ANSWER_SCHEMA, max_tokens=1024)
+            on_text = None
+            if run.emit is not None:
+                async def relay(piece: str) -> None:
+                    await self._event(run, type="delta", text=piece)
+
+                on_text = _AnswerStreamer(relay).feed
+            response = await self._generate(
+                run, prompt, render.ANSWER_SCHEMA, max_tokens=1024, on_text=on_text
+            )
             answer = render.parse_answer(response)
             if answer is None:
                 logger.warning(
@@ -439,7 +528,7 @@ class AskService:
 
     async def _generate(
         self, run: _Run, prompt: render.RenderedPrompt, schema: dict[str, Any], *, max_tokens: int = 2048,
-        extra_user: str = "",
+        extra_user: str = "", on_text: Callable[[str], Awaitable[None]] | None = None,
     ) -> LLMResponse:
         response = await self.llm.generate(
             LLMRequest(
@@ -449,6 +538,7 @@ class AskService:
                 max_output_tokens=max_tokens,
                 timeout_s=self.settings.LLM_TIMEOUT_S,
                 json_schema=schema,
+                on_text=on_text,
             )
         )
         run.usage = run.usage + Usage(response.usage.input_tokens, response.usage.output_tokens, 1, 0)

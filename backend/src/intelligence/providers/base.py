@@ -1,14 +1,14 @@
 """Provider-neutral interfaces to a language model and an embedding model.
 
-The pipeline only talks to these protocols.  ``GeminiLLM`` / ``GeminiEmbedder``
-are the real implementations; ``NullLLM`` / ``NullEmbedder`` stand in when
+The pipeline only talks to these protocols.  ``OpenAICompatLLM`` (OpenRouter, OpenAI, ...) and
+``GeminiLLM`` are the real implementations; ``NullLLM`` / ``NullEmbedder`` stand in when
 nothing is configured and ``FakeLLM`` / ``FakeEmbedder`` serve tests and
 offline checks.
 """
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
@@ -53,6 +53,9 @@ class LLMRequest:
     timeout_s: float | None = None
     # JSON schema of the wanted answer; the provider is asked for JSON in that shape.
     json_schema: dict[str, Any] | None = None
+    # When set, providers that can stream call it with each text delta as it arrives
+    # (others ignore it and return the whole reply at the end).
+    on_text: Callable[[str], Awaitable[None]] | None = field(default=None, compare=False, repr=False)
 
 
 @dataclass(frozen=True)

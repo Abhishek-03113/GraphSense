@@ -24,6 +24,7 @@ import { TypeDot } from '../../components/ui/TypeBadge';
 import { Skeleton } from '../../components/ui/Skeleton';
 import { ValueText } from '../../components/ui/ValueText';
 import type { ChatColumn } from '../../lib/api/schemas';
+import type { ChatStage } from '../../lib/api/chatSocket';
 import { currencyFor, downloadText, formatInteger, formatValue, humanize, pluralize, toCsv } from '../../lib/format';
 import { recordValue } from '../../lib/graph';
 import { useSchema } from '../../lib/schema';
@@ -33,15 +34,16 @@ import { Notice } from './Notice';
 import { RichText } from './RichText';
 import { readableWarnings } from './warnings';
 
-const STAGES = ['Reading your question', 'Finding the right data', 'Running the lookup', 'Writing up the answer'];
+const STAGE_LABELS: Record<ChatStage | 'reading', string> = {
+  reading: 'Reading your question',
+  retrieving: 'Finding the right data',
+  writing_query: 'Writing the lookup',
+  running_query: 'Running the lookup',
+  answering: 'Writing up the answer',
+};
 const MAX_ROWS = 200;
 
-function PendingReply() {
-  const [stage, setStage] = useState(0);
-  useEffect(() => {
-    const timer = window.setInterval(() => setStage((s) => Math.min(s + 1, STAGES.length - 1)), 1600);
-    return () => window.clearInterval(timer);
-  }, []);
+function PendingReply({ stage, streamed }: { stage?: ChatStage; streamed?: string }) {
   return (
     <div className={styles.pending} role="status" aria-live="polite">
       <span className={styles.stage}>
@@ -50,13 +52,17 @@ function PendingReply() {
           <span />
           <span />
         </span>
-        {STAGES[stage]}…
+        {STAGE_LABELS[stage ?? 'reading']}…
       </span>
-      <div className={styles.skeletonLines} aria-hidden="true">
-        <Skeleton width="92%" />
-        <Skeleton width="78%" />
-        <Skeleton width="54%" />
-      </div>
+      {streamed ? (
+        <RichText text={streamed} />
+      ) : (
+        <div className={styles.skeletonLines} aria-hidden="true">
+          <Skeleton width="92%" />
+          <Skeleton width="78%" />
+          <Skeleton width="54%" />
+        </div>
+      )}
     </div>
   );
 }
@@ -362,7 +368,7 @@ export function TurnView({ turn, suggestions, onPickPrompt, onOpenRecord }: Turn
     <article className={styles.turn} aria-label={`Question: ${turn.question}`}>
       <p className={styles.question}>{turn.question}</p>
       <div className={styles.reply}>
-        {turn.status === 'pending' && <PendingReply />}
+        {turn.status === 'pending' && <PendingReply stage={turn.stage} streamed={turn.streamingAnswer} />}
 
         {turn.status === 'failed' && (
           <Notice

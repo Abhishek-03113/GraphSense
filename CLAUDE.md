@@ -123,7 +123,9 @@ npm run e2e:screens -- ./e2e/screens   # Playwright screenshots against mocked A
 - `GET /api/graph/trace?doc_type=&doc_id=&depth=` - subgraph traversal from a record (default depth 4)
 - `GET /api/graph/full?node_limit=&type_filter=` - sampled graph, up to `node_limit` records per type
 
-### Ask (`POST /api/chat`)
+### Ask (`POST /api/chat`, `WS /api/chat/ws`)
+
+The UI asks over a WebSocket (`/api/chat/ws`, frames documented on `chat_socket` in `src/api/chat.py`): `status` frames per pipeline stage, `delta` frames with the answer as the model writes it, then a `result` with the same body as the REST endpoint. The frontend falls back to `POST /api/chat` when the socket cannot open. Models: `LLM_PROVIDER=openrouter` (default, `OPENROUTER_API_KEY`/`OPENROUTER_MODEL`), `openai_compatible` (`LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`) or legacy `gemini`; `providers/openai_compat.py` also does embeddings.
 
 Accepts `{ message }`, returns `{ answer, sql, data, entities, graph_nodes, error, row_count, summary }`. Pipeline: scope and injection guardrails, retrieval over the dataset's knowledge items, SQL generation, the SQL guard, execution on the read-only role, synthesis. `error` is `null` or a stable code (`guardrail`, `sql_generation_failed`, `sql_rejected`, `sql_execution_error: <category>`, `not_configured`, `dataset_not_ready`, `rate_limited`, `provider_unavailable`, `internal_error`). Knowledge is refreshed after each load by the post-ingest hooks or with `graphsense knowledge refresh <id>`; `POST /api/chat/train` and `POST /api/ingest` answer 410.
 
