@@ -138,6 +138,7 @@ def test_parse_answer():
     assert render.parse_answer(resp("plain text answer")) == "plain text answer"
     assert render.parse_answer(resp("", {"answer": "  "})) is None
     assert render.parse_answer(resp("")) is None
+    assert render.parse_answer(resp('{"answer": "The top customer is **')) is None  # cut off: never shown raw
 
 
 def test_rule_templates_have_no_leftover_placeholders():

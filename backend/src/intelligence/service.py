@@ -419,12 +419,21 @@ class AskService:
         )
         try:
             response = await self._generate(run, prompt, render.ANSWER_SCHEMA, max_tokens=1024)
+            answer = render.parse_answer(response)
+            if answer is None:
+                logger.warning(
+                    "Answer reply unusable (finish_reason=%s, %d chars); retrying once with a larger cap",
+                    response.finish_reason,
+                    len(response.text),
+                )
+                response = await self._generate(run, prompt, render.ANSWER_SCHEMA, max_tokens=4096)
+                answer = render.parse_answer(response)
         except ProviderError as exc:
             logger.warning(
                 "Answer synthesis failed (%s: %s); returning the data with a standard sentence", type(exc).__name__, exc
             )
             return None
-        return render.parse_answer(response)
+        return answer
 
     # --- model calls --------------------------------------------------------
 

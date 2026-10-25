@@ -16,7 +16,8 @@ Rules specific to this dataset:
 - A loan is open while returned_at is NULL.
 - Use authors.full_name for author names and members.full_name for member names.
 
-Answer with a JSON object: {"can_answer": true or false, "sql": "<one corrected query>" or null, "assumptions": ["<assumption you made>", ...], "refusal_reason": "<why not>" or null}.
+Assumptions are shown to the end user: write them in plain language, without table or column names.
+Answer with a JSON object: {"can_answer": true or false, "sql": "<one corrected query>" or null, "assumptions": ["<assumption you made, in everyday words>", ...], "refusal_reason": "<why not>" or null}.
 
 [user]
 QUESTION
