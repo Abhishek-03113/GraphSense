@@ -307,7 +307,6 @@ class DatasetRow:
     status: str
     active_run_id: str | None
     previous_run_id: str | None
-    compat_views: bool
     updated_at: datetime | None = None
     extra: dict[str, Any] = field(default_factory=dict)
 
@@ -319,7 +318,7 @@ async def fetch_dataset_rows(session: AsyncSession) -> dict[str, DatasetRow]:
             id=r.id, package_version=r.package_version, status=r.status,
             active_run_id=str(r.active_run_id) if r.active_run_id else None,
             previous_run_id=str(r.previous_run_id) if r.previous_run_id else None,
-            compat_views=r.compat_views, updated_at=r.updated_at,
+            updated_at=r.updated_at,
         )
         for r in rows
     }

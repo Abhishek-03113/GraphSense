@@ -27,8 +27,7 @@ async def get_dataset_context(
 
     An unknown id answers 404.  ``schema_name`` is the schema the dataset's
     tables live in (``ds_<id>``); see :func:`get_dataset_db` for how requests
-    read it.  A database that still keeps the tables in ``public`` works too,
-    because ``public`` stays on the search path behind the dataset schema.
+    read it.
     """
     dataset_id = dataset_header or dataset or default_dataset_id()
     try:

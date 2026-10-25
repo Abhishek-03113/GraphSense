@@ -10,6 +10,7 @@ node_types:
     display_properties: [full_name, home_country, birth_date]
     table: authors
     id_columns: [author_id]
+    terminal: true
     label_column: full_name
   - key: Book
     label: Book
@@ -22,6 +23,7 @@ node_types:
     display_properties: [title, published, page_count, language]
     table: books
     id_columns: [isbn]
+    terminal: true
     property_columns: [price, price_currency, shelf_code, is_reference]
     label_column: title
   - key: Member
@@ -35,6 +37,7 @@ node_types:
     display_properties: [full_name, tier, joined_at]
     table: members
     id_columns: [member_id]
+    terminal: true
     label_column: full_name
   - key: Loan
     label: Loan

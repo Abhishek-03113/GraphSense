@@ -270,10 +270,9 @@ def test_varchar_counts_as_text_and_unconstrained_numeric_as_any_decimal(toy_pac
     assert [i.kind for i in detect_drift(toy_package, live)] == ["type_mismatch"]
 
 
-def test_shared_schema_does_not_report_unrelated_tables(toy_package):
+def test_tables_the_package_does_not_know_are_reported(toy_package):
     live = _live_from_package(toy_package)
     live["_schema_migrations"] = {"version": LiveColumn("version", "text", "text")}
-    assert detect_drift(toy_package, live, shared_schema=True) == []
     assert [i.kind for i in detect_drift(toy_package, live)] == ["extra_table"]
 
 

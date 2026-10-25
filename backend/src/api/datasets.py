@@ -9,7 +9,6 @@ timestamps, never filesystem paths, SQL or error internals.
 ``loading``  a load is running
 ``ready``    data is loaded
 ``failed``   the first load failed (a failed reload of a loaded dataset leaves it ``ready``)
-``legacy``   data adopted from a stage-1 database, not yet reloaded
 """
 
 from __future__ import annotations
@@ -22,7 +21,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.datasets.context import DatasetContext
 from src.datasets.errors import PackageError, UnknownDatasetError
-from src.datasets.models import DatasetPackage
 from src.datasets.registry import get_package, list_packages
 from src.db.session import get_db_session
 from src.intelligence.status import ai_status
@@ -47,11 +45,6 @@ async def _dataset_rows(db: AsyncSession) -> dict[str, DatasetRow]:
         return {}
 
 
-async def _public_tables(db: AsyncSession) -> set[str]:
-    rows = await db.execute(text("SELECT table_name FROM information_schema.tables WHERE table_schema = 'public'"))
-    return {r[0] for r in rows}
-
-
 async def _latest_runs(db: AsyncSession, dataset_id: str | None = None) -> dict[str, Any]:
     """Latest run per dataset."""
     try:
@@ -67,13 +60,11 @@ async def _latest_runs(db: AsyncSession, dataset_id: str | None = None) -> dict[
         return {}
 
 
-def _status(pkg: DatasetPackage, row: DatasetRow | None, latest: Any, public: set[str]) -> str:
+def _status(row: DatasetRow | None, latest: Any) -> str:
     if latest is not None and latest.status in RUN_ACTIVE:
         return "loading"
     if row is not None:
         return row.status
-    if pkg.tables and all(t.table in public for t in pkg.tables):
-        return "legacy"
     return "empty"
 
 
@@ -92,12 +83,10 @@ async def list_datasets(db: AsyncSession = Depends(get_db_session)) -> list[dict
     """Every available dataset with its load status."""
     rows = await _dataset_rows(db)
     latest = await _latest_runs(db)
-    public = await _public_tables(db)
     out = []
     for info in list_packages():
         if not info.valid:
             continue
-        pkg = get_package(info.id)
         row = rows.get(info.id)
         active = await _active_run(db, row)
         out.append(
@@ -105,7 +94,7 @@ async def list_datasets(db: AsyncSession = Depends(get_db_session)) -> list[dict
                 "id": info.id,
                 "name": info.name,
                 "description": info.description,
-                "status": _status(pkg, row, latest.get(info.id), public),
+                "status": _status(row, latest.get(info.id)),
                 "package_version": info.version,
                 "last_ingested_at": active.finished_at.isoformat() if active is not None and active.finished_at else None,
             }
@@ -126,8 +115,7 @@ async def dataset_status(dataset_id: str, db: AsyncSession = Depends(get_db_sess
     rows = await _dataset_rows(db)
     row = rows.get(dataset_id)
     latest = (await _latest_runs(db, dataset_id)).get(dataset_id)
-    public = await _public_tables(db)
-    status = _status(pkg, row, latest, public)
+    status = _status(row, latest)
     active = await _active_run(db, row)
 
     last_run = None

@@ -15,13 +15,6 @@ logger = get_logger(__name__)
 
 MIGRATIONS_DIR = Path(__file__).resolve().parent.parent.parent / "migrations"
 
-# Stage-1 migrations that created the dataset tables (and the first embedding
-# table) in the ``public`` schema.  Dataset tables are generated from dataset
-# packages now, so on a database that never ran them they are recorded as
-# baselined instead of executed.  Databases that did run them keep their
-# record, and ``graphsense dataset adopt-legacy`` moves the tables.
-LEGACY_VERSIONS = frozenset({"20260325000001", "20260326000001"})
-
 _CREATE_EXTENSION = re.compile(r"CREATE\s+EXTENSION\s+(?:IF\s+NOT\s+EXISTS\s+)?\"?(\w+)\"?", re.IGNORECASE)
 
 
@@ -152,8 +145,7 @@ async def apply_pending(engine: AsyncEngine, skipped: list[str | None] = None) -
     A migration that needs a PostgreSQL extension the server does not provide is
     not applied and stays pending (its version is appended to ``skipped``), so the
     rest of the schema can still be created; it is applied by a later run once the
-    extension is installed.  Stage-1 data-table migrations are baselined, not run
-    (see ``LEGACY_VERSIONS``).
+    extension is installed.
     """
     local_migs = _get_local_migrations()
     applied_this_run = []
@@ -174,20 +166,6 @@ async def apply_pending(engine: AsyncEngine, skipped: list[str | None] = None) -
 
             content = m.filepath.read_text(encoding="utf-8")
             checksum = _get_checksum(content)
-
-            if m.version in LEGACY_VERSIONS:
-                logger.info("Baselining legacy %s__%s (dataset tables are generated from packages).", m.version, m.name)
-                await conn.execute(
-                    text(
-                        """
-                        INSERT INTO _schema_migrations
-                        (version, name, category, status, checksum)
-                        VALUES (:v, :n, :c, 'baselined', :chk)
-                        """
-                    ),
-                    {"v": m.version, "n": m.name, "c": m.category, "chk": checksum},
-                )
-                continue
 
             missing = await _missing_extensions(conn, content)
             if missing:

@@ -124,7 +124,6 @@ def build_catalog(
     schema: str,
     run_id: str,
     cfg: ProfileConfig | None = None,
-    shared_schema: bool = False,
 ) -> BuiltCatalog:
     """Profile the dataset living in ``schema`` and return the catalog.
 
@@ -139,7 +138,7 @@ def build_catalog(
 
     conn.execute(text("SET LOCAL TIME ZONE 'UTC'"))
     live = introspect_schema(conn, schema)
-    drift = detect_drift(pkg, live, shared_schema=shared_schema)
+    drift = detect_drift(pkg, live)
     broken = {i.table for i in drift if i.kind in ("missing_table", "missing_column", "type_mismatch")}
 
     profiles: dict[str, TableProfile] = {}

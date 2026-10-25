@@ -1,4 +1,4 @@
-"""``graphsense dataset ...``: inspect, roll back, drop and adopt datasets."""
+"""``graphsense dataset ...``: inspect, roll back and drop datasets."""
 
 from __future__ import annotations
 
@@ -10,8 +10,6 @@ from sqlalchemy import text
 from src.datasets.errors import PackageError, UnknownDatasetError
 from src.datasets.models import DatasetPackage
 from src.datasets.registry import get_package, list_packages
-from src.ingestion.adopt import adopt_legacy, revert_adoption
-from src.ingestion.report import IngestError
 from src.storage import schema_manager as sm
 from src.storage.engines import dispose_sync_engines, get_owner_sync_engine
 
@@ -32,7 +30,7 @@ def _rows(sql: str, **params):
         return conn.execute(text(sql), params).all()
 
 
-@click.group(name="dataset", help="List, inspect, roll back, drop and adopt datasets.")
+@click.group(name="dataset", help="List, inspect, roll back and drop datasets.")
 def command() -> None:
     pass
 
@@ -70,7 +68,6 @@ def status(dataset_id: str, as_json: bool) -> None:
         "status": row.status if row else "not loaded",
         "generations": gens,
         "active_run_id": str(row.active_run_id) if row and row.active_run_id else None,
-        "compat_views": bool(row.compat_views) if row else False,
         "runs": [
             {"id": str(r.id), "kind": r.kind, "status": r.status, "phase": r.phase,
              "started_at": r.started_at.isoformat() if r.started_at else None,
@@ -119,36 +116,3 @@ def drop(dataset_id: str, yes: bool) -> None:
     finally:
         dispose_sync_engines()
     click.echo(f"{dataset_id}: dropped {', '.join(dropped) or 'nothing (no data)'}")
-
-
-@command.command("adopt-legacy", help="Move a stage-1 database's dataset tables from public into the dataset schema.")
-@click.argument("dataset_id")
-@click.option("--no-compat-views", is_flag=True, help="Do not leave views with the old names in public.")
-@click.option("--if-needed", is_flag=True, help="Do nothing (successfully) when there is nothing to adopt.")
-@click.option("--allow-drift", is_flag=True, help="Adopt even if tables or columns differ from the package.")
-@click.option("--revert", is_flag=True, help="Undo a previous adoption: move the tables back to public.")
-def adopt(dataset_id: str, no_compat_views: bool, if_needed: bool, allow_drift: bool, revert: bool) -> None:
-    pkg = _package(dataset_id)
-    try:
-        if revert:
-            moved = revert_adoption(pkg)
-            click.echo(f"{dataset_id}: moved {len(moved)} table(s) back to public")
-            return
-        report = adopt_legacy(
-            pkg, compat_views=not no_compat_views, if_needed=if_needed, allow_drift=allow_drift
-        )
-    except IngestError as exc:
-        raise click.ClickException(f"[{exc.code}] {exc.message}") from None
-    finally:
-        dispose_sync_engines()
-    if not report.adopted:
-        click.echo(f"{dataset_id}: nothing to adopt ({report.reason})")
-        return
-    click.echo(f"{dataset_id}: adopted {len(report.tables)} table(s), {sum(report.tables.values())} rows")
-    if report.added_columns:
-        click.echo("  added columns: " + ", ".join(report.added_columns))
-    for warning in report.drift_warnings[:10]:
-        click.echo(f"  warning {warning}")
-    if report.compat_views:
-        click.echo("  compatibility views created in public")
-    click.echo("  Next: run `graphsense ingest` to reload the data in canonical form.")

@@ -4,55 +4,28 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-DodgeAI is a graph-based data modeling and query system for SAP Order-to-Cash (O2C) data. It features:
-- A FastAPI backend that exposes graph traversal and data ingestion APIs
-- A React + TypeScript frontend for visualizing entity relationships as an interactive graph
-- PostgreSQL database with pgvector extension for storing and querying relational data
-- Data ingestion pipeline for loading JSONL-formatted SAP data
-- **LLM-powered conversational query interface** using Gemini + pgvector RAG for text-to-SQL
+GraphSense (DodgeAI) turns a relational dataset into an explorable graph and a conversational query interface. The engine is dataset-agnostic: everything specific to a dataset lives in a **dataset package** (YAML under `backend/dataset_packages/<id>/`). The shipped package is `o2c` (SAP Order-to-Cash); `backend/tests/fixtures/packages/toy_library` is a second, unrelated package the tests use to prove the engine names no dataset.
+
+- FastAPI backend: graph traversal, dataset status, Ask (text-to-SQL), operator API
+- React + TypeScript frontend that renders whatever the schema endpoint describes
+- PostgreSQL with pgvector: each dataset in its own schema `ds_<id>`, application tables in `app`
+- `graphsense` CLI for operators: migrations, ingestion, catalog, knowledge, evaluation
 
 ## Architecture
 
 ### Backend Structure (`/backend`)
 
-The backend follows a layered architecture:
-
-- **`src/api/`** - FastAPI routers and request handling
-  - `graph.py` - Endpoints for graph queries (summary, subgraph, flows, trace, full graph, entity listing)
-  - `ingest.py` - Endpoint to trigger background data ingestion
-  - `chat.py` - Chat endpoint (`POST /api/chat`) and training trigger (`POST /api/chat/train`)
-
-- **`src/db/`** - Database layer
-  - `models.py` - SQLAlchemy ORM models (BillingDocumentHeader, BillingDocumentItem, etc.)
-  - `session.py` - Database session and connection management
-  - `engine.py` - SQLAlchemy engine configuration
-  - `migration_runner.py` - Custom Alembic migration wrapper
-
-- **`src/repositories/`** - Data access layer
-  - `graph_repository.py` - Runs graph queries (summary, subgraph, flow, full graph, entities) for the active dataset and shapes the results
-  - `graph_sql.py` - `GraphSqlBuilder`: generates all node/edge SQL from the dataset definition; owns the zero-padding helpers `norm()` / `composite()`
-
-- **`src/domain/`** - Response schemas and domain models
-  - `graph_models.py` - Pydantic models for API responses (`Node`, `Edge`, `GraphSubgraphResponse`, `FlowDefinition`, `FlowListResponse`, etc.)
-  - `graph_schema.py` - Declarative graph model: `NodeTypeDef`, `EdgeTypeDef`, `GraphDataset` (validated on construction: edge endpoints, flows and entity hints must reference registered types)
-  - `graph_registry.py` - `get_dataset()` selects the active dataset via `GRAPH_DATASET` (default `o2c`)
-  - `config.py` - `GraphSettings` (`GRAPH_DATASET`)
-  - `datasets/` - One module per dataset exposing a `DATASET`; `o2c.py` is the SAP Order-to-Cash definition (node types, edge types, flows, entity column hints)
-
-- **`src/ai/`** - LLM-powered chat pipeline (text-to-SQL RAG)
-  - `config.py` - AI settings (Gemini API key, model, embedding model)
-  - `embeddings.py` - pgvector embedding store using Gemini text-embedding-004 (DDL, docs, SQL pairs, data summaries)
-  - `training.py` - Training data: 17 DDL schemas, 7 domain docs, 15 SQL question-answer pairs
-  - `guardrails.py` - Domain restriction: rejects off-topic queries, SQL injection, prompt injection
-  - `chat.py` - Full pipeline: guardrails → RAG retrieval → SQL generation → execution → synthesis (entity-column hints for graph highlighting come from the dataset registry)
-
-- **`src/ingestion/`** - Data loading utilities
-  - `jsonl_loader.py` - JSONL file parsing and database insertion
-  - `schemas.py` - Data schemas for ingestion validation
-
-- **`main.py`** - FastAPI application initialization with CORS and router registration
-
-Database models represent SAP O2C entities (BillingDocumentHeader, BillingDocumentItem, BillingDocumentCancellation, etc.) with relationships tracked via foreign keys.
+- **`dataset_packages/<id>/`** - one package per dataset: `package.yaml`, `tables/*.yaml` (columns, types, roles, `normalize` steps), `graph.yaml` (node types, edge types, flows), `semantics/` (glossary, value sets, vocabulary, examples, suggested questions)
+- **`src/datasets/`** - the package engine (no database needed): loading and validation (`loader.py`, `models.py`, `validate.py`), the registry (`registry.py`: `get_package()`, `PACKAGES_DIR` then the shipped packages), generated DDL (`ddl.py`), value coercion and normalisers (`coerce.py`, `normalizers.py`), `DatasetContext`
+- **`src/domain/`** - `graph_schema.py` (`NodeTypeDef`, `EdgeTypeDef`, `GraphDataset`, validated on construction), `graph_models.py` (API response models), `graph_registry.py` (`get_dataset()`; default from `DEFAULT_DATASET`)
+- **`src/repositories/`** - `graph_sql.py` (`GraphSqlBuilder`: every node/edge SQL statement, generated from the dataset; `composite()` builds multi-column ids) and `graph_repository.py` (runs them and shapes results)
+- **`src/storage/`** - dataset schemas and generations (`schema_manager.py`: staging, atomic swap, rollback, drop), `search_path` scoping (`session.py`, `schema_names.py`), database roles (`roles.py`), run records (`runs.py`)
+- **`src/ingestion/`** - `graphsense ingest`: reads a package's JSONL sources, coerces and normalises rows, loads a staging generation, validates, runs hooks, swaps it live
+- **`src/catalog/`** - the semantic catalog: introspection, drift detection, profiling, stored builds (`app.catalog_*`)
+- **`src/intelligence/`** - the Ask pipeline: scope guardrails and injection checks, hybrid retrieval over `app.knowledge_items`, prompt rendering (`prompts/*.j2`), `sql/guard.py` (sqlglot allowlists, tables limited to the dataset catalog), `sql/executor.py` (read-only role, timeouts, row cap), entity extraction, the evaluation harness (`eval/`)
+- **`src/api/`** - routers: `graph.py`, `chat.py`, `datasets.py`, `catalog.py`, `admin.py` (mounted only with `ADMIN_TOKEN`); `deps.py` resolves the dataset of a request
+- **`src/cli/`** - the `graphsense` command
+- **`migrations/schema/`** - SQL migrations for the `app` schema only. Dataset tables are never created by migrations: ingestion generates them from the package
 
 ### Frontend Structure (`/frontend`)
 
@@ -79,122 +52,94 @@ Data flow: `SchemaProvider` loads schema + summary once; pages fetch their own d
 
 ### Environment Setup
 
-**Backend:**
 ```bash
-cd backend
-python -m venv .venv          # or use uv to manage deps
-source .venv/bin/activate
-uv pip install -e .            # Install from pyproject.toml
+cd backend && uv venv --python 3.12 .venv && uv pip install --python .venv/bin/python -e ".[dev]"
+cd frontend && npm install
+docker-compose up -d           # local PostgreSQL with pgvector (or point DATABASE_DSN at any Postgres)
 ```
 
-**Frontend:**
-```bash
-cd frontend
-npm install
-```
+Copy `backend/.env.example` to `backend/.env`. Only `DATABASE_DSN` is required; a plain `postgresql://` URL is accepted.
 
-**Database:**
-```bash
-docker-compose up -d           # Starts PostgreSQL with pgvector
-```
-
-### Database Migrations
-
-Backend uses Alembic migrations in `/backend/migrations/versions/`.
+### Database and data
 
 ```bash
 cd backend
-python migrate.py status                              # Show pending migrations
-python migrate.py apply                               # Apply all pending migrations
-python migrate.py create --name <description>         # Create a new migration
-python migrate.py baseline --upto <timestamp>         # Mark migrations as applied without executing
+graphsense db migrate                         # create/upgrade the app schema
+graphsense db status                          # migration status
+graphsense ingest o2c --data-root <dir>       # load a dataset into ds_o2c (DATA_ROOT may be set instead)
+graphsense dataset list | status | rollback | drop
+graphsense package lint <id-or-dir>           # validate a package
 ```
+
+Migrations are plain SQL files `V<timestamp>__<name>.sql`; statements are split on semicolons, so comments must not contain any.
 
 ### Running Services
 
-**Backend (FastAPI server):**
 ```bash
-cd backend
-uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+cd backend && uvicorn src.main:app --reload --host 0.0.0.0 --port 8000
+cd frontend && npm run dev
 ```
 
-**Frontend (Vite dev server):**
-```bash
-cd frontend
-npm run dev
-```
-
-The frontend connects to the backend at `http://localhost:8000/api` (override with `VITE_API_BASE_URL`; see `src/lib/api/client.ts`). The backend currently allows all origins (CORS).
+The frontend connects to `http://localhost:8000/api` (override with `VITE_API_BASE_URL`).
 
 ### Testing & Linting
 
-**Backend:**
-- pytest configured in `pyproject.toml` with asyncio mode
-- Install test deps: `uv pip install -e ".[dev]"`; run `pytest` from `/backend` (no database needed)
-- `tests/test_graph_sql_equivalence.py` compares the generated graph SQL to a baseline (`tests/fixtures/graph_sql_baseline.json`); regenerate it only for an intentional graph-model change: `python -m tests.sql_snapshot tests/fixtures/graph_sql_baseline.json`
+**Backend** (from `/backend`):
+- `pytest`: unit tests need no database; PostgreSQL tests run when `TEST_DATABASE_DSN` is set (a server where the test user can create databases)
+- `ruff check src tests scripts`
+- `tests/test_graph_sql_equivalence.py` compares generated graph SQL to `tests/fixtures/graph_sql_baseline.json`; regenerate only for an intentional change: `python -m tests.sql_snapshot tests/fixtures/graph_sql_baseline.json` (toy: add `tests/fixtures/packages/toy_library` and write `graph_sql_baseline_toy_library.json`)
+- `tests/test_toy_package.py` fails if engine code mentions dataset names or business vocabulary
 
 **Frontend:**
 ```bash
-npm run lint                   # ESLint check
-npm run build                  # TypeScript + Vite build
-npm run e2e:screens -- ./e2e/screens   # Playwright screenshots against mocked API routes (see frontend/README.md)
+npm run lint
+npm run build
+npm run e2e:screens -- ./e2e/screens   # Playwright screenshots against mocked API routes
 ```
 
 ## Key Concepts
 
+### Datasets and requests
+
+- A request names its dataset with the `X-GraphSense-Dataset` header or `?dataset=`; otherwise `DEFAULT_DATASET` is used. Unknown ids answer 404
+- A request's transaction runs with `search_path = ds_<id>` and nothing else, so graph SQL uses plain table names and a dataset that is not loaded answers `409 dataset_not_ready`, never another schema's rows
+- Ingestion builds a complete new generation in `ds_<id>__r<run>` and swaps it in atomically; the previous one is kept as `ds_<id>__prev` for rollback
+- Dataset status (`GET /api/datasets/{id}/status`): `empty`, `loading`, `ready`, `failed`
+
+### Graph model rules
+
+- `id_columns`: one column, or several for a composite id rendered as the values joined with `-`, exactly as stored. Values are never rewritten at query time: canonical forms (e.g. item numbers without leading zeros) come from the column's `normalize` steps at ingestion
+- An edge endpoint has one column per id column of the node type it points at, in the same order, normalised the same way (`GraphDataset` and `graphsense package lint` enforce both)
+- `terminal: true` marks shared reference records (parties, catalogue items, addresses): traversal reaches them but does not expand through them unless one is the root
+- `category` is a free-form label for clients; it has no effect on queries
+
 ### Graph API Endpoints
 
-- `GET /api/graph/schema` - Describes the active dataset (no DB access): `domain`, `node_types` (key, label, plural, description, category, accent, icon, is_primary, display_properties), `edge_types` (key, label, source, target, description), `flows`. Counts are not included; join with `/summary`
-- `GET /api/graph/summary` - Returns node/edge counts by entity type
-- `GET /api/graph/subgraph?root_type=SalesOrder&root_id=123&depth=2` - Returns nodes and edges reachable from a root entity (depth 1–5). Traversal reaches shared reference records (node types of category `party` or `master`: customers, products, addresses) but does not expand through them unless one is the root, so a trace follows the document chain rather than fanning out to every other order of the same customer. Every graph endpoint (subgraph, flow, trace, full) fills `Node.properties` (display and other scalar columns of the record, NULLs omitted, dates as ISO strings, decimals as numbers) and, where the type declares a natural name, `Node.label`; `id` is never affected. Details are fetched with one batched query per node type
-- `GET /api/graph/entities/{node_type}?limit=50` - Returns a sample of records of a type: `{id, label}` plus the type's `display_properties` as extra keys (`null` when a record has no value)
-- `GET /api/graph/flows` - Lists all predefined O2C flow definitions (id, label, description, node/edge types)
-- `GET /api/graph/flow?flow_id=full_o2c&limit=50` - Returns a sampled subgraph for a named flow (`sales`, `fulfillment`, `billing`, `financial`, `customer_master`, `full_o2c`)
-- `GET /api/graph/trace?doc_type=Invoice&doc_id=X&depth=4` - Traces the full O2C lifecycle for a document (reuses subgraph traversal at depth 4)
-- `GET /api/graph/full?node_limit=20&type_filter=Customer,Invoice` - Returns a sampled knowledge graph (up to `node_limit` entities per type)
+- `GET /api/graph/schema` - describes the dataset (no DB access): `domain`, `node_types` (key, label, plural, description, category, accent, icon, is_primary, display_properties, value_labels), `edge_types`, `flows`. Join with `/summary` for counts
+- `GET /api/graph/summary` - node/edge counts by type
+- `GET /api/graph/subgraph?root_type=&root_id=&depth=` - records reachable from a root (depth 1-5). Every graph endpoint fills `Node.properties` and, where the type declares a natural name, `Node.label`; details are fetched with one batched query per node type
+- `GET /api/graph/entities/{node_type}?limit=` - sample records: `{id, label}` plus the type's `display_properties`
+- `GET /api/graph/flows`, `GET /api/graph/flow?flow_id=&limit=` - the package's flows and a sampled subgraph for one
+- `GET /api/graph/trace?doc_type=&doc_id=&depth=` - subgraph traversal from a record (default depth 4)
+- `GET /api/graph/full?node_limit=&type_filter=` - sampled graph, up to `node_limit` records per type
 
-### Conversational Query (Chat) API
+### Ask (`POST /api/chat`)
 
-- `POST /api/chat` - Accepts `{ message }`, returns `{ answer, sql, data, entities, graph_nodes, error, row_count, summary }`. `error` is `null` or a stable code: `guardrail`, `sql_generation_failed`, `sql_execution_error: <detail>`, `not_configured` (no `GEMINI_API_KEY`) or `internal_error` (details are logged, not returned)
-- `POST /api/chat/train` - Triggers (re-)training of the RAG pipeline
-
-**Pipeline**: Guardrails → pgvector RAG retrieval (DDL + docs + SQL pairs + data summaries) → Gemini SQL generation → PostgreSQL execution → Gemini response synthesis
-
-**Architecture**:
-- **pgvector** stores embeddings (Gemini text-embedding-004, 768 dims) for 17 DDL schemas, 7 domain docs, 15 SQL question-answer pairs, and data summaries derived from ingested data
-- **Google Gemini** (`gemini-2.0-flash`) generates SQL from RAG context and synthesizes natural language answers
-- **Guardrails** reject off-topic queries, SQL injection, and prompt injection attempts
-- Entities extracted from query results are highlighted on the graph visualization
-
-### Data Ingestion
-
-- `POST /api/ingest` - Triggers background ingestion from JSONL files in `data/sap-o2c-data/`
-- Ingestion runs asynchronously and populates database tables via `ingestion/jsonl_loader.py`
-
-### Database Schema
-
-SAP O2C entities are modeled as database tables with foreign key relationships:
-- BillingDocumentHeader/Item/Cancellation
-- SalesOrderHeader/Item
-- MaterialInfo
-- PartyInfo
-- And others (see `src/db/models.py`)
-
-The graph API traverses these relationships to build subgraphs for visualization.
+Accepts `{ message }`, returns `{ answer, sql, data, entities, graph_nodes, error, row_count, summary }`. Pipeline: scope and injection guardrails, retrieval over the dataset's knowledge items, SQL generation, the SQL guard, execution on the read-only role, synthesis. `error` is `null` or a stable code (`guardrail`, `sql_generation_failed`, `sql_rejected`, `sql_execution_error: <category>`, `not_configured`, `dataset_not_ready`, `rate_limited`, `provider_unavailable`, `internal_error`). Knowledge is refreshed after each load by the post-ingest hooks or with `graphsense knowledge refresh <id>`; `POST /api/chat/train` and `POST /api/ingest` answer 410.
 
 ## Common Tasks
 
-**Adding a new API endpoint:**
-1. Create handler in `src/api/` (or add to existing router file)
-2. Add repository method in `src/repositories/graph_repository.py` if querying data (generate per-type SQL from the dataset via `GraphSqlBuilder`, never hand-write it per node/edge type)
-3. Define response schema in `src/domain/graph_models.py`
-4. Register router in `src/main.py` if new file
+**Adding a new dataset:**
+1. Create `backend/dataset_packages/<id>/` (or a directory under `PACKAGES_DIR`) with `package.yaml`, one `tables/<table>.yaml` per table, `graph.yaml` and `semantics/`
+2. Declare per column its type, `role` and any `normalize` steps (e.g. `strip_leading_zeros` for item numbers that some sources pad)
+3. Run `graphsense package lint <id>` until it has no errors, then `graphsense ingest <id> --data-root <dir>`
+4. No engine code changes: graph SQL, catalog, prompts, guardrail vocabulary and evaluations all derive from the package
 
-**Adding a new database model:**
-1. Define SQLAlchemy class in `src/db/models.py`
-2. Create migration: `python migrate.py create --name <desc>`
-3. Update migration file in `/backend/migrations/versions/`
-4. Run migrations: `python migrate.py apply`
+**Adding a node type, edge type or flow:** edit the package's `graph.yaml`. Edge order is the order of the UNION ALL blocks; node order is the order of keys in `/api/graph/summary`; list a flow's `node_types` in process order (the UI uses it for steps and layout). Validation fails on unregistered types, unknown columns, endpoint/id column-count mismatches and normalisation mismatches.
+
+**Adding an API endpoint:** handler in `src/api/`, repository method in `graph_repository.py` (SQL from `GraphSqlBuilder`, never hand-written per type), response model in `graph_models.py`, router registered in `src/main.py`. Take the dataset from `get_dataset_context` / `get_dataset_db`.
+
+**Changing the app schema:** add a new `migrations/schema/V<timestamp>__<name>.sql` (later timestamp than the existing ones) and update `src/storage/app_tables.py` to match.
 
 **Updating frontend visualization:**
 - Graph rendering lives in `src/components/graph/GraphCanvas.tsx` (Cytoscape, no wrapper library); node/edge styling is in `graphStyle.ts`, layouts in `layouts.ts`
@@ -202,25 +147,9 @@ The graph API traverses these relationships to build subgraphs for visualization
 - Node/edge data is a `GraphData` (`lib/api/schemas.ts`); feed it to `GraphCanvas` and the Explore, Flow and Trace screens all work the same way
 - Never hard-code a record type name or colour: use `useSchema()` (`colorForType`, `typeLabel`, `edgeLabel`)
 
-**Adding a new flow:**
-1. Add a `FlowDefinition` to `FLOWS` in the dataset module (`backend/src/domain/datasets/o2c.py` for O2C); node and edge types must already be registered
-2. `/api/graph/flows`, `/api/graph/flow` and `/api/graph/schema` pick it up automatically, and so does the Flows page (`src/features/flows/`). List `node_types` in process order: the UI uses that order for steps and layout
-
-**Adding a node or edge type:**
-1. Add a `NodeTypeDef` / `EdgeTypeDef` to the dataset module. Edge order is the order of the UNION ALL blocks; node order is the order of keys in `/api/graph/summary`
-2. `GraphDataset` validation and `pytest` fail if an edge endpoint or flow references an unregistered type or a column is missing from `src/db/models.py`
-3. No repository SQL changes are needed
-
-**Adding a new dataset:**
-1. Create `backend/src/domain/datasets/<name>.py` exposing `DATASET = GraphDataset(id="<name>", ...)` (the id must equal the module name)
-2. Per node type: presentation metadata (`label`, `plural`, `description`, `category`, `accent`, `icon`, `is_primary`, `display_properties`) plus the query mapping (`table`, `id_columns`, `count_distinct`) and record details (`property_columns` for extra scalar columns, `label_column` or `label_lookup` for a natural name; all validated identifiers, values bound as parameters). Per edge type: `key`, `label` (verb phrase), `source`, `target`, `description`, plus `table`, `alias`, `source_columns`, `target_columns`, `not_null`, `distinct`. Two `*_columns` entries mean a composite `doc-item` id with the item number zero-stripped
-3. Add `flows` and optional `entity_column_hints`, then set `GRAPH_DATASET=<name>`
-4. Still dataset-specific and not driven by the registry: RAG training data (`src/ai/training.py`), guardrail keywords/messages (`src/ai/guardrails.py`), the synthesis prompt's entity mapping (`src/ai/chat.py`), ingestion (`src/ingestion/`) and the ORM models
-
 ## Important Notes
 
-- Backend uses async SQLAlchemy (`sqlalchemy.ext.asyncio`) — always use `await` with database queries
-- Frontend state management: Zustand for client state, React Query for server state
-- Environment variables for backend: see `/backend/.env.example`
-- Migrations are tracked in `/backend/migrations/` — review migration files before running `apply`
-- CORS currently allows all origins (`allow_origins=["*"]` in `src/main.py`); restrict it for production
+- Backend uses async SQLAlchemy - always `await` database calls
+- Environment variables: see `backend/.env.example`
+- In production (`GRAPHSENSE_ENV=production`) `READONLY_DATABASE_DSN` is required and a CORS wildcard is ignored; `graphsense db provision-roles` creates the roles
+- The frontend currently never sends `X-GraphSense-Dataset`, so it shows the server's default dataset

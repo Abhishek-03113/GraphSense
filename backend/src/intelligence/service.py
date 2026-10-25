@@ -72,7 +72,7 @@ MAX_REFUSAL_CHARS = 240
 
 
 class SqlExecutor(Protocol):
-    async def execute(self, schema_name: str | None, validated: ValidatedSql) -> ExecutionResult: ...
+    async def execute(self, schema_name: str, validated: ValidatedSql) -> ExecutionResult: ...
 
 
 @dataclass

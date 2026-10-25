@@ -49,7 +49,7 @@ def grant_read(conn: Connection, schema: str, roles: list[str] | None = None) ->
 
 
 def _checked(schema: str) -> str:
-    if not (is_dataset_schema(schema) or schema in ("public", "app")):
+    if not (is_dataset_schema(schema) or schema == "app"):
         raise ValueError("unexpected schema name")
     return schema
 
@@ -72,13 +72,8 @@ def provision_roles(
     app_password: str | None = None,
     readonly_password: str | None = None,
     statement_timeout_ms: int = 5000,
-    legacy_tables: tuple[str, ...] = (),
 ) -> RolesReport:
-    """Create the application roles and grant them what they need.  Safe to repeat.
-
-    ``legacy_tables`` names dataset tables that may still sit in the ``public``
-    schema (a database not yet adopted); the roles get SELECT on those.
-    """
+    """Create the application roles and grant them what they need.  Safe to repeat."""
     report = RolesReport()
     passwords = {APP_ROLE: app_password, READONLY_ROLE: readonly_password}
     with engine.begin() as conn:
@@ -119,12 +114,6 @@ def provision_roles(
             conn.execute(text(f'REVOKE ALL ON SCHEMA app FROM "{READONLY_ROLE}"'))
         else:
             report.notes.append("schema app does not exist yet: run `graphsense db migrate`, then this command again.")
-
-        for table in legacy_tables:
-            exists = conn.execute(text("SELECT to_regclass(:n) IS NOT NULL"), {"n": f"public.{table}"}).scalar_one()
-            if exists:
-                for role in ROLES:
-                    _exec_format(conn, "GRANT SELECT ON public.%I TO %I", table, role)
 
         # Dataset schemas that exist now (new generations are granted when they are staged).
         schemas = [

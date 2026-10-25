@@ -24,6 +24,6 @@ ENV PYTHONUNBUFFERED=1 \
 # Hosts may set PORT; scripts/start.sh defaults to 8000
 EXPOSE 8000
 
-# Migrate, adopt a stage-1 database if present, then serve (see scripts/start.sh).
+# Migrate, then serve (see scripts/start.sh).
 # Loading data is an operator step: `graphsense ingest <dataset>`.
 CMD ["sh", "scripts/start.sh"]

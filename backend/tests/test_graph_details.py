@@ -91,10 +91,29 @@ def test_details_query_for_a_plain_id_is_one_batched_statement():
 
 def test_details_query_for_a_composite_id_narrows_on_the_document_first():
     sql, params = SQL.details_query(node("SalesOrderItem"), ["740505-10", "740505-20", "740583-30"])
-    assert "t.sales_order = ANY(CAST(:docs AS text[]))" in sql
-    assert "REGEXP_REPLACE(t.sales_order_item::text, '^0+', '')" in sql
+    assert "t.sales_order::text = ANY(CAST(:docs AS text[]))" in sql
+    assert "(t.sales_order::text || '-' || t.sales_order_item::text)" in sql
+    assert "REGEXP_REPLACE" not in sql
     assert params["docs"] == ["740505", "740583"]
     assert params["ids"] == ["740505-10", "740505-20", "740583-30"]
+
+
+def test_ids_of_three_columns_are_joined_in_order_and_narrowed_on_the_first():
+    line = NodeTypeDef(
+        key="Line", label="Line", plural="Lines", description="x",
+        table="lines", id_columns=("order_no", "item_no", "line_no"),
+    )
+    assert SQL.id_expression(line, "t") == "(t.order_no::text || '-' || t.item_no::text || '-' || t.line_no::text)"
+    _, params = SQL.details_query(line, ["A-1-2"])
+    assert params["docs"] == ["A"]
+
+
+def test_leading_values_allow_the_separator_inside_a_part():
+    item = node("SalesOrderItem")
+    # "SO-2026-7" could be ("SO", "2026-7") or ("SO-2026", "7"): both are tried, the exact id decides
+    assert SQL.leading_values(item, "SO-2026-7") == ["SO", "SO-2026"]
+    assert SQL.leading_values(item, "740505-10") == ["740505"]
+    assert SQL.leading_values(node("SalesOrder"), "740505") == []
 
 
 def test_details_query_keeps_one_row_per_id():

@@ -181,31 +181,6 @@ def drop_orphan_staging(dataset_id: str, *, keep: str | None = None, engine: Eng
 
 
 # ---------------------------------------------------------------------------
-# Compatibility views (stage-1 images read the dataset tables from ``public``)
-# ---------------------------------------------------------------------------
-
-
-def drop_compat_views(conn: Connection, tables: list[str]) -> None:
-    """Drop ``public.<table>`` where it is a view.  A real table of that name is never touched."""
-    for table in tables:
-        kind = conn.execute(
-            text("SELECT c.relkind FROM pg_class c WHERE c.oid = to_regclass(:n)"), {"n": f"public.{quote_ident(table)}"}
-        ).scalar()
-        if kind == "v":
-            conn.exec_driver_sql(f"DROP VIEW public.{quote_ident(table)}")
-
-
-def create_compat_views(conn: Connection, schema: str, tables: list[str]) -> None:
-    roles = existing_roles(conn)
-    for table in tables:
-        conn.exec_driver_sql(
-            f"CREATE VIEW public.{quote_ident(table)} AS SELECT * FROM {_q(schema)}.{quote_ident(table)}"
-        )
-        for role in roles:
-            conn.exec_driver_sql(f'GRANT SELECT ON public.{quote_ident(table)} TO "{role}"')
-
-
-# ---------------------------------------------------------------------------
 # Swap, rollback, drop
 # ---------------------------------------------------------------------------
 
@@ -222,7 +197,7 @@ def _dataset_row(conn: Connection, dataset_id: str):
         return None
     return conn.execute(
         text(
-            "SELECT compat_views, active_run_id, previous_run_id, status FROM app.datasets WHERE id = :id FOR UPDATE"
+            "SELECT active_run_id, previous_run_id, status FROM app.datasets WHERE id = :id FOR UPDATE"
         ),
         {"id": dataset_id},
     ).first()
@@ -252,17 +227,12 @@ def swap(
         if not schema_exists(conn, staging):
             raise SchemaError("staging_missing", "The new generation is missing.")
         row = _dataset_row(conn, dataset_id)
-        compat = bool(row and row.compat_views)
         live_exists = schema_exists(conn, live)
 
-        if compat:
-            drop_compat_views(conn, tables_in(conn, live) if live_exists else [])
         conn.exec_driver_sql(f"DROP SCHEMA IF EXISTS {_q(prev)} CASCADE")
         if live_exists:
             conn.exec_driver_sql(f"ALTER SCHEMA {_q(live)} RENAME TO {_q(prev)}")
         conn.exec_driver_sql(f"ALTER SCHEMA {_q(staging)} RENAME TO {_q(live)}")
-        if compat:
-            create_compat_views(conn, live, tables_in(conn, live))
 
         if has_app_schema(conn):
             _upsert_dataset(
@@ -282,15 +252,14 @@ def _upsert_dataset(
     previous_run_id: str | None,
     status: str,
     keep_previous: bool = False,
-    compat_views: bool | None = None,
 ) -> None:
     conn.execute(
         text(
             """
             INSERT INTO app.datasets
                 (id, package_id, package_version, package_hash, schema_name, status,
-                 active_run_id, previous_run_id, compat_views)
-            VALUES (:id, :pid, :ver, :hash, :schema, :status, :run, :prev, COALESCE(:compat, false))
+                 active_run_id, previous_run_id)
+            VALUES (:id, :pid, :ver, :hash, :schema, :status, :run, :prev)
             ON CONFLICT (id) DO UPDATE SET
                 package_id = EXCLUDED.package_id,
                 package_version = EXCLUDED.package_version,
@@ -299,7 +268,6 @@ def _upsert_dataset(
                 status = EXCLUDED.status,
                 active_run_id = COALESCE(EXCLUDED.active_run_id, app.datasets.active_run_id),
                 previous_run_id = CASE WHEN :keep THEN app.datasets.previous_run_id ELSE EXCLUDED.previous_run_id END,
-                compat_views = COALESCE(:compat, app.datasets.compat_views),
                 updated_at = now()
             """
         ),
@@ -313,19 +281,7 @@ def _upsert_dataset(
             "run": run_id,
             "prev": previous_run_id,
             "keep": keep_previous,
-            "compat": compat_views,
         },
-    )
-
-
-def register_dataset(
-    conn: Connection, dataset_id: str, package: DatasetPackage, *, status: str, run_id: str | None,
-    compat_views: bool,
-) -> None:
-    """Create or update the dataset record inside the caller's transaction (used by adoption)."""
-    _upsert_dataset(
-        conn, dataset_id, package=package, run_id=run_id, previous_run_id=None, status=status,
-        compat_views=compat_views,
     )
 
 
@@ -341,27 +297,17 @@ def rollback(dataset_id: str, *, engine: Engine | None = None) -> SwapResult:
         if not schema_exists(conn, prev):
             raise SchemaError("no_previous_generation", "There is no previous generation to roll back to.")
         row = _dataset_row(conn, dataset_id)
-        compat = bool(row and row.compat_views)
         live_exists = schema_exists(conn, live)
 
-        if compat:
-            drop_compat_views(conn, tables_in(conn, live) if live_exists else [])
         if live_exists:
             conn.exec_driver_sql(f"ALTER SCHEMA {_q(live)} RENAME TO {_q(tmp)}")
             conn.exec_driver_sql(f"ALTER SCHEMA {_q(prev)} RENAME TO {_q(live)}")
             conn.exec_driver_sql(f"ALTER SCHEMA {_q(tmp)} RENAME TO {_q(prev)}")
         else:
             conn.exec_driver_sql(f"ALTER SCHEMA {_q(prev)} RENAME TO {_q(live)}")
-        if compat:
-            create_compat_views(conn, live, tables_in(conn, live))
 
         if row is not None:
             new_active = row.previous_run_id
-            kind = None
-            if new_active:
-                kind = conn.execute(
-                    text("SELECT kind FROM app.ingestion_runs WHERE id = :r"), {"r": str(new_active)}
-                ).scalar()
             conn.execute(
                 text(
                     "UPDATE app.datasets SET active_run_id = :a, previous_run_id = :p, status = :s, "
@@ -370,7 +316,7 @@ def rollback(dataset_id: str, *, engine: Engine | None = None) -> SwapResult:
                 {
                     "a": str(new_active) if new_active else None,
                     "p": str(row.active_run_id) if row.active_run_id else None,
-                    "s": "legacy" if kind == "adopt" else "ready",
+                    "s": "ready",
                     "id": dataset_id,
                 },
             )
@@ -383,10 +329,8 @@ def drop_dataset(dataset_id: str, *, engine: Engine | None = None) -> list[str]:
     dropped: list[str] = []
     with _engine(engine).begin() as conn:
         _begin_exclusive(conn, dataset_id)
-        row = _dataset_row(conn, dataset_id)
+        _dataset_row(conn, dataset_id)  # locks the record for the rest of the transaction
         if schema_exists(conn, live):
-            if row and row.compat_views:
-                drop_compat_views(conn, tables_in(conn, live))
             conn.exec_driver_sql(f"DROP SCHEMA {_q(live)} CASCADE")
             dropped.append(live)
         if schema_exists(conn, prev):

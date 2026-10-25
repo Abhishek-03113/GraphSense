@@ -45,7 +45,11 @@ def staging_prefix(dataset_id: str) -> str:
 
 
 def search_path_for(schema: str) -> str:
-    """Value of ``search_path`` that reads ``schema``, falling back to ``public`` (legacy tables)."""
+    """Value of ``search_path`` that reads ``schema`` and nothing else.
+
+    No other schema is on the path, so a table missing from a dataset can never
+    resolve to a table of the same name somewhere else.
+    """
     if not is_dataset_schema(schema):
         raise ValueError("invalid schema name")
-    return f"{schema}, public"
+    return schema

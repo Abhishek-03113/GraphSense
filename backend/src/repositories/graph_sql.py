@@ -1,8 +1,8 @@
 """SQL generation for a ``GraphDataset``.
 
 Turns the declarative node/edge definitions into the SQL the repository runs.
-All composite ids ("doc-item") go through ``composite()`` so cross-document
-references match regardless of zero-padding differences.
+An id made of several columns is written by ``composite()``, so a node's own id
+and every edge endpoint that refers to it are built the same way.
 """
 
 from __future__ import annotations
@@ -15,19 +15,19 @@ from src.domain.graph_schema import EdgeTypeDef, GraphDataset, NodeTypeDef
 EDGE_COLUMNS = "source_id, source_type, target_id, target_type, type"
 
 
-# SQL helper: normalize an item-number column by stripping leading zeros.
-# Cross-document FK references use short numbers (e.g. '10') while source
-# tables use zero-padded numbers (e.g. '000010').  Wrapping every item
-# column with norm() produces a canonical composite ID that matches
-# regardless of which table the value originates from.
-def norm(col: str) -> str:
-    """Returns a SQL expression that strips leading zeros from *col*."""
-    return f"REGEXP_REPLACE({col}::text, '^0+', '')"
+# Joins the parts of a composite id: ``<first>-<second>[-<third>...]``.
+ID_SEPARATOR = "-"
 
 
-def composite(doc_col: str, item_col: str) -> str:
-    """Returns a SQL expression for a normalized composite ID: 'doc-item'."""
-    return f"({doc_col}::text || '-' || {norm(item_col)})"
+def composite(columns: Sequence[str]) -> str:
+    """SQL expression for an id made of several columns, joined with ``ID_SEPARATOR``.
+
+    Values are used exactly as stored.  Making both sides of a reference agree
+    (e.g. item numbers without leading zeros) is the package's job: each column
+    declares its ``normalize`` steps and ingestion applies them.
+    """
+    sep = f" || '{ID_SEPARATOR}' || "
+    return "(" + sep.join(f"{col}::text" for col in columns) + ")"
 
 
 def edge_id(edge: EdgeTypeDef) -> str:
@@ -49,7 +49,7 @@ class GraphSqlBuilder:
     def _endpoint(alias: str, columns: Sequence[str]) -> str:
         if len(columns) == 1:
             return f"{alias}.{columns[0]}"
-        return composite(f"{alias}.{columns[0]}", f"{alias}.{columns[1]}")
+        return composite([f"{alias}.{col}" for col in columns])
 
     def edge_select(self, edge: EdgeTypeDef) -> str:
         """One edge definition as a SELECT yielding ``EDGE_COLUMNS``."""
@@ -115,8 +115,7 @@ class GraphSqlBuilder:
         prefix = f"{alias}." if alias else ""
         if len(node.id_columns) == 1:
             return f"{prefix}{node.id_columns[0]}"
-        doc, item = node.id_columns
-        return f"{prefix}{doc} || '-' || {norm(prefix + item)}"
+        return composite([f"{prefix}{col}" for col in node.id_columns])
 
     @staticmethod
     def count_query(node: NodeTypeDef) -> str:
@@ -143,11 +142,18 @@ class GraphSqlBuilder:
     DETAIL_LABEL = "_gs_label"
 
     @staticmethod
-    def split_id(node: NodeTypeDef, node_id: str) -> str | None:
-        """The document part of a composite ``doc-item`` id (None for plain ids)."""
+    def leading_values(node: NodeTypeDef, node_id: str) -> list[str]:
+        """Values the first id column can hold for the composite id ``node_id`` (empty for plain ids).
+
+        A part may itself contain ``ID_SEPARATOR``, so the id does not say where
+        the first part ends: every split that leaves a part for each remaining
+        column is a candidate.  They only narrow the lookup; the exact id check follows.
+        """
         if len(node.id_columns) == 1:
-            return None
-        return node_id.rsplit("-", 1)[0]
+            return []
+        pieces = node_id.split(ID_SEPARATOR)
+        last = len(pieces) - (len(node.id_columns) - 1)
+        return [ID_SEPARATOR.join(pieces[:end]) for end in range(1, last + 1)]
 
     def details_query(self, node: NodeTypeDef, node_ids: Sequence[str]) -> tuple[str, dict]:
         """One statement fetching properties and label for many records of a type.
@@ -177,10 +183,10 @@ class GraphSqlBuilder:
             )
 
         where = f"{id_expr} = ANY(CAST(:ids AS text[]))"
-        if len(node.id_columns) == 2:
-            # Narrow on the indexed document column first; the exact id check follows.
-            where = f"{alias}.{node.id_columns[0]} = ANY(CAST(:docs AS text[])) AND {where}"
-            params["docs"] = sorted({self.split_id(node, i) or "" for i in node_ids})
+        if len(node.id_columns) > 1:
+            # Narrow on the indexed first column; the exact id check follows.
+            where = f"{alias}.{node.id_columns[0]}::text = ANY(CAST(:docs AS text[])) AND {where}"
+            params["docs"] = sorted({v for i in node_ids for v in self.leading_values(node, i)})
 
         order = [self.DETAIL_ID] + [f"{alias}.{col}" for col in node.detail_columns]
         return (

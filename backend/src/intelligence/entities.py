@@ -7,8 +7,8 @@ definition, so the ids produced here are exactly the ids the graph API serves:
 * a column that is the single id column of a node type (``books.isbn`` -> Book);
 * an endpoint column of an edge (``loans.member_id`` is the Member side of BORROWED);
 * a column named by ``entity_refs`` in the package;
-* a composite id (document + item): when both columns come from the same row of
-  the same table, the id is ``<doc>-<item without leading zeros>`` as in the graph SQL;
+* a composite id: when every one of its columns comes from the same row of the
+  same table, the id is the values joined with ``ID_SEPARATOR``, as in the graph SQL;
 * as a last resort, for an expression that is neither an aggregate nor a constant, the
   package's ``entity_column_hints`` (column-name substrings).
 
@@ -18,20 +18,13 @@ alias such as ``AS book_id`` does not matter and ``COUNT(*) AS book_count`` is n
 
 from __future__ import annotations
 
-import re
 from collections.abc import Sequence
 from typing import Any
 
 from src.datasets.models import DatasetPackage
 from src.intelligence.models import EntityRef, GraphNodeRef, Projection
+from src.repositories.graph_sql import ID_SEPARATOR
 from src.utils.serialization import json_value
-
-_LEADING_ZEROS = re.compile(r"^0+")
-
-
-def graph_item_number(value: str) -> str:
-    """The item part of a composite id, exactly as the graph SQL writes it (``norm()`` there)."""
-    return _LEADING_ZEROS.sub("", value)
 
 
 def _text(value: Any) -> str | None:
@@ -48,7 +41,8 @@ class EntityExtractor:
     def __init__(self, package: DatasetPackage) -> None:
         dataset = package.graph_dataset()
         self._single: dict[tuple[str, str], str] = {}
-        self._composite: dict[tuple[str, str, str], str] = {}
+        # (table, id columns in order) -> node type
+        self._composite: dict[tuple[str, tuple[str, ...]], str] = {}
         self._hints = dataset.entity_column_hints
 
         def put_single(table: str, column: str, node_type: str) -> None:
@@ -59,7 +53,7 @@ class EntityExtractor:
             if len(node.id_columns) == 1:
                 put_single(node.table, node.id_columns[0], node.key)
             else:
-                self._composite.setdefault((node.table, node.id_columns[0], node.id_columns[1]), node.key)
+                self._composite.setdefault((node.table, node.id_columns), node.key)
         for ref in dataset.entity_refs:
             put_single(ref.table, ref.column, ref.node_type)
         for edge in dataset.edge_types:
@@ -67,7 +61,7 @@ class EntityExtractor:
                 if len(columns) == 1:
                     put_single(edge.table, columns[0], node_type)
                 else:
-                    self._composite.setdefault((edge.table, columns[0], columns[1]), node_type)
+                    self._composite.setdefault((edge.table, columns), node_type)
 
     @property
     def node_types(self) -> frozenset[str]:
@@ -107,11 +101,11 @@ class EntityExtractor:
                     if needle in lowered:
                         fallback.append((i, node_type))
                         break
-        composites: list[tuple[int, int, str]] = []
+        composites: list[tuple[tuple[int, ...], str]] = []
         for columns in by_instance.values():
-            for (table, doc, item), node_type in self._composite.items():
-                if (table, doc) in columns and (table, item) in columns:
-                    composites.append((columns[(table, doc)], columns[(table, item)], node_type))
+            for (table, parts), node_type in self._composite.items():
+                if all((table, part) in columns for part in parts):
+                    composites.append((tuple(columns[(table, part)] for part in parts), node_type))
 
         def add(node_type: str, value: str | None) -> None:
             if value is None or len(found) >= max_entities:
@@ -123,11 +117,11 @@ class EntityExtractor:
         for row in rows[:max_rows]:
             for i, node_type in singles:
                 add(node_type, _text(row[i]) if i < len(row) else None)
-            for doc_i, item_i, node_type in composites:
-                if doc_i < len(row) and item_i < len(row):
-                    doc, item = _text(row[doc_i]), _text(row[item_i])
-                    if doc is not None and item is not None:
-                        add(node_type, f"{doc}-{graph_item_number(item)}")
+            for indexes, node_type in composites:
+                if all(i < len(row) for i in indexes):
+                    values = [_text(row[i]) for i in indexes]
+                    if all(v is not None for v in values):
+                        add(node_type, ID_SEPARATOR.join(values))
             for i, node_type in fallback:
                 add(node_type, _text(row[i]) if i < len(row) else None)
             if len(found) >= max_entities:

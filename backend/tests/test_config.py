@@ -44,10 +44,10 @@ def test_database_url_is_an_alias_and_gets_the_asyncpg_driver(monkeypatch):
     assert str(Settings(_env_file=None).DATABASE_DSN).startswith("postgresql+asyncpg://")
 
 
-def test_default_dataset_accepts_the_old_name(monkeypatch):
+def test_default_dataset_is_read_from_its_one_name(monkeypatch):
     assert Settings(_env_file=None).DEFAULT_DATASET == "o2c"
-    monkeypatch.setenv("GRAPH_DATASET", "toy")
-    assert Settings(_env_file=None).DEFAULT_DATASET == "toy"
+    monkeypatch.setenv("GRAPH_DATASET", "toy")  # the retired name is ignored
+    assert Settings(_env_file=None).DEFAULT_DATASET == "o2c"
     monkeypatch.setenv("DEFAULT_DATASET", "other")
     assert Settings(_env_file=None).DEFAULT_DATASET == "other"
 

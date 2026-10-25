@@ -8,7 +8,7 @@ migrations and keep their own definitions.
 
 from __future__ import annotations
 
-from sqlalchemy import BigInteger, Boolean, Column, DateTime, MetaData, Table, Text
+from sqlalchemy import BigInteger, Column, DateTime, MetaData, Table, Text
 from sqlalchemy.dialects.postgresql import JSONB, UUID
 
 APP_SCHEMA = "app"
@@ -26,7 +26,6 @@ datasets = Table(
     Column("status", Text, nullable=False),
     Column("active_run_id", UUID(as_uuid=False)),
     Column("previous_run_id", UUID(as_uuid=False)),
-    Column("compat_views", Boolean, nullable=False),
     Column("created_at", DateTime(timezone=True)),
     Column("updated_at", DateTime(timezone=True)),
 )

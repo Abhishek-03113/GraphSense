@@ -52,8 +52,6 @@ class GraphEntityResponse(BaseModel):
 # GET /api/graph/schema — dataset description for clients
 # ---------------------------------------------------------------------------
 
-NodeCategory = Literal["party", "document", "item", "master", "finance", "other"]
-
 AccentName = Literal[
     "red", "orange", "yellow", "green", "mint", "teal", "cyan",
     "blue", "indigo", "purple", "pink", "brown", "gray",
@@ -76,7 +74,8 @@ class SchemaNodeType(BaseModel):
     label: str
     plural: str
     description: str
-    category: NodeCategory
+    # Free-form grouping label chosen by the dataset package.
+    category: str
     accent: AccentName | None = None
     icon: str | None = None
     is_primary: bool

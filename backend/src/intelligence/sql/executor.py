@@ -66,13 +66,11 @@ _CATEGORY_BY_STATE: dict[str, ExecutionCategory] = {
 }
 
 
-def search_path_for(schema_name: str | None) -> str:
-    """The ``search_path`` for generated SQL: the dataset schema, then ``public``.
+def search_path_for(schema_name: str) -> str:
+    """The ``search_path`` for generated SQL: the dataset schema only.
 
     The storage layer owns the format, so the executor and the graph sessions always agree.
     """
-    if schema_name is None:
-        return "public"
     return storage_search_path(schema_name)
 
 
@@ -167,9 +165,9 @@ class ReadOnlyExecutor:
 
     # --- execution --------------------------------------------------------
 
-    async def execute(self, schema_name: str | None, validated: ValidatedSql) -> ExecutionResult:
+    async def execute(self, schema_name: str, validated: ValidatedSql) -> ExecutionResult:
         """Run the query.  Raises :class:`ExecutionError`."""
-        if schema_name is not None and not is_dataset_schema(schema_name):
+        if not is_dataset_schema(schema_name):
             raise ExecutionError("other", "invalid schema name")
         search_path = search_path_for(schema_name)
         timeout_ms = self.settings.SQL_STATEMENT_TIMEOUT_MS

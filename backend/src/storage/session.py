@@ -1,10 +1,10 @@
 """Dataset-scoped database sessions.
 
 Graph SQL names tables without a schema.  A request reads the right dataset
-because its transaction runs with ``search_path = ds_<id>, public``
+because its transaction runs with ``search_path = ds_<id>``
 (``set_config(..., true)`` is transaction-local, so a pooled connection never
-carries it to the next request).  ``public`` stays on the path so a database
-that still keeps the dataset tables there (not adopted yet) works unchanged.
+carries it to the next request).  Nothing else is on the path: a dataset that
+is not loaded yet answers "relation does not exist", never another dataset's rows.
 
 The path names a schema, not an object: when a load swaps a new generation in,
 the same name resolves to the new tables on the next statement.
@@ -28,8 +28,6 @@ async def use_dataset(session: AsyncSession, ctx: DatasetContext) -> AsyncSessio
     The path is applied whenever a transaction begins, so a request that never
     queries (for example one answered 404) never opens a connection for it.
     """
-    if not ctx.schema_name:
-        return session
     params = {"path": search_path_for(ctx.schema_name)}
     sync_session = getattr(session, "sync_session", None)
     if sync_session is None:  # a stand-in session (tests): apply it right away

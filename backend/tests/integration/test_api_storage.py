@@ -200,7 +200,7 @@ def test_provisioned_roles_have_the_intended_privileges(db, toy_root):
 
     ingest("toy_library", IngestOptions(data_root=toy_root))
     report = provision_roles(
-        get_owner_sync_engine(), app_password="app-pw", readonly_password="ro-pw", legacy_tables=("authors",)
+        get_owner_sync_engine(), app_password="app-pw", readonly_password="ro-pw"
     )
     assert set(report.created) <= {"graphsense_app", "graphsense_ro"}
     # provisioning is repeatable
