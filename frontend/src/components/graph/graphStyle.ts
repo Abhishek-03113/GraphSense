@@ -1,4 +1,4 @@
-import type { StylesheetJsonBlock } from 'cytoscape';
+import type { NodeSingular, StylesheetJsonBlock } from 'cytoscape';
 import { PALETTE_SLOTS } from '../../lib/schema/types';
 import type { ThemeColors } from './useThemeColors';
 
@@ -28,9 +28,11 @@ export function buildStylesheet(colors: ThemeColors, labelsAlways: boolean, redu
         'font-family': FONT,
         'font-size': 11,
         'font-weight': 500,
-        'text-valign': 'bottom',
+        // The label's centre sits at an offset `placeLabels` picks: the freest side of the record.
+        'text-valign': 'center',
         'text-halign': 'center',
-        'text-margin-y': 5,
+        'text-margin-x': (node: NodeSingular) => Number(node.data('lx') ?? 0),
+        'text-margin-y': (node: NodeSingular) => Number(node.data('ly') ?? 0),
         'text-wrap': 'ellipsis',
         'text-max-width': '96px',
         'text-background-color': colors.surface,
@@ -75,11 +77,13 @@ export function buildStylesheet(colors: ThemeColors, labelsAlways: boolean, redu
       style: { 'source-arrow-shape': 'triangle', 'source-arrow-color': colors.edge, 'target-arrow-shape': 'none' },
     },
     // Emphasis states ---------------------------------------------------
-    { selector: '.dim', style: { opacity: 0.16 } },
+    // Dimmed context recedes far enough that it never competes with a focused record's label.
+    { selector: 'node.dim', style: { opacity: 0.1, 'z-index': 0 } },
+    { selector: 'edge.dim', style: { opacity: 0.05, 'z-index': 0 } },
     { selector: '.soft-dim', style: { opacity: 0.42 } },
     {
       selector: 'node.focus-label',
-      style: { label: 'data(short)', 'z-index': 20, 'font-weight': 600 },
+      style: { label: 'data(short)', 'z-index': 20, 'font-weight': 600, 'text-background-opacity': 0.95 },
     },
     {
       selector: 'edge.active',
@@ -89,10 +93,14 @@ export function buildStylesheet(colors: ThemeColors, labelsAlways: boolean, redu
         'source-arrow-color': colors.accent,
         'line-opacity': 1,
         width: 1.8,
-        label: 'data(label)',
-        color: colors.label,
         'z-index': 10,
       },
+    },
+    // One label per relationship kind around the focus, not one per edge: twelve identical
+    // "billed to" captions say nothing the first one did not.
+    {
+      selector: 'edge.labelled',
+      style: { label: 'data(label)', color: colors.label, 'z-index': 11 },
     },
     {
       selector: 'node.hovered',

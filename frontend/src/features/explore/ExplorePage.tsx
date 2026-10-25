@@ -31,7 +31,7 @@ export default function ExplorePage() {
   const focusId = params.get('focus');
 
   const canvasRef = useRef<GraphCanvasHandle>(null);
-  const [layout, setLayout] = useState<LayoutName>('organic');
+  const [layout, setLayout] = useState<LayoutName>('physics');
   const [sampleSize, setSampleSize] = useState(DEFAULT_SAMPLE);
   const [hiddenTypes, setHiddenTypes] = useState<Set<string>>(new Set());
   const [search, setSearch] = useState('');

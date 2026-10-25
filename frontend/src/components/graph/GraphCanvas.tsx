@@ -1,4 +1,4 @@
-import cytoscape, { type Core, type ElementDefinition } from 'cytoscape';
+import cytoscape, { type Core, type EdgeCollection, type EdgeSingular, type ElementDefinition } from 'cytoscape';
 import dagre from 'cytoscape-dagre';
 import coseBilkent from 'cytoscape-cose-bilkent';
 import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, type KeyboardEvent } from 'react';
@@ -8,7 +8,9 @@ import { usePrefersReducedMotion } from '../../lib/hooks';
 import { flowRank, useSchema } from '../../lib/schema';
 import styles from './GraphCanvas.module.css';
 import { buildStylesheet } from './graphStyle';
+import { defaultLabelOffset, placeLabels } from './labelPlacement';
 import { layoutOptions, type LayoutName } from './layouts';
+import { attachPhysics, type Physics } from './physics';
 import { useThemeColors } from './useThemeColors';
 
 cytoscape.use(dagre);
@@ -40,7 +42,21 @@ interface GraphCanvasProps {
   labelsAlways?: boolean;
 }
 
-const FOCUS_CLASSES = 'dim soft-dim active focus-label hovered selected-record match highlighted mark';
+const FOCUS_CLASSES = 'dim soft-dim active labelled focus-label hovered selected-record match highlighted mark';
+
+/** The longest edge of each relationship kind: the one with the most room for its caption. */
+function captionEdges(edges: EdgeCollection): EdgeCollection {
+  const longest = new Map<string, { edge: EdgeSingular; length: number }>();
+  edges.forEach((edge) => {
+    const a = edge.source().position();
+    const b = edge.target().position();
+    const length = Math.hypot(a.x - b.x, a.y - b.y);
+    const kind = String(edge.data('label'));
+    const current = longest.get(kind);
+    if (!current || length > current.length) longest.set(kind, { edge, length });
+  });
+  return edges.filter((edge) => longest.get(String(edge.data('label')))?.edge === edge);
+}
 
 /** Interactive relationship graph. Knows nothing about the dataset: colours and labels come from the schema. */
 export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(function GraphCanvas(
@@ -54,10 +70,13 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
 
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
+  const physicsRef = useRef<Physics | null>(null);
   const hoveredRef = useRef<string | null>(null);
   const latest = useRef({ onSelect, onExpand, layout, reducedMotion, insetRight });
   const structureRef = useRef('');
   const emphasisRef = useRef<() => void>(() => undefined);
+  /** Edges captioned by the current emphasis, so pointing away from another edge only touches that edge. */
+  const captionedRef = useRef<EdgeCollection | null>(null);
 
   useEffect(() => {
     latest.current = { onSelect, onExpand, layout, reducedMotion, insetRight };
@@ -82,7 +101,10 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       seenNodes.add(node.id);
       const d = degree.get(node.id) ?? 0;
       const size = dense ? Math.min(10 + 3 * Math.sqrt(d), 26) : Math.min(18 + 5 * Math.sqrt(d), 42);
-      out.push({ group: 'nodes', data: { id: node.id, short: recordValue(node), slot: slotForType(node.type), size } });
+      out.push({
+        group: 'nodes',
+        data: { id: node.id, short: recordValue(node), slot: slotForType(node.type), size, ...defaultLabelOffset(size) },
+      });
     }
     const seenEdges = new Set<string>();
     for (const edge of validEdges) {
@@ -111,6 +133,13 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
     const cy = cyRef.current;
     if (!cy || cy.nodes().length === 0) return;
     const { layout: name, reducedMotion: reduce } = latest.current;
+    if (name === 'physics') {
+      physicsRef.current ??= attachPhysics(cy, () => placeLabels(cy));
+      physicsRef.current.run({ scatter: randomize, animate: animate && !reduce });
+      return;
+    }
+    physicsRef.current?.destroy();
+    physicsRef.current = null;
     cy.layout(layoutOptions(name, { animate: animate && !reduce && cy.nodes().length < 220, randomize })).run();
   }, []);
 
@@ -144,12 +173,23 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       container.style.cursor = '';
       emphasisRef.current();
     });
+    // Any single relationship can still be read by pointing at it.
+    cy.on('mouseover', 'edge', (event) => {
+      if (!event.target.hasClass('dim')) event.target.addClass('labelled');
+    });
+    cy.on('mouseout', 'edge', (event) => {
+      if (!captionedRef.current?.contains(event.target)) event.target.removeClass('labelled');
+    });
+    cy.on('layoutstop', () => placeLabels(cy));
+    cy.on('free', 'node', () => placeLabels(cy));
 
     const observer = new ResizeObserver(() => cy.resize());
     observer.observe(container);
 
     return () => {
       observer.disconnect();
+      physicsRef.current?.destroy();
+      physicsRef.current = null;
       cy.destroy();
       cyRef.current = null;
     };
@@ -183,10 +223,13 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       }
     });
     cy.style(buildStylesheet(colors, showAllLabels, reducedMotion));
-
     if (changed) {
       structureRef.current = key;
       runLayout(!hadNodes);
+    } else {
+      // Syncing data reset label offsets on records that have not moved. New records sit at the origin
+      // until the layout above places them, and every layout places labels when it finishes.
+      placeLabels(cy);
     }
     emphasisRef.current();
     // Only element identity should re-sync; colours and label mode have their own effect.
@@ -200,7 +243,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       firstLayout.current = false;
       return;
     }
-    runLayout(true);
+    // Physics starts from the current arrangement, so switching to it morphs rather than jumps.
+    runLayout(layout !== 'physics');
   }, [layout, runLayout]);
 
   // ── Emphasis: selection, hover, search, highlights ───────
@@ -210,6 +254,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       const cy = cyRef.current;
       if (!cy) return;
       const highlightSet = new Set(highlightedIds ?? []);
+      captionedRef.current = null;
       cy.batch(() => {
         cy.elements().removeClass(FOCUS_CLASSES);
 
@@ -228,7 +273,9 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
           const hood = focus.closedNeighborhood();
           cy.elements().not(hood).addClass('dim');
           hood.nodes().addClass('focus-label');
-          focus.connectedEdges().addClass('active');
+          const active = focus.connectedEdges();
+          active.addClass('active');
+          captionedRef.current = captionEdges(active).addClass('labelled');
         } else if (matchIds && matchIds.size > 0) {
           cy.nodes().forEach((node) => {
             if (matchIds.has(node.id())) node.addClass('match');

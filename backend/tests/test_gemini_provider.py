@@ -37,8 +37,32 @@ def client_with(models):
     return SimpleNamespace(aio=SimpleNamespace(models=models))
 
 
+class FlakyModels(FakeModels):
+    """Fails with each of ``failures`` in turn, then answers."""
+
+    def __init__(self, failures, response=None):
+        super().__init__(response or reply())
+        self.failures = list(failures)
+
+    async def generate_content(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.failures:
+            raise self.failures.pop(0)
+        return self.response
+
+    async def embed_content(self, **kwargs):
+        if self.failures:
+            self.calls.append(kwargs)
+            raise self.failures.pop(0)
+        return await super().embed_content(**kwargs)
+
+
+def busy():
+    return errors.APIError(503, {"error": {"message": "high demand"}})
+
+
 def llm(models):
-    provider = GeminiLLM(SecretStr("k"), "model-x")
+    provider = GeminiLLM(SecretStr("k"), "model-x", retry_delays_s=(0, 0))
     provider._client_instance = client_with(models)
     return provider
 
@@ -98,6 +122,35 @@ async def test_failures_become_provider_errors(error, expected):
     with pytest.raises(expected) as raised:
         await llm(FakeModels(error=error)).generate(LLMRequest(prompt="p"))
     assert "quota" not in str(raised.value) and "boom" not in str(raised.value)  # no provider text
+
+
+async def test_a_busy_model_is_retried_until_it_answers():
+    models = FlakyModels([busy(), errors.APIError(500, {})])
+    out = await llm(models).generate(LLMRequest(prompt="p"))
+    assert out.text == '{"answer": "hi"}' and len(models.calls) == 3
+
+
+async def test_retries_give_up_after_the_last_attempt():
+    models = FlakyModels([busy(), busy(), busy(), busy()])
+    with pytest.raises(ProviderUnavailable):
+        await llm(models).generate(LLMRequest(prompt="p"))
+    assert len(models.calls) == 3
+
+
+@pytest.mark.parametrize("error", [errors.APIError(400, {}), errors.APIError(429, {}), TimeoutError()])
+async def test_only_temporary_server_errors_are_retried(error):
+    models = FlakyModels([error])
+    with pytest.raises((InvalidRequest, RateLimited, ProviderUnavailable)):
+        await llm(models).generate(LLMRequest(prompt="p"))
+    assert len(models.calls) == 1
+
+
+async def test_the_embedder_retries_a_busy_model():
+    models = FlakyModels([busy()])
+    embedder = GeminiEmbedder(SecretStr("k"), "m", retry_delays_s=(0, 0))
+    embedder._client_instance = client_with(models)
+    assert len(await embedder.embed(["x"], task="query")) == 1
+    assert len(models.calls) == 2
 
 
 async def test_no_key_means_not_configured():
