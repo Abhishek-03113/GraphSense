@@ -1,0 +1,4 @@
+.hyperframes/
+*.webm
+.dist/
+footage/
