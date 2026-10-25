@@ -1,5 +1,5 @@
-Rows. Columns. Joins? Nope. Graph.
+Your orders, deliveries, invoices and payments, finally connected.
 
-GraphSense turns a relational dataset into a physics-driven graph you can explore in five layouts, plus an AI Ask that writes the SQL, shows its work and refuses off-topic questions. Real app footage, recorded with Playwright on dummy SAP order-to-cash data.
+GraphSense gives business teams one clear view of order-to-cash, plain-English answers in seconds, and a one-click path from any answer to the records behind it. Know your business, end to end.
 
-#GraphSense #dataviz #textToSQL #buildinpublic
+#GraphSense #orderToCash #businessintelligence #productlaunch

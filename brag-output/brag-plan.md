@@ -48,11 +48,13 @@ Turned a pile of SAP tables into a graph you can explore and interrogate in plai
 - SFX posture: sparse; music carries it
 - Restraint rule: no text change faster than reading floor
 
-## Storyboard (v2: AI + physics + layouts)
-- 0-3.2 Hook: Rows. Columns. Joins? Nope. Graph.
-- 3.2-6.4 Overview reveal
-- 6.4-9.6 Physics: drag a record, neighbours follow
-- 9.6-14.4 Five layouts: Physics, Clusters, Circle, Horizontal, Vertical
-- 14.4-16.0 Flow graph; 16.0-17.6 Trace graph
-- 17.6-27.2 AI Ask: typed question and answer, SQL shown, off-topic refusal, jump to the graph with records highlighted
-- 27.2-30 Outro: GraphSense, Ask your data. See the connections.
+## Storyboard (v3: business launch)
+Tone: polished product launch, benefit-led copy, no developer vocabulary.
+- 0-3.2 Hook: Orders. Deliveries. Invoices. Connected.
+- 3.2-6.4 GraphSense: Your order-to-cash data, in one clear view.
+- 6.4-11.2 See how it all connects (Explore graph + record details)
+- 11.2-16 Just ask: plain-English answers in seconds
+- 16-19.2 Answers you can trust: stays on your data, declines the rest
+- 19.2-22.4 Answer to action: one click to the records behind it
+- 22.4-25.6 Trace any order to cash
+- 25.6-30 Outro: GraphSense. Know your business, end to end.
