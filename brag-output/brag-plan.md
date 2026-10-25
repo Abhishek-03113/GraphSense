@@ -48,13 +48,16 @@ Turned a pile of SAP tables into a graph you can explore and interrogate in plai
 - SFX posture: sparse; music carries it
 - Restraint rule: no text change faster than reading floor
 
-## Storyboard (v3: business launch)
-Tone: polished product launch, benefit-led copy, no developer vocabulary.
-- 0-3.2 Hook: Orders. Deliveries. Invoices. Connected.
-- 3.2-6.4 GraphSense: Your order-to-cash data, in one clear view.
-- 6.4-11.2 See how it all connects (Explore graph + record details)
-- 11.2-16 Just ask: plain-English answers in seconds
-- 16-19.2 Answers you can trust: stays on your data, declines the rest
-- 19.2-22.4 Answer to action: one click to the records behind it
-- 22.4-25.6 Trace any order to cash
-- 25.6-30 Outro: GraphSense. Know your business, end to end.
+## Storyboard (v4: minimal business launch, 64s)
+Tone: calm and minimal. Real-time footage, soft 0.8s crossfades, slow drift, no flashes. Calm bundled track (Business Moves vol. 12).
+- 0-4 GraphSense: Your order-to-cash data, connected.
+- 01 Overview: Your business at a glance
+- 02 Connections: See how everything connects
+- 03 Record details: Open any record
+- 04 Views: View it your way
+- 05 Ask: Ask in plain English
+- 06 Trust: Focused on your data
+- 07 Action: From answer to records
+- 08 Flows: Follow your process
+- 09 Trace: Trace any record
+- 59.5-64 GraphSense: Know your business, end to end.

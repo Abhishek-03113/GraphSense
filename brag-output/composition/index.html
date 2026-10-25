@@ -5,108 +5,96 @@
 <meta name="viewport" content="width=1920, height=1080" />
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
 <style>
-:root{--ground:#0a0a10;--ink:#fff;--indigo:#5e5ce6;--hot:#ff3d2e;--font:'Inter',sans-serif}
+:root{--ground:#0b0b12;--ink:#f5f5fa;--muted:#a3a3bd;--accent:#8b89ff;--font:'Inter',sans-serif}
 *{margin:0;padding:0;box-sizing:border-box}
 html,body{width:1920px;height:1080px;overflow:hidden;background:var(--ground)}
-#root{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:var(--font);color:var(--ink);
- background:radial-gradient(1200px 700px at 50% 40%,#17172b 0%,var(--ground) 70%)}
-.scene{position:absolute;inset:0;overflow:hidden}
-#glow{position:absolute;left:260px;top:20px;width:1400px;height:860px;border-radius:50%;
- background:radial-gradient(closest-side,rgba(94,92,230,.55),rgba(255,61,46,.18) 60%,transparent 100%);opacity:.3;filter:blur(30px)}
-.frame{position:absolute;left:220px;top:36px;width:1480px;height:833px;border-radius:18px;object-fit:cover;box-shadow:0 0 0 2px rgba(255,255,255,.14),0 30px 90px rgba(0,0,0,.7);background:#000}
-.cap{position:absolute;left:220px;top:890px;width:1480px;display:flex;flex-direction:column;gap:6px}
-.cap .big{font-weight:900;font-size:92px;line-height:1;letter-spacing:-.03em;text-transform:uppercase}
-.cap .big b{color:var(--hot);font-weight:900}
-.cap .sub{font-weight:600;font-size:36px;color:#c9c9e8;letter-spacing:-.01em}
-.slam{position:absolute;left:0;width:1920px;text-align:center;font-weight:900;text-transform:uppercase;letter-spacing:-.04em;line-height:.95}
-#vb{position:absolute;left:-60px;top:-40px;width:2040px;height:1160px;object-fit:cover;filter:blur(22px) brightness(.85) saturate(1.3)}
-.tag{position:absolute;top:905px;left:1500px;padding:10px 20px;border-radius:999px;background:var(--hot);font-weight:900;font-size:28px;letter-spacing:.08em;text-transform:uppercase}
-#flash{position:absolute;inset:0;background:#fff;opacity:0;pointer-events:none;z-index:50}
-#stripe{position:absolute;left:-200px;top:0;width:240px;height:1080px;background:var(--hot);transform:skewX(-14deg);opacity:0;z-index:40}
+#root{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:var(--font);color:var(--ink);background:var(--ground)}
+.frame{position:absolute;left:240px;top:56px;width:1440px;height:810px;border-radius:14px;object-fit:cover;
+ box-shadow:0 0 0 1px rgba(255,255,255,.08),0 24px 60px rgba(0,0,0,.55);background:#000;opacity:0}
+.cap{position:absolute;left:240px;top:890px;width:1440px;opacity:0}
+.eyebrow{font-size:28px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
+.title{font-size:52px;font-weight:600;letter-spacing:-.02em;line-height:1.05}
+.sub{font-size:30px;font-weight:400;color:var(--muted);margin-top:10px}
+.center{position:absolute;left:0;width:1920px;text-align:center;opacity:0}
+.brand{font-size:132px;font-weight:600;letter-spacing:-.04em}
+.brand span{color:var(--accent)}
+.line{font-size:36px;font-weight:400;color:var(--muted)}
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="main" data-start="0" data-duration="30" data-width="1920" data-height="1080">
-  <div id="glow"></div>
-  <video id="vb" class="clip" data-track-index="1" src="assets/footage/explore.mp4" data-start="0" data-duration="3.2" data-media-start="3" muted playsinline></video>
-  <video id="v2" class="frame clip" data-track-index="2" src="assets/footage/overview.mp4" data-start="3.2" data-duration="3.2" data-media-start="0.6" muted playsinline></video>
-  <video id="v3" class="frame clip" data-track-index="3" src="assets/footage/explore.mp4" data-start="6.4" data-duration="4.8" data-media-start="6.6" muted playsinline></video>
-  <video id="v4" class="frame clip" data-track-index="4" src="assets/footage/ask_answer.mp4" data-start="11.2" data-duration="4.8" data-media-start="0" muted playsinline></video>
-  <video id="v5" class="frame clip" data-track-index="5" src="assets/footage/ask_guard.mp4" data-start="16" data-duration="3.2" data-media-start="0" muted playsinline></video>
-  <video id="v6" class="frame clip" data-track-index="6" src="assets/footage/ask_jump.mp4" data-start="19.2" data-duration="3.2" data-media-start="0" muted playsinline></video>
-  <video id="v7" class="frame clip" data-track-index="7" src="assets/footage/trace.mp4" data-start="22.4" data-duration="3.2" data-media-start="1.8" muted playsinline></video>
-
-  <audio id="music" src="assets/music/rock-riff.mp3" data-start="0" data-duration="30" data-track-index="9" data-volume="0.9" data-fade-out="1.2"></audio>
-
-  <div id="s1" class="scene clip" data-start="0" data-duration="3.2" data-track-index="21">
-    <div id="w1" class="slam" style="top:400px;font-size:230px">Orders.</div>
-    <div id="w2" class="slam" style="top:400px;font-size:200px">Deliveries.</div>
-    <div id="w3" class="slam" style="top:400px;font-size:230px">Invoices.</div>
-    <div id="w4" class="slam" style="top:400px;font-size:230px;color:var(--hot)">Connected.</div>
+<div id="root" data-composition-id="main" data-start="0" data-duration="64" data-width="1920" data-height="1080">
+  <video id="v_overview" class="frame clip" data-track-index="1" src="assets/footage/overview.mp4" data-start="4" data-duration="6.8" data-media-start="1.4" muted playsinline></video>
+  <video id="v_explore" class="frame clip" data-track-index="2" src="assets/footage/explore.mp4" data-start="10" data-duration="6.8" data-media-start="2.5" muted playsinline></video>
+  <video id="v_details" class="frame clip" data-track-index="3" src="assets/footage/details.mp4" data-start="16" data-duration="7.3" data-media-start="4.8" muted playsinline></video>
+  <video id="v_layouts" class="frame clip" data-track-index="4" src="assets/footage/layouts.mp4" data-start="22.5" data-duration="7.3" data-media-start="4.0" muted playsinline></video>
+  <video id="v_ask" class="frame clip" data-track-index="5" src="assets/footage/ask.mp4" data-start="29" data-duration="8.3" data-media-start="1.9" muted playsinline></video>
+  <video id="v_trust" class="frame clip" data-track-index="6" src="assets/footage/trust.mp4" data-start="36.5" data-duration="6.3" data-media-start="1.9" muted playsinline></video>
+  <video id="v_map" class="frame clip" data-track-index="7" src="assets/footage/map.mp4" data-start="42" data-duration="8.3" data-media-start="1.8" muted playsinline></video>
+  <video id="v_flows" class="frame clip" data-track-index="8" src="assets/footage/flows.mp4" data-start="49.5" data-duration="5.8" data-media-start="2.6" muted playsinline></video>
+  <video id="v_trace" class="frame clip" data-track-index="9" src="assets/footage/trace.mp4" data-start="54.5" data-duration="5.8" data-media-start="2.0" muted playsinline></video>
+  <audio id="music" src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3" data-start="0" data-duration="64" data-track-index="9" data-volume="0.55" data-fade-in="1" data-fade-out="3"></audio>
+  <div id="intro" class="clip" data-start="0" data-duration="4.4" data-track-index="18">
+    <div id="i1" class="center brand" style="top:380px">Graph<span>Sense</span></div>
+    <div id="i2" class="center line" style="top:560px">Your order-to-cash data, connected.</div>
   </div>
-  <div id="s2" class="scene clip" data-start="3.2" data-duration="3.2" data-track-index="22">
-    <div class="cap" id="c2"><div class="big">Graph<b>Sense</b></div><div class="sub">Your order-to-cash data, in one clear view.</div></div>
+  <div id="c_overview" class="cap clip" data-start="4" data-duration="6" data-track-index="20">
+    <div class="eyebrow">01 · Overview</div><div class="title">Your business at a glance</div><div class="sub">Every order, delivery, invoice and payment in one view.</div>
   </div>
-  <div id="s3" class="scene clip" data-start="6.4" data-duration="4.8" data-track-index="23">
-    <div class="tag">Visibility</div>
-    <div class="cap" id="c3"><div class="big">See how it all <b>connects</b></div><div class="sub">Orders, deliveries, invoices and payments, linked.</div></div>
+  <div id="c_explore" class="cap clip" data-start="10" data-duration="6" data-track-index="21">
+    <div class="eyebrow">02 · Connections</div><div class="title">See how everything connects</div><div class="sub">Each record linked to the ones it touches.</div>
   </div>
-  <div id="s4" class="scene clip" data-start="11.2" data-duration="4.8" data-track-index="24">
-    <div class="tag">Answers</div>
-    <div class="cap" id="c4"><div class="big">Just <b>ask</b></div><div class="sub">Plain-English answers in seconds. No analyst needed.</div></div>
+  <div id="c_details" class="cap clip" data-start="16" data-duration="6.5" data-track-index="22">
+    <div class="eyebrow">03 · Record details</div><div class="title">Open any record</div><div class="sub">Key details and every relationship, side by side.</div>
   </div>
-  <div id="s5" class="scene clip" data-start="16" data-duration="3.2" data-track-index="25">
-    <div class="tag">Trust</div>
-    <div class="cap" id="c5"><div class="big">Answers you can <b>trust</b></div><div class="sub">Stays on your data. Declines the rest.</div></div>
+  <div id="c_layouts" class="cap clip" data-start="22.5" data-duration="6.5" data-track-index="23">
+    <div class="eyebrow">04 · Views</div><div class="title">View it your way</div><div class="sub">Clusters, circles or a left-to-right process view.</div>
   </div>
-  <div id="s6" class="scene clip" data-start="19.2" data-duration="3.2" data-track-index="26">
-    <div class="tag">Action</div>
-    <div class="cap" id="c6"><div class="big">Answer to <b>action</b></div><div class="sub">One click to the records behind it.</div></div>
+  <div id="c_ask" class="cap clip" data-start="29" data-duration="7.5" data-track-index="24">
+    <div class="eyebrow">05 · Ask</div><div class="title">Ask in plain English</div><div class="sub">Clear answers in seconds, with the data behind them.</div>
   </div>
-  <div id="s7" class="scene clip" data-start="22.4" data-duration="3.2" data-track-index="27">
-    <div class="tag">Trace</div>
-    <div class="cap" id="c7"><div class="big">Trace any order to <b>cash</b></div><div class="sub">Customer to payment, step by step.</div></div>
+  <div id="c_trust" class="cap clip" data-start="36.5" data-duration="5.5" data-track-index="25">
+    <div class="eyebrow">06 · Trust</div><div class="title">Focused on your data</div><div class="sub">Off-topic questions are politely declined.</div>
   </div>
-  <div id="s8" class="scene clip" data-start="25.6" data-duration="4.4" data-track-index="28">
-    <div id="o1" class="slam" style="top:320px;font-size:205px">Graph<span style="color:var(--hot)">Sense</span></div>
-    <div id="o2" class="slam" style="top:590px;font-size:64px;letter-spacing:-.01em;font-weight:700;color:#d6d6f5;text-transform:none">Know your business, end to end.</div>
+  <div id="c_map" class="cap clip" data-start="42" data-duration="7.5" data-track-index="26">
+    <div class="eyebrow">07 · Action</div><div class="title">From answer to records</div><div class="sub">One click shows the results on the map.</div>
   </div>
-  <div id="stripe"></div>
-  <div id="flash"></div>
+  <div id="c_flows" class="cap clip" data-start="49.5" data-duration="5" data-track-index="27">
+    <div class="eyebrow">08 · Flows</div><div class="title">Follow your process</div><div class="sub">Order to cash, step by step.</div>
+  </div>
+  <div id="c_trace" class="cap clip" data-start="54.5" data-duration="5" data-track-index="28">
+    <div class="eyebrow">09 · Trace</div><div class="title">Trace any record</div><div class="sub">From customer to payment, end to end.</div>
+  </div>
+  <div id="outro" class="clip" data-start="59.5" data-duration="4.5" data-track-index="19">
+    <div id="o1" class="center brand" style="top:380px">Graph<span>Sense</span></div>
+    <div id="o2" class="center line" style="top:560px">Know your business, end to end.</div>
+  </div>
 </div>
 <script>
-const RMS=[0.39, 0.87, 0.83, 0.74, 0.73, 0.68, 0.78, 0.76, 0.7, 0.66, 0.61, 0.56, 0.82, 0.74, 0.66, 0.6, 0.55, 0.47, 0.69, 0.82, 0.67, 0.56, 0.49, 0.39, 1.0, 0.98, 0.66, 0.56, 0.51, 0.42, 0.72, 0.68, 0.59, 0.54, 0.47, 0.38, 0.8, 0.65, 0.57, 0.49, 0.42, 0.31, 0.7, 0.79, 0.64, 0.53, 0.46, 0.35, 1.0, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.8, 0.71, 0.61, 0.54, 0.47, 0.37, 0.67, 0.82, 0.65, 0.53, 0.45, 0.34, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.77, 0.66, 0.57, 0.49, 0.41, 0.31, 0.7, 0.79, 0.64, 0.53, 0.46, 0.35, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.73, 0.68, 0.59, 0.54, 0.46, 0.37, 0.78, 0.7, 0.61, 0.53, 0.48, 0.37, 0.67, 0.82, 0.65, 0.53, 0.45, 0.34, 1.0, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.8, 0.65, 0.57, 0.49, 0.41, 0.31, 0.7, 0.78, 0.64, 0.53, 0.46, 0.35, 1.0, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.8, 0.71, 0.61, 0.53, 0.48, 0.37, 0.66, 0.82, 0.65, 0.53, 0.45, 0.34, 1.0, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.83, 0.67, 0.59, 0.65, 0.48, 0.33, 0.77, 0.8, 0.65, 0.68, 0.52, 0.37, 0.99, 0.96, 0.76, 0.69, 0.64, 0.58, 0.76, 0.73, 0.65, 0.62, 0.55, 0.48, 0.82, 0.73, 0.63, 0.57, 0.52, 0.42, 0.68, 0.82, 0.66, 0.54, 0.48, 0.37, 0.99, 0.98, 0.65, 0.56, 0.5, 0.41, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.79, 0.65, 0.57, 0.49, 0.42, 0.31, 0.7, 0.78, 0.65, 0.53, 0.46, 0.35, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.73, 0.68, 0.59, 0.54, 0.46, 0.37, 0.81, 0.72, 0.61, 0.53, 0.48, 0.37, 0.66, 0.82, 0.65, 0.53, 0.45, 0.34, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.8, 0.67, 0.57, 0.49, 0.41, 0.31, 0.7, 0.78, 0.65, 0.53, 0.46, 0.35, 1.0, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.77, 0.71, 0.62, 0.54, 0.47, 0.37, 0.67, 0.82, 0.65, 0.53, 0.45, 0.34, 1.0, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.8, 0.65, 0.57, 0.49, 0.41, 0.31, 0.7, 0.79, 0.65, 0.53, 0.46, 0.35, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.8, 0.72, 0.61, 0.53, 0.47, 0.37, 0.67, 0.82, 0.65, 0.53, 0.45, 0.34, 1.0, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.83, 0.67, 0.57, 0.63, 0.48, 0.33, 0.77, 0.8, 0.65, 0.68, 0.52, 0.37, 0.99, 0.95, 0.76, 0.7, 0.65, 0.59, 0.76, 0.73, 0.64, 0.61, 0.56, 0.48, 0.8, 0.73, 0.63, 0.56, 0.51, 0.42, 0.69, 0.82, 0.66, 0.55, 0.47, 0.37, 0.99, 0.98, 0.65, 0.56, 0.51, 0.41, 0.73, 0.68, 0.59, 0.54, 0.46, 0.37, 0.82, 0.65, 0.57, 0.49, 0.41, 0.31, 0.7, 0.79, 0.64, 0.53, 0.46, 0.35, 1.0, 0.98, 0.65, 0.55, 0.5, 0.4, 0.73, 0.68, 0.59, 0.54, 0.46, 0.37, 0.78, 0.72, 0.61, 0.53, 0.48, 0.37, 0.67, 0.82, 0.65, 0.53, 0.45, 0.34, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.79, 0.65, 0.57, 0.49, 0.41, 0.31, 0.69, 0.79, 0.65, 0.53, 0.46, 0.35, 1.0, 0.98, 0.65, 0.55, 0.5, 0.4, 0.73, 0.68, 0.59, 0.54, 0.46, 0.37, 0.79, 0.71, 0.61, 0.53, 0.47, 0.37, 0.67, 0.82, 0.65, 0.53, 0.45, 0.34, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.79, 0.65, 0.56, 0.49, 0.41, 0.31, 0.7, 0.78, 0.64, 0.53, 0.46, 0.35, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.79, 0.71, 0.61, 0.53, 0.47, 0.37, 0.66, 0.82, 0.65, 0.53, 0.45, 0.34, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.83, 0.69, 0.58, 0.65, 0.49, 0.34, 0.78, 0.8, 0.65, 0.64, 0.53, 0.37, 0.97, 0.96, 0.75, 0.68, 0.67, 0.6, 0.76, 0.73, 0.65, 0.6, 0.54, 0.5, 0.79, 0.73, 0.65, 0.57, 0.51, 0.43, 0.68, 0.82, 0.66, 0.55, 0.48, 0.37, 0.99, 0.98, 0.65, 0.56, 0.51, 0.41, 0.73, 0.68, 0.59, 0.54, 0.46, 0.37, 0.8, 0.65, 0.56, 0.49, 0.41, 0.31, 0.71, 0.78, 0.64, 0.53, 0.46, 0.35, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.77, 0.71, 0.61, 0.53, 0.48, 0.37, 0.67, 0.82, 0.65, 0.53, 0.45, 0.34, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.81, 0.65, 0.56, 0.49, 0.41, 0.31, 0.71, 0.78, 0.64, 0.53, 0.46, 0.35, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.77, 0.72, 0.61, 0.53, 0.48, 0.37, 0.67, 0.82, 0.65, 0.53, 0.45, 0.34, 1.0, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.77, 0.66, 0.57, 0.49, 0.41, 0.31, 0.69, 0.79, 0.64, 0.54, 0.46, 0.35, 1.0, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.8, 0.71, 0.61, 0.53, 0.47, 0.37, 0.67, 0.82, 0.65, 0.53, 0.45, 0.34, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.73, 0.68, 0.59, 0.54, 0.46, 0.37, 0.84, 0.68, 0.58, 0.64, 0.5, 0.34, 0.77, 0.8, 0.65, 0.68, 0.52, 0.37, 0.97, 0.97, 0.76, 0.7, 0.65, 0.59, 0.76, 0.72, 0.66, 0.61, 0.55, 0.49, 0.81, 0.74, 0.64, 0.57, 0.51, 0.42, 0.68, 0.82, 0.66, 0.54, 0.47, 0.37, 0.99, 0.98, 0.65, 0.56, 0.51, 0.41, 0.73, 0.68, 0.59, 0.54, 0.46, 0.37, 0.79, 0.67, 0.57, 0.49, 0.42, 0.31, 0.69, 0.79, 0.64, 0.53, 0.46, 0.35, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.81, 0.71, 0.62, 0.53, 0.48, 0.37, 0.67, 0.82, 0.65, 0.53, 0.45, 0.34, 0.99, 0.98, 0.65, 0.55, 0.5, 0.4, 0.72, 0.68, 0.59, 0.54, 0.46, 0.37, 0.79, 0.66, 0.56, 0.49, 0.41, 0.31, 0.7, 0.79, 0.64, 0.53, 0.46, 0.35, 0.98, 0.94, 0.6, 0.5, 0.44, 0.34, 0.59, 0.54, 0.45, 0.4, 0.33, 0.25, 0.52, 0.45, 0.37, 0.3, 0.26, 0.19, 0.32, 0.38, 0.28, 0.21, 0.17, 0.12, 0.32, 0.29, 0.17, 0.13, 0.1, 0.07, 0.11, 0.09, 0.06, 0.04, 0.02];
 const tl=gsap.timeline({paused:true});
-const IN={duration:.28,ease:"power4.out"};
-function hit(t,strong){
-  tl.set("#flash",{opacity:strong?.8:.4},t);
-  tl.to("#flash",{opacity:0,duration:.35,ease:"power2.out"},t+.001);
-  tl.set("#stripe",{x:0,opacity:.9},t);
-  tl.to("#stripe",{x:2300,duration:.45,ease:"power3.in"},t+.001);
+const X=0.8;
+// calm crossfade in, slow drift, nothing flashes
+function fadeFrame(id,s,d){
+  tl.fromTo(id,{opacity:0,scale:1.0},{opacity:1,duration:X,ease:"power1.inOut"},s);
+  tl.fromTo(id,{scale:1.0},{scale:1.012,duration:d,ease:"none",immediateRender:false},s);
 }
-function crash(t){ tl.set("#flash",{opacity:.3},t); tl.to("#flash",{opacity:0,duration:.3,ease:"power2.out"},t+.001); }
-function frameIn(id,t){ tl.fromTo(id,{scale:1.06,y:30,opacity:0},{scale:1,y:0,opacity:1,duration:.4,ease:"power4.out"},t); }
-function up(id,t,d){ tl.fromTo(id,{y:60,opacity:0},{y:0,opacity:1,...IN},t); if(d) tl.to(id,{opacity:0,y:-20,duration:.18,ease:"power2.in"},t+d); }
-function slam(id,t,hold){ tl.fromTo(id,{scale:1.5,opacity:0},{scale:1,opacity:1,duration:.22,ease:"power4.out"},t); tl.set(id,{opacity:0},t+hold); }
-
-slam("#w1",0.0,0.8); slam("#w2",0.8,0.8); slam("#w3",1.6,0.8); slam("#w4",2.4,0.8);
-tl.fromTo("#vb",{scale:1.2},{scale:1.1,duration:3.2,ease:"none"},0);
-hit(3.2); frameIn("#v2",3.2); up("#c2",3.5);
-hit(6.4,true); frameIn("#v3",6.4); up("#c3",6.6); // beat-locked: 6.4s crash
-hit(11.2); frameIn("#v4",11.2); up("#c4",11.4);
-crash(12.8); // beat-locked
-hit(16.0); frameIn("#v5",16.0); up("#c5",16.2);
-hit(19.2,true); frameIn("#v6",19.2); up("#c6",19.4); // beat-locked: 19.2s crash
-hit(22.4); frameIn("#v7",22.4); up("#c7",22.6);
-hit(25.6,true); // beat-locked: 25.6s crash
-tl.fromTo("#o1",{scale:1.6,opacity:0},{scale:1,opacity:1,duration:.3,ease:"power4.out"},25.6);
-up("#o2",26.6);
-tl.to("#o1",{scale:1.04,duration:3.6,ease:"none"},26.2);
-const p={t:0};
-tl.to(p,{t:30,duration:30,ease:"none",onUpdate(){
-  const r=RMS[Math.min(RMS.length-1,Math.floor(p.t*30))]||0;
-  gsap.set("#glow",{opacity:.22+r*.5,scale:1+r*.06});
-}},0);
+function caption(id,s,d){
+  tl.fromTo(id,{opacity:0,y:12},{opacity:1,y:0,duration:.9,ease:"power2.out"},s+.5);
+  tl.to(id,{opacity:0,duration:.5,ease:"power1.in"},s+d-.5);
+}
+tl.set("#i1",{opacity:1},0);
+tl.fromTo("#i2",{opacity:0},{opacity:1,duration:1,ease:"power1.out"},1.4);
+tl.to(["#i1","#i2"],{opacity:0,duration:.7,ease:"power1.in"},3.5);
+fadeFrame("#v_overview",4,6.8); caption("#c_overview",4,6);
+fadeFrame("#v_explore",10,6.8); caption("#c_explore",10,6);
+fadeFrame("#v_details",16,7.3); caption("#c_details",16,6.5);
+fadeFrame("#v_layouts",22.5,7.3); caption("#c_layouts",22.5,6.5);
+fadeFrame("#v_ask",29,8.3); caption("#c_ask",29,7.5);
+fadeFrame("#v_trust",36.5,6.3); caption("#c_trust",36.5,5.5);
+fadeFrame("#v_map",42,8.3); caption("#c_map",42,7.5);
+fadeFrame("#v_flows",49.5,5.8); caption("#c_flows",49.5,5);
+fadeFrame("#v_trace",54.5,5.8); caption("#c_trace",54.5,5);
+tl.fromTo("#o1",{opacity:0,y:10},{opacity:1,y:0,duration:1.2,ease:"power2.out"},60.0);
+tl.fromTo("#o2",{opacity:0},{opacity:1,duration:1,ease:"power1.out"},61.0);
 window.__timelines=window.__timelines||{};
 window.__timelines["main"]=tl;
 tl.seek(0);

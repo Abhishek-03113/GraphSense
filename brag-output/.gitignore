@@ -1,4 +1,7 @@
 .hyperframes/
 *.webm
 .dist/
-footage/
+/footage/
+/footage2/
+/footage3/
+/footage4/
