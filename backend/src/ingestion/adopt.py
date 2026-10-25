@@ -19,7 +19,6 @@ import uuid
 from dataclasses import dataclass, field
 from typing import Any
 
-import structlog
 from sqlalchemy import Connection, Engine, insert, text
 
 from src.datasets.ddl import index_ddl, qualified, quote_ident, table_ddl, table_indexes
@@ -30,8 +29,9 @@ from src.storage.app_tables import ingestion_issues, ingestion_runs
 from src.storage.engines import get_owner_sync_engine
 from src.storage.roles import existing_roles, grant_read
 from src.storage.schema_names import live_schema
+from src.utils.logger import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 # Package type -> database types that hold it.  ``varchar`` counts as ``text``.
 _COMPATIBLE: dict[str, set[str]] = {
@@ -213,7 +213,7 @@ def adopt_legacy(
             report.adopted = True
     finally:
         lock.release()
-    logger.info("adopt.done", dataset=dataset_id, tables=len(report.tables), compat_views=compat_views)
+    logger.info("adopt.done dataset=%s tables=%s compat_views=%s", dataset_id, len(report.tables), compat_views)
     return report
 
 

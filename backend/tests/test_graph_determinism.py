@@ -41,15 +41,12 @@ async def test_subgraph_edges_are_ordered():
     assert "ORDER BY ge.source_type,ge.source_id,ge.target_type,ge.target_id,ge.type" in query
 
 
-async def test_flow_diagnostics_only_run_when_debugging():
+async def test_flow_runs_a_single_query_at_any_log_level():
     repo_logger = logging.getLogger("src.repositories.graph_repository")
     original = repo_logger.level
     try:
-        repo_logger.setLevel(logging.INFO)
-        assert len(await _statements(lambda r: r.get_flow("sales", 5))) == 1
-
-        repo_logger.setLevel(logging.DEBUG)
-        statements = await _statements(lambda r: r.get_flow("sales", 5))
-        assert len(statements) == 3  # raw counts, filtered counts, then the sample
+        for level in (logging.INFO, logging.DEBUG):
+            repo_logger.setLevel(level)
+            assert len(await _statements(lambda r: r.get_flow("sales", 5))) == 1
     finally:
         repo_logger.setLevel(original)

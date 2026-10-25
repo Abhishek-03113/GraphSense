@@ -11,12 +11,13 @@ Usage in a FastAPI route:
 
 from collections.abc import AsyncGenerator
 
-import structlog
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, async_sessionmaker
+
+from src.utils.logger import get_logger
 
 from .engine import get_engine
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 _sessionmaker: async_sessionmaker[AsyncSession] | None = None
 _bound_engine: AsyncEngine | None = None

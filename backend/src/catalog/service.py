@@ -227,8 +227,3 @@ def get_catalog_service() -> CatalogService:
         _default = CatalogService()
     return _default
 
-
-def reset_catalog_service() -> None:
-    """Drop the process-wide service and its cache (tests)."""
-    global _default
-    _default = None

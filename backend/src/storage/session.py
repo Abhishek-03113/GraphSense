@@ -12,13 +12,11 @@ the same name resolves to the new tables on the next statement.
 
 from __future__ import annotations
 
-from collections.abc import AsyncIterator
 
 from sqlalchemy import event, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.datasets.context import DatasetContext
-from src.db.session import AsyncSessionLocal
 from src.storage.schema_names import search_path_for
 
 _SET_PATH = text("SELECT set_config('search_path', :path, true)")
@@ -46,19 +44,3 @@ async def use_dataset(session: AsyncSession, ctx: DatasetContext) -> AsyncSessio
         await session.execute(_SET_PATH, params)
     return session
 
-
-async def dataset_session(ctx: DatasetContext) -> AsyncIterator[AsyncSession]:
-    """Open a session of the application engine scoped to ``ctx``.
-
-    Commits on success, rolls back on error and always closes.  Use it outside
-    request handling; handlers use the ``get_dataset_db`` dependency instead,
-    which shares the request's session.
-    """
-    async with AsyncSessionLocal() as session:
-        try:
-            await use_dataset(session, ctx)
-            yield session
-            await session.commit()
-        except Exception:
-            await session.rollback()
-            raise

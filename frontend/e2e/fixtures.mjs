@@ -401,8 +401,6 @@ export function chatError(code, extra = {}) {
   return { ...CHAT_BASE, error: code, mode: code === 'not_configured' ? 'disabled' : 'full', suggestions: SUGGESTED_QUESTIONS.questions.slice(0, 4).map((q) => q.text), ...extra };
 }
 
-export const CHAT_ERROR_CODES = ['not_configured', 'sql_rejected', 'provider_unavailable', 'dataset_not_ready', 'sql_generation_failed', 'sql_execution_error: timeout'];
-
 const DELIVERY_STATUSES = SCHEMA.node_types.find((type) => type.key === 'SalesOrder').value_labels.overall_delivery_status;
 
 export function chatReply(message) {

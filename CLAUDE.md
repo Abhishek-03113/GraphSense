@@ -63,7 +63,7 @@ React 19 + TypeScript + Vite, React Router for real URLs, TanStack Query for ser
   - `overview/` (`/`), `explore/` (`/explore`, graph + filters), `ask/` (`/ask` and the Explore side panel), `flows/` (`/flows`, `/flows/:flowId`), `trace/` (`/trace?type=&id=`), `records/` (`/records/:type?`)
   - `inspector/` - `RecordInspector`, the details panel shared by Explore, Flows, Trace and Records
   - `onboarding/` - first-run "Load data" state (`POST /api/ingest`)
-- **`src/components/ui/`** - Button, IconButton, Card, Badge, TypeBadge, Input/Select, SegmentedControl, Checkbox, Slider, Table, Sheet, Tooltip, EmptyState/ErrorState, Skeleton, Kbd, Combobox, Disclosure, CommandPalette
+- **`src/components/ui/`** - Button, IconButton, Card, Badge, TypeBadge, Input/Select, Checkbox, Slider, Table, Sheet, Tooltip, EmptyState/ErrorState, Skeleton, Kbd, Combobox, Disclosure, CommandPalette
 - **`src/components/graph/`** - `GraphCanvas` (the only Cytoscape wrapper; used by Explore, Flows and Trace), `CanvasToolbar`, `Legend`, `layouts.ts`, `graphStyle.ts`, `useThemeColors.ts`
 - **`src/lib/api/`** - `client.ts` (fetch + `VITE_API_BASE_URL`), `schemas.ts` (Zod), `queries.ts` (TanStack Query hooks)
 - **`src/lib/schema/`** - `useSchema()` and helpers (`getTypeMeta`, `colorForType`, `typeLabel`, `edgeLabel`); built from `GET /api/graph/schema`, with a fallback derived from `/summary` and `/flows`

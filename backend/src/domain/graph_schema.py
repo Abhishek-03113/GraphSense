@@ -343,9 +343,6 @@ class GraphDataset(_Frozen):
                 return f
         return None
 
-    def flows_by_id(self) -> dict[str, FlowDefinition]:
-        return {f.id: f for f in self.flows}
-
     # ------------------------------------------------------------------
     # Client-facing description
     # ------------------------------------------------------------------

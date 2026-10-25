@@ -16,7 +16,6 @@ from __future__ import annotations
 
 from typing import Any
 
-import structlog
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -31,8 +30,9 @@ from src.storage.app_tables import RUN_ACTIVE, ingestion_runs
 from src.storage.readiness import is_missing_relation
 from src.storage.runs import DatasetRow, fetch_dataset_rows, run_summary
 from src.storage.session import use_dataset
+from src.utils.logger import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
 
@@ -169,7 +169,7 @@ async def _has_rows(db: AsyncSession, table: str) -> bool:
     except Exception as exc:  # noqa: BLE001
         if is_missing_relation(exc):
             return False
-        logger.warning("datasets.suggested_questions.row_check_failed", table=table, error=type(exc).__name__)
+        logger.warning("datasets.suggested_questions.row_check_failed table=%s error=%s", table, type(exc).__name__)
         return True
 
 

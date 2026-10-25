@@ -152,7 +152,7 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_DSN", "READONLY_DATABASE_DSN", "OWNER_DATABASE_DSN", mode="before")
     @classmethod
     def _asyncpg_driver(cls, v: object) -> object:
-        """Plain ``postgresql://`` (as Railway and Heroku provide) means the asyncpg driver here."""
+        """Plain ``postgresql://`` (as hosting providers usually give it) means the asyncpg driver here."""
         if isinstance(v, str):
             v = v.strip()
             if not v:

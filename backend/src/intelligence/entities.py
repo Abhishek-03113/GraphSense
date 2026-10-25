@@ -73,10 +73,6 @@ class EntityExtractor:
     def node_types(self) -> frozenset[str]:
         return frozenset(self._single.values()) | frozenset(self._composite.values())
 
-    def node_type_of(self, table: str, column: str) -> str | None:
-        """Node type whose id is held in ``table.column`` (single-column ids only)."""
-        return self._single.get((table, column))
-
     def extract(
         self,
         projections: Sequence[Projection],

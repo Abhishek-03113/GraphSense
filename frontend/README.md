@@ -50,7 +50,7 @@ src/
     inspector/    Record details panel shared by Explore, Flows, Trace and Records
     onboarding/   First-run "Load data" state
   components/
-    ui/           Button, IconButton, Card, Badge, Input, Select, SegmentedControl,
+    ui/           Button, IconButton, Card, Badge, Input, Select,
                   Checkbox, Slider, Table, Sheet, Tooltip, EmptyState, Skeleton,
                   Kbd, Combobox, Disclosure, CommandPalette
     graph/        GraphCanvas (Cytoscape wrapper), toolbar, legend, layouts, theme colours

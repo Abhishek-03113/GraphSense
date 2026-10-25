@@ -37,16 +37,6 @@ from src.utils.logger import get_logger
 logger = get_logger(__name__)
 
 
-def configured_ai() -> dict[str, Any]:
-    """Mode and provider state from configuration alone (no database)."""
-    providers = build_providers()
-    return {
-        "mode": providers.mode,
-        "llm_configured": is_configured(providers.llm),
-        "embeddings_configured": is_configured(providers.embedder),
-    }
-
-
 # The most recent run that finished and in which the knowledge hook ran.  Ingest runs count (the
 # hook runs after the swap) as do refresh runs; a run that was skipped or whose hook failed does not.
 _LAST_REFRESH_RUN = text(

@@ -19,7 +19,6 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
-import structlog
 from sqlalchemy import Engine, text
 
 from src.config import get_settings
@@ -42,8 +41,9 @@ from src.storage import schema_manager as sm
 from src.storage.engines import get_owner_sync_engine, make_owner_async_engine
 from src.storage.runs import IssueRow, NullRunStore, RunStore, SqlRunStore
 from src.storage.schema_names import live_schema
+from src.utils.logger import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 HEARTBEAT_SECONDS = 10.0
 
@@ -182,7 +182,7 @@ class IngestRun:
         except IngestError as exc:
             return self._fail(exc.code, exc.message)
         except Exception:
-            logger.error("ingest.unexpected_failure", dataset=self.package.id, run=self.run_id, exc_info=True)
+            logger.error("ingest.unexpected_failure dataset=%s run=%s", self.package.id, self.run_id, exc_info=True)
             return self._fail("internal_error", "The ingestion failed unexpectedly. See the server log for details.")
         finally:
             self._cleanup()
@@ -325,15 +325,14 @@ class IngestRun:
             self.run_id, status, table_counts=table_counts, reject_counts=reject_counts, report=self.report,
             source_fingerprint=plan.fingerprint if plan else None,
         )
-        logger.info("ingest.finished", dataset=self.package.id, run=self.run_id, status=status,
-                    rows=sum(table_counts.values()))
+        logger.info("ingest.finished dataset=%s run=%s status=%s rows=%s", self.package.id, self.run_id, status, sum(table_counts.values()))
         return IngestOutcome(
             self.package.id, self.kind, self.run_id, status, dry_run=self.options.dry_run,
             table_counts=table_counts, reject_counts=reject_counts, report=self.report, issues=rows,
         )
 
     def _fail(self, code: str, message: str) -> IngestOutcome:
-        logger.warning("ingest.failed", dataset=self.package.id, run=self.run_id, code=code)
+        logger.warning("ingest.failed dataset=%s run=%s code=%s", self.package.id, self.run_id, code)
         rows = self.issues.rows()
         try:
             self.store.add_issues(self.run_id, rows)
@@ -344,7 +343,7 @@ class IngestRun:
             if self.kind == "ingest" and not self.options.dry_run:
                 self._mark_dataset_failed()
         except Exception:
-            logger.error("ingest.record_failure_failed", run=self.run_id, exc_info=True)
+            logger.error("ingest.record_failure_failed run=%s", self.run_id, exc_info=True)
         return IngestOutcome(
             self.package.id, self.kind, self.run_id, "failed", dry_run=self.options.dry_run,
             reject_counts=self.issues.reject_counts(), report=self.report, issues=rows,
@@ -375,7 +374,7 @@ class IngestRun:
             try:
                 sm.drop_schema(self._staging, engine=self.engine)
             except Exception:
-                logger.error("ingest.cleanup_failed", dataset=self.package.id, exc_info=True)
+                logger.error("ingest.cleanup_failed dataset=%s", self.package.id, exc_info=True)
             self._staging = None
 
 
@@ -421,7 +420,7 @@ def _prepare(
         store = SqlRunStore(engine)
         reaped = store.reap_stale(dataset_id)
         if reaped:
-            logger.warning("ingest.stale_runs_reaped", dataset=dataset_id, count=reaped)
+            logger.warning("ingest.stale_runs_reaped dataset=%s count=%s", dataset_id, reaped)
         sm.drop_orphan_staging(dataset_id, engine=engine)
         run_id = store.create(dataset_id, kind, package_hash=package.content_hash,
                               triggered_by=options.triggered_by, status="queued")

@@ -27,12 +27,6 @@ export function filterGraphByTypes(graph: GraphData, allowed: Set<string>, alway
   return { nodes, edges: graph.edges.filter((edge) => ids.has(edge.source) && ids.has(edge.target)) };
 }
 
-export function countByType(nodes: GraphNode[]): Record<string, number> {
-  const out: Record<string, number> = {};
-  for (const node of nodes) out[node.type] = (out[node.type] ?? 0) + 1;
-  return out;
-}
-
 export interface Neighbour {
   node: GraphNode;
   edge: GraphEdge;

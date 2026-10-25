@@ -21,7 +21,7 @@ ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
     PATH="/app/.venv/bin:$PATH"
 
-# Railway sets PORT dynamically (typically 8080), default to 8000 for local dev
+# Hosts may set PORT; scripts/start.sh defaults to 8000
 EXPOSE 8000
 
 # Migrate, adopt a stage-1 database if present, then serve (see scripts/start.sh).

@@ -94,13 +94,3 @@ def test_override_settings_applies_and_restores():
         assert get_settings() is patched
         assert get_settings().DEFAULT_DATASET == "zzz"
     assert get_settings().DEFAULT_DATASET == before
-
-
-def test_legacy_shims_read_the_new_settings(monkeypatch):
-    from src.db.config import db_settings
-    from src.domain.config import graph_settings
-
-    monkeypatch.setenv("GEMINI_API_KEY", "k")
-    reset_settings()
-    assert "localhost" in str(db_settings.DATABASE_DSN)
-    assert graph_settings.GRAPH_DATASET == "o2c"

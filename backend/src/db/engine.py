@@ -8,14 +8,12 @@ application shutdown via ``dispose_engine()``.
 
 from __future__ import annotations
 
-from typing import Any
-
-import structlog
 from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
 
 from src.config import dsn_host, get_settings
+from src.utils.logger import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 _engine: AsyncEngine | None = None
 
@@ -24,8 +22,12 @@ def _build_engine() -> AsyncEngine:
     """Create the async engine with pool settings from config."""
     settings = get_settings()
     dsn = settings.require_database_dsn()
-    log = logger.bind(pool_size=settings.DB_POOL_SIZE, max_overflow=settings.DB_MAX_OVERFLOW)
-    log.info("db.engine.creating", dsn=dsn_host(dsn))  # credentials hidden
+    logger.info(
+        "db.engine.creating dsn=%s pool_size=%s max_overflow=%s",
+        dsn_host(dsn),  # credentials hidden
+        settings.DB_POOL_SIZE,
+        settings.DB_MAX_OVERFLOW,
+    )
 
     return create_async_engine(
         dsn,
@@ -44,13 +46,6 @@ def get_engine() -> AsyncEngine:
     if _engine is None:
         _engine = _build_engine()
     return _engine
-
-
-def __getattr__(name: str) -> Any:
-    # Backwards compatibility for ``from src.db.engine import engine``.
-    if name == "engine":
-        return get_engine()
-    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 async def dispose_engine() -> None:

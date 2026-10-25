@@ -20,7 +20,6 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Self
 
-import structlog
 from sqlalchemy import Connection, Engine, text
 
 from src.datasets.ddl import index_ddl, quote_ident, table_ddl, table_indexes
@@ -33,8 +32,6 @@ from src.storage.schema_names import (
     staging_prefix,
     staging_schema,
 )
-
-logger = structlog.get_logger(__name__)
 
 SWAP_LOCK_TIMEOUT = "15s"
 

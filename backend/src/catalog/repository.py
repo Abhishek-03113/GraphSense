@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass
-from datetime import datetime
 from typing import Any
 
 from sqlalchemy import Connection, text
@@ -352,9 +351,3 @@ def load_build(conn: Connection, dataset_id: str, run_id: str) -> StoredCatalog 
         )
     return StoredCatalog(info, profiles, stats)
 
-
-def stored_built_at(conn: Connection, dataset_id: str, run_id: str) -> datetime | None:
-    return conn.execute(
-        text("SELECT built_at FROM app.catalog_builds WHERE dataset_id = :d AND run_id = :r"),
-        {"d": dataset_id, "r": run_id},
-    ).scalar()
