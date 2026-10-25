@@ -420,7 +420,9 @@ class AskService:
         try:
             response = await self._generate(run, prompt, render.ANSWER_SCHEMA, max_tokens=1024)
         except ProviderError as exc:
-            logger.warning("Answer synthesis failed (%s); returning the data with a standard sentence", type(exc).__name__)
+            logger.warning(
+                "Answer synthesis failed (%s: %s); returning the data with a standard sentence", type(exc).__name__, exc
+            )
             return None
         return render.parse_answer(response)
 
@@ -511,9 +513,11 @@ class AskService:
     @staticmethod
     def _templated_answer(row_count: int, truncated: bool, validated: ValidatedSql) -> str:
         if row_count == 0:
-            return "No matching records were found."
-        more = f" (showing the first {validated.row_cap})" if truncated else ""
-        return f"{row_count} record{'s' if row_count != 1 else ''} found{more}. See the table for the details."
+            return "I couldn't find any records that match that. Try widening the question a little."
+        noun = "record" if row_count == 1 else "records"
+        more = f" (the first {validated.row_cap} are shown)" if truncated else ""
+        where = "it's" if row_count == 1 else "they're"
+        return f"I found {row_count} matching {noun}{more}, and {where} in the table below."
 
     @staticmethod
     def _execution_problem(category: str, validated: ValidatedSql, snapshot: CatalogSnapshot) -> str:
