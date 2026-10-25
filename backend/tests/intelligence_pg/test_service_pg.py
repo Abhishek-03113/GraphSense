@@ -124,9 +124,8 @@ async def test_a_dataset_that_is_not_loaded_is_not_ready(pg, toy_ctx):
     assert result.error == "dataset_not_ready"
 
 
-def test_the_search_path_keeps_public_for_legacy_layouts():
-    assert search_path_for("ds_o2c") == "ds_o2c, public"
-    assert search_path_for(None) == "public"
+def test_the_search_path_holds_only_the_dataset_schema():
+    assert search_path_for("ds_o2c") == "ds_o2c"
 
 
 # ---------------------------------------------------------------------------

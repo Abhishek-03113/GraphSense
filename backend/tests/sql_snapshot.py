@@ -128,10 +128,10 @@ async def snapshot(dataset: GraphDataset | None = None) -> dict[str, Any]:
         await _record(dataset, f"entities:{node_type}", lambda r, t=node_type: r.get_entities(t, 10), out)
 
     repo = GraphRepository(RecordingSession(), dataset)  # type: ignore[arg-type]
-    out["union_query"] = canon(repo._get_edges_union_query())
+    out["union_query"] = canon(repo.sql.edges_union())
     # Registry edges are keyed by a unique edge id rather than the old ad-hoc
     # query keys, so compare the list of statements in definition order.
-    out["edge_queries"] = [canon(sql) for sql in repo._get_individual_edge_queries().values()]
+    out["edge_queries"] = [canon(sql) for sql in repo.sql.edge_selects().values()]
     return out
 
 

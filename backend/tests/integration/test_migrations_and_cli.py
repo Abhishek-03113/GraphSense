@@ -1,4 +1,4 @@
-"""The migration runner's handling of stage-1 migrations and missing extensions, and the CLI end to end."""
+"""The migration runner on a fresh database and with missing extensions, and the CLI end to end."""
 
 from __future__ import annotations
 
@@ -55,7 +55,7 @@ def tables(name: str) -> set[str]:
     return {r[0] for r in rows}
 
 
-def test_a_fresh_database_gets_the_app_schema_and_no_stage_one_tables(empty_db):
+def test_a_fresh_database_gets_the_app_schema_and_no_dataset_tables_in_public(empty_db):
     async def go():
         engine = make_owner_async_engine()
         try:
@@ -65,8 +65,6 @@ def test_a_fresh_database_gets_the_app_schema_and_no_stage_one_tables(empty_db):
 
     asyncio.run(go())
     assert statuses(empty_db) == {
-        "20260325000001": "baselined",
-        "20260326000001": "baselined",
         "20261101000001": "applied",
         "20261101000002": "applied",
         "20261101000003": "applied",

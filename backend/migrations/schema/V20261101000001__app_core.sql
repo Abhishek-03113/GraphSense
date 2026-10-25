@@ -6,7 +6,7 @@
 
 CREATE SCHEMA IF NOT EXISTS app;
 
--- One row per dataset that has been loaded or adopted.
+-- One row per dataset that has been loaded.
 CREATE TABLE IF NOT EXISTS app.datasets (
     id               text        PRIMARY KEY,
     package_id       text        NOT NULL,
@@ -14,10 +14,9 @@ CREATE TABLE IF NOT EXISTS app.datasets (
     package_hash     text        NOT NULL,
     schema_name      text        NOT NULL,
     status           text        NOT NULL DEFAULT 'empty'
-                     CHECK (status IN ('empty', 'ready', 'legacy', 'failed')),
+                     CHECK (status IN ('empty', 'ready', 'failed')),
     active_run_id    uuid,
     previous_run_id  uuid,
-    compat_views     boolean     NOT NULL DEFAULT false,
     created_at       timestamptz NOT NULL DEFAULT now(),
     updated_at       timestamptz NOT NULL DEFAULT now()
 );
@@ -27,7 +26,7 @@ CREATE TABLE IF NOT EXISTS app.ingestion_runs (
     id                  uuid        PRIMARY KEY,
     dataset_id          text        NOT NULL,
     kind                text        NOT NULL DEFAULT 'ingest'
-                        CHECK (kind IN ('ingest', 'adopt', 'refresh')),
+                        CHECK (kind IN ('ingest', 'refresh')),
     status              text        NOT NULL
                         CHECK (status IN ('queued', 'running', 'succeeded', 'succeeded_with_warnings', 'failed', 'skipped')),
     phase               text,

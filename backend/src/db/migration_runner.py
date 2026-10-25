@@ -5,19 +5,15 @@ import re
 from dataclasses import dataclass
 from datetime import datetime, UTC
 from pathlib import Path
-from typing import List, Optional
 
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-MIGRATIONS_DIR = Path(__file__).resolve().parent.parent.parent / "migrations"
+from src.utils.logger import get_logger
 
-# Stage-1 migrations that created the dataset tables (and the first embedding
-# table) in the ``public`` schema.  Dataset tables are generated from dataset
-# packages now, so on a database that never ran them they are recorded as
-# baselined instead of executed.  Databases that did run them keep their
-# record, and ``graphsense dataset adopt-legacy`` moves the tables.
-LEGACY_VERSIONS = frozenset({"20260325000001", "20260326000001"})
+logger = get_logger(__name__)
+
+MIGRATIONS_DIR = Path(__file__).resolve().parent.parent.parent / "migrations"
 
 _CREATE_EXTENSION = re.compile(r"CREATE\s+EXTENSION\s+(?:IF\s+NOT\s+EXISTS\s+)?\"?(\w+)\"?", re.IGNORECASE)
 
@@ -35,8 +31,8 @@ class MigrationStatus:
     version: str
     name: str
     status: str
-    applied_at: Optional[str]
-    checksum: Optional[str]
+    applied_at: str | None
+    checksum: str | None
 
 
 def _get_checksum(content: str) -> str:
@@ -62,7 +58,7 @@ async def _ensure_migrations_table(conn) -> None:
     )
 
 
-def _get_local_migrations() -> List[MigrationFile]:
+def _get_local_migrations() -> list[MigrationFile]:
     """Discover all migration files from migrations/schema and migrations/seed."""
     migrations = []
     for category in ["schema", "seed"]:
@@ -87,7 +83,7 @@ def _get_local_migrations() -> List[MigrationFile]:
     return migrations
 
 
-async def get_status(engine: AsyncEngine) -> List[MigrationStatus]:
+async def get_status(engine: AsyncEngine) -> list[MigrationStatus]:
     """Get the current state of migrations."""
     local_migs = _get_local_migrations()
     
@@ -143,14 +139,13 @@ async def _missing_extensions(conn, content: str) -> list[str]:
     return sorted(wanted - available)
 
 
-async def apply_pending(engine: AsyncEngine, skipped: Optional[List[str]] = None) -> List[MigrationFile]:
+async def apply_pending(engine: AsyncEngine, skipped: list[str | None] = None) -> list[MigrationFile]:
     """Apply all pending migrations in version order.
 
     A migration that needs a PostgreSQL extension the server does not provide is
     not applied and stays pending (its version is appended to ``skipped``), so the
     rest of the schema can still be created; it is applied by a later run once the
-    extension is installed.  Stage-1 data-table migrations are baselined, not run
-    (see ``LEGACY_VERSIONS``).
+    extension is installed.
     """
     local_migs = _get_local_migrations()
     applied_this_run = []
@@ -172,31 +167,17 @@ async def apply_pending(engine: AsyncEngine, skipped: Optional[List[str]] = None
             content = m.filepath.read_text(encoding="utf-8")
             checksum = _get_checksum(content)
 
-            if m.version in LEGACY_VERSIONS:
-                print(f"Baselining legacy {m.version}__{m.name} (dataset tables are generated from packages).")
-                await conn.execute(
-                    text(
-                        """
-                        INSERT INTO _schema_migrations
-                        (version, name, category, status, checksum)
-                        VALUES (:v, :n, :c, 'baselined', :chk)
-                        """
-                    ),
-                    {"v": m.version, "n": m.name, "c": m.category, "chk": checksum},
-                )
-                continue
-
             missing = await _missing_extensions(conn, content)
             if missing:
-                print(
-                    f"Skipping {m.version}__{m.name}: PostgreSQL extension(s) {', '.join(missing)} "
-                    "not available on this server. It stays pending."
+                logger.warning(
+                    "Skipping %s__%s: PostgreSQL extension(s) %s not available on this server. It stays pending.",
+                    m.version, m.name, ", ".join(missing),
                 )
                 if skipped is not None:
                     skipped.append(m.version)
                 continue
 
-            print(f"Applying {m.version}__{m.name} ({m.category})...")
+            logger.info("Applying %s__%s (%s)...", m.version, m.name, m.category)
 
             # Apply the SQL file — split by semicolons because asyncpg
             # does not support multiple statements in a single prepared stmt.
@@ -225,7 +206,7 @@ async def apply_pending(engine: AsyncEngine, skipped: Optional[List[str]] = None
     return applied_this_run
 
 
-async def baseline(engine: AsyncEngine, upto: str) -> List[MigrationFile]:
+async def baseline(engine: AsyncEngine, upto: str) -> list[MigrationFile]:
     """Mark all migrations up to a certain version as applied without executing them."""
     local_migs = _get_local_migrations()
     baselined_this_run = []

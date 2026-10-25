@@ -197,8 +197,7 @@ class CatalogService:
         cfg = profile_config(get_settings())
 
         def work(conn: Connection):
-            schema, shared = resolve_schema(conn, pkg)
-            built = build_catalog(conn, pkg, schema=schema, run_id="live", cfg=cfg, shared_schema=shared)
+            built = build_catalog(conn, pkg, schema=resolve_schema(conn, pkg), run_id="live", cfg=cfg)
             conn.rollback()
             return built
 
@@ -227,8 +226,3 @@ def get_catalog_service() -> CatalogService:
         _default = CatalogService()
     return _default
 
-
-def reset_catalog_service() -> None:
-    """Drop the process-wide service and its cache (tests)."""
-    global _default
-    _default = None

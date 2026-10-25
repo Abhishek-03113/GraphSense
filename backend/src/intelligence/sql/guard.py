@@ -243,8 +243,13 @@ class SqlGuard:
             return _reject("schema_not_allowed", "Cross-database references are not allowed.")
         schema = node.args.get("db")
         if schema is not None:
-            wanted = schema_name or "public"
-            if not isinstance(schema, exp.Identifier) or schema.name != wanted or not _SCHEMA.match(schema.name):
+            # Without a dataset schema there is no qualifier that could be right.
+            if (
+                schema_name is None
+                or not isinstance(schema, exp.Identifier)
+                or schema.name != schema_name
+                or not _SCHEMA.match(schema.name)
+            ):
                 return _reject("schema_not_allowed", "Only the dataset's own tables may be queried.")
         elif this.name.lower() in cte_names:
             return None

@@ -7,8 +7,6 @@ import asyncio
 import click
 
 from src.config import dsn_host, get_settings
-from src.datasets.errors import PackageError
-from src.datasets.registry import available_ids, get_package
 from src.db.migration_runner import apply_pending, get_status
 from src.storage.engines import (
     dispose_sync_engines,
@@ -78,19 +76,12 @@ def status() -> None:
 )
 def provision(app_password: str | None, readonly_password: str | None) -> None:
     settings = get_settings()
-    legacy: list[str] = []
-    for dataset_id in available_ids():
-        try:
-            legacy += [t.table for t in get_package(dataset_id).tables]
-        except PackageError:
-            continue
     try:
         report = provision_roles(
             get_owner_sync_engine(),
             app_password=app_password,
             readonly_password=readonly_password,
             statement_timeout_ms=settings.SQL_STATEMENT_TIMEOUT_MS,
-            legacy_tables=tuple(sorted(set(legacy))),
         )
     except Exception as exc:
         raise _fail(exc) from None

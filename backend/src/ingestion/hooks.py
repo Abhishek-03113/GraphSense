@@ -37,14 +37,14 @@ from collections.abc import Awaitable, Callable
 from dataclasses import dataclass, field
 from typing import Any, Literal, Protocol, runtime_checkable
 
-import structlog
 from sqlalchemy import Engine
 from sqlalchemy.ext.asyncio import AsyncEngine
 
 from src.config import Settings, get_settings
 from src.datasets.models import DatasetPackage
+from src.utils.logger import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 Phase = Literal["pre_swap", "post_swap"]
 PHASES: tuple[Phase, ...] = ("pre_swap", "post_swap")
@@ -141,7 +141,7 @@ def load_hooks(specs: list[str] | None = None) -> LoadedHooks:
     for spec in specs if specs is not None else get_settings().POST_INGEST_HOOKS:
         module_name, _, attr = spec.partition(":")
         if not module_name or not attr:
-            logger.warning("ingest.hook.invalid_spec", spec=spec)
+            logger.warning("ingest.hook.invalid_spec spec=%s", spec)
             result.skipped.append(HookResult(spec, "", "skipped", "Not of the form module:attr."))
             continue
         try:
@@ -150,18 +150,18 @@ def load_hooks(specs: list[str] | None = None) -> LoadedHooks:
         except ModuleNotFoundError as exc:
             # Only "this hook's own module is not there" is an expected, quiet skip.
             if exc.name and (module_name == exc.name or module_name.startswith(exc.name + ".")):
-                logger.warning("ingest.hook.unavailable", hook=spec)
+                logger.warning("ingest.hook.unavailable hook=%s", spec)
                 result.skipped.append(HookResult(spec, "", "skipped", "The hook module is not available."))
             else:
-                logger.warning("ingest.hook.import_failed", hook=spec, error=type(exc).__name__)
+                logger.warning("ingest.hook.import_failed hook=%s error=%s", spec, type(exc).__name__)
                 result.skipped.append(
                     HookResult(spec, "", "warning", "The hook could not be imported (a dependency is missing).")
                 )
         except (AttributeError, TypeError) as exc:
-            logger.warning("ingest.hook.unusable", hook=spec, error=type(exc).__name__)
+            logger.warning("ingest.hook.unusable hook=%s error=%s", spec, type(exc).__name__)
             result.skipped.append(HookResult(spec, "", "warning", "The hook is not usable."))
         except Exception as exc:
-            logger.warning("ingest.hook.import_failed", hook=spec, error=type(exc).__name__)
+            logger.warning("ingest.hook.import_failed hook=%s error=%s", spec, type(exc).__name__)
             result.skipped.append(HookResult(spec, "", "warning", "The hook could not be imported."))
     return result
 
@@ -197,7 +197,7 @@ async def run_hooks(hooks: list[Hook], phase: Phase, ctx: HookContext) -> list[H
             returned = await item.run(ctx)
             result = _coerce_result(returned)
         except Exception as exc:
-            logger.error("ingest.hook.failed", hook=item.name, phase=phase, exc_info=True)
+            logger.error("ingest.hook.failed hook=%s phase=%s", item.name, phase, exc_info=True)
             result = HookResult(status="failed", message=f"The hook failed ({type(exc).__name__}).")
         result.name = result.name or item.name
         result.phase = phase

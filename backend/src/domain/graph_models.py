@@ -1,4 +1,5 @@
-from typing import Dict, List, Literal, Optional, Any
+from typing import Any, Literal
+
 from pydantic import BaseModel, ConfigDict, Field
 
 
@@ -8,45 +9,48 @@ class FlowDefinition(BaseModel):
     id: str
     label: str
     description: str
-    node_types: List[str]
-    edge_types: List[str]
+    node_types: list[str]
+    edge_types: list[str]
 
 
 class FlowListResponse(BaseModel):
-    flows: List[FlowDefinition]
+    flows: list[FlowDefinition]
+
 
 class Node(BaseModel):
     id: str
     type: str
-    label: Optional[str] = None
-    properties: Dict[str, Any] = Field(default_factory=dict)
+    label: str | None = None
+    properties: dict[str, Any] = Field(default_factory=dict)
+
 
 class Edge(BaseModel):
     id: str
     source: str
     target: str
     type: str
-    properties: Dict[str, Any] = Field(default_factory=dict)
+    properties: dict[str, Any] = Field(default_factory=dict)
+
 
 class GraphSummaryResponse(BaseModel):
-    nodes: Dict[str, int]
-    edges: Dict[str, int]
+    nodes: dict[str, int]
+    edges: dict[str, int]
+
 
 class GraphSubgraphResponse(BaseModel):
-    nodes: List[Node]
-    edges: List[Edge]
+    nodes: list[Node]
+    edges: list[Edge]
+
 
 class GraphEntityResponse(BaseModel):
     type: str
     # Each entity is {"id": "...", "label": "...", <display property>: value, ...}.
-    entities: List[Dict[str, Any]]
+    entities: list[dict[str, Any]]
 
 
 # ---------------------------------------------------------------------------
 # GET /api/graph/schema — dataset description for clients
 # ---------------------------------------------------------------------------
-
-NodeCategory = Literal["party", "document", "item", "master", "finance", "other"]
 
 AccentName = Literal[
     "red", "orange", "yellow", "green", "mint", "teal", "cyan",
@@ -70,14 +74,15 @@ class SchemaNodeType(BaseModel):
     label: str
     plural: str
     description: str
-    category: NodeCategory
-    accent: Optional[AccentName] = None
-    icon: Optional[str] = None
+    # Free-form grouping label chosen by the dataset package.
+    category: str
+    accent: AccentName | None = None
+    icon: str | None = None
     is_primary: bool
-    display_properties: List[str] = Field(default_factory=list)
+    display_properties: list[str] = Field(default_factory=list)
     # Coded properties: property -> {code: label}. Only labels the package
     # author is confident about are served (see confidence in value_sets).
-    value_labels: Dict[str, Dict[str, str]] = Field(default_factory=dict)
+    value_labels: dict[str, dict[str, str]] = Field(default_factory=dict)
 
 
 class SchemaEdgeType(BaseModel):
@@ -90,6 +95,6 @@ class SchemaEdgeType(BaseModel):
 
 class GraphSchemaResponse(BaseModel):
     domain: SchemaDomain
-    node_types: List[SchemaNodeType]
-    edge_types: List[SchemaEdgeType]
-    flows: List[FlowDefinition]
+    node_types: list[SchemaNodeType]
+    edge_types: list[SchemaEdgeType]
+    flows: list[FlowDefinition]

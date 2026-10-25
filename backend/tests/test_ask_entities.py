@@ -1,9 +1,8 @@
 """Entity extraction: result columns map to graph node ids through the dataset definition."""
 
-import pytest
 
 from src.catalog import CatalogSnapshot
-from src.intelligence.entities import EntityExtractor, graph_item_number
+from src.intelligence.entities import EntityExtractor
 from src.intelligence.models import ValidatedSql
 from src.intelligence.sql.guard import SqlGuard
 
@@ -78,14 +77,21 @@ def test_only_the_first_hundred_rows_are_scanned(toy_package):
 
 def test_composite_ids_use_the_graph_form(o2c_package):
     sql = "SELECT soi.sales_order, soi.sales_order_item, soi.material FROM sales_order_items soi"
-    ids = extract(o2c_package, sql, ("740506", "000010", "TG11"), ("740506", "20", "TG12"))
+    # values as stored: ingestion has already normalised the item numbers
+    ids = extract(o2c_package, sql, ("740506", "10", "TG11"), ("740506", "20", "TG12"))
     assert ids == [
         "SalesOrder:740506",
         "Product:TG11",
-        "SalesOrderItem:740506-10",  # leading zeros of the item stripped, as the graph SQL does
+        "SalesOrderItem:740506-10",
         "Product:TG12",
         "SalesOrderItem:740506-20",
     ]
+
+
+def test_composite_ids_use_stored_values_verbatim(o2c_package):
+    sql = "SELECT soi.sales_order, soi.sales_order_item FROM sales_order_items soi"
+    # no query-time rewriting: a value is part of the id exactly as the database returns it
+    assert extract(o2c_package, sql, ("740506", "000010")) == ["SalesOrder:740506", "SalesOrderItem:740506-000010"]
 
 
 def test_composite_needs_both_columns_from_the_same_row_of_the_same_table(o2c_package):
@@ -128,7 +134,3 @@ def test_every_example_query_yields_entities_only_from_id_columns(o2c_package):
             if p.aggregate:
                 assert f"v{index}" not in [e.value for e in entities], f"{example.id}.{p.name}"
 
-
-@pytest.mark.parametrize("raw,expected", [("000010", "10"), ("10", "10"), ("0", ""), ("000", ""), ("1010", "1010")])
-def test_item_numbers_follow_the_graph_sql(raw, expected):
-    assert graph_item_number(raw) == expected

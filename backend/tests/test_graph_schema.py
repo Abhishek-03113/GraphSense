@@ -1,5 +1,7 @@
 """Consistency of dataset definitions and the /api/graph/schema contract."""
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 from pydantic import ValidationError
@@ -14,7 +16,7 @@ from src.domain.graph_schema import EdgeTypeDef, GraphDataset, NodeTypeDef
 from src.main import app
 from tests.conftest import TOY_DIR
 
-CATEGORIES = {"party", "document", "item", "master", "finance", "other"}
+CATEGORY = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 ACCENTS = {
     "red", "orange", "yellow", "green", "mint", "teal", "cyan",
     "blue", "indigo", "purple", "pink", "brown", "gray",
@@ -69,7 +71,7 @@ def test_entity_hints_target_registered_types(dataset):
 def test_presentation_metadata_is_well_formed(dataset):
     for n in dataset.node_types:
         assert n.label and n.plural and n.description
-        assert n.category in CATEGORIES
+        assert CATEGORY.match(n.category), n.key
         assert n.accent is None or n.accent in ACCENTS
         assert 2 <= len(n.display_properties) <= 5, n.key
     assert any(n.is_primary for n in dataset.node_types)
@@ -137,7 +139,7 @@ def test_unknown_dataset_is_rejected():
 def _node(key: str, **kw) -> NodeTypeDef:
     return NodeTypeDef(
         key=key, label=key, plural=key + "s", description=key,
-        table="t_" + key.lower(), id_columns=("id",), **kw,
+        table="t_" + key.lower(), **{"id_columns": ("id",), **kw},
     )
 
 
@@ -182,7 +184,40 @@ def test_definitions_reject_unsafe_identifiers():
                     table="t", id_columns=("id",))
     with pytest.raises(ValidationError):
         NodeTypeDef(key="A", label="A", plural="As", description="A",
-                    table="t", id_columns=("id", "item", "extra"))
+                    table="t", id_columns=("id", "id"))
+    with pytest.raises(ValidationError):
+        NodeTypeDef(key="A", label="A", plural="As", description="A",
+                    table="t", id_columns=())
+    with pytest.raises(ValidationError):
+        _node("A", category="Not A Label")
+
+
+def test_ids_may_have_any_number_of_columns():
+    line = _node("Line", id_columns=("order_no", "item_no", "line_no"))
+    assert line.id_columns == ("order_no", "item_no", "line_no")
+
+
+def test_an_edge_endpoint_must_have_as_many_columns_as_the_id_it_refers_to():
+    nodes = (_node("Order"), _node("Line", id_columns=("order_no", "line_no")))
+
+    def edge(target_columns: tuple[str, ...]) -> EdgeTypeDef:
+        return EdgeTypeDef(
+            key="HAS_LINE", label="has line", source="Order", target="Line", description="x",
+            table="t_line", alias="l", source_columns=("order_no",), target_columns=target_columns,
+        )
+
+    GraphDataset(id="x", name="X", description="x", node_types=nodes, edge_types=(edge(("order_no", "line_no")),))
+    with pytest.raises(ValidationError, match="target_columns has 1 column"):
+        GraphDataset(id="x", name="X", description="x", node_types=nodes, edge_types=(edge(("line_no",)),))
+
+
+def test_traversal_stops_at_types_marked_terminal_whatever_their_category():
+    nodes = (
+        _node("Doc", category="party"),  # a category alone changes nothing
+        _node("Ref", category="lookup_data", terminal=True),
+    )
+    dataset = GraphDataset(id="x", name="X", description="x", node_types=nodes, edge_types=(_edge("USES", "Doc", "Ref"),))
+    assert dataset.terminal_node_keys == ["Ref"]
 
 
 # ---------------------------------------------------------------------------
@@ -217,7 +252,7 @@ def test_schema_endpoint_matches_contract(client):
     for n in body["node_types"]:
         assert node_fields <= set(n)
         assert set(n) - node_fields <= {"value_labels"}
-        assert n["category"] in CATEGORIES
+        assert CATEGORY.match(n["category"])
         assert n["accent"] is None or n["accent"] in ACCENTS
         assert isinstance(n["is_primary"], bool)
         assert isinstance(n["display_properties"], list)

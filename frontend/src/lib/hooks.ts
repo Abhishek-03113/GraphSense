@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useSyncExternalStore, type RefObject } from 'react';
+import { useEffect, useState, useSyncExternalStore, type RefObject } from 'react';
 
 /** Subscribe to a CSS media query. */
 export function useMediaQuery(query: string): boolean {
@@ -69,20 +69,4 @@ export function useFocusTrap(containerRef: RefObject<HTMLElement | null>, active
       opener?.focus?.();
     };
   }, [containerRef, active]);
-}
-
-/** Run a callback on Escape while enabled. */
-export function useEscape(handler: () => void, enabled = true): void {
-  const saved = useRef(handler);
-  useEffect(() => {
-    saved.current = handler;
-  }, [handler]);
-  useEffect(() => {
-    if (!enabled) return undefined;
-    const onKey = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') saved.current();
-    };
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [enabled]);
 }

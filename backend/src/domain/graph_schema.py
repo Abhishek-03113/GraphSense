@@ -20,21 +20,15 @@ from src.domain.graph_models import (
     AccentName,
     FlowDefinition,
     GraphSchemaResponse,
-    NodeCategory,
     SchemaDomain,
     SchemaEdgeType,
     SchemaNodeType,
 )
 
-# Records of these categories are shared reference data (one party or catalogue
-# item is linked to a great many documents).  Graph traversal reaches them but
-# does not expand through them, otherwise a trace of one document would pull in
-# every other document that refers to the same party or item.
-TERMINAL_CATEGORIES = frozenset({"party", "master"})
-
 _KEY = re.compile(r"^[A-Za-z][A-Za-z0-9_]*$")
 _TABLE = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*(\.[A-Za-z_][A-Za-z0-9_]*)?$")
 _COLUMN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+_CATEGORY = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 
 
 def _check(pattern: re.Pattern, value: str, what: str) -> str:
@@ -116,7 +110,9 @@ class NodeTypeDef(_Frozen):
     label: str
     plural: str
     description: str
-    category: NodeCategory = "other"
+    # Free-form grouping label for clients (e.g. "document", "party"); it has no
+    # effect on queries.  Traversal behaviour is set by ``terminal``.
+    category: str = "other"
     accent: AccentName | None = None
     icon: str | None = None
     is_primary: bool = False
@@ -124,9 +120,13 @@ class NodeTypeDef(_Frozen):
 
     # --- query mapping (used by the repository) ---------------------------
     table: str
-    # One column for a plain id, or two (document, item) for a composite id
-    # rendered as ``doc-item`` with the item number zero-stripped.
+    # One column for a plain id, or several for a composite id rendered as the
+    # values joined with "-" (``<first>-<second>...``), exactly as stored.
     id_columns: tuple[str, ...]
+    # Shared reference records (one party or catalogue item is linked to a great
+    # many others): traversal reaches them but does not expand through them,
+    # otherwise a trace of one record would pull in everything that refers to it.
+    terminal: bool = False
     # Count distinct ids rather than rows (multi-row-per-document tables).
     count_distinct: bool = False
 
@@ -149,6 +149,11 @@ class NodeTypeDef(_Frozen):
     def _valid_table(cls, v: str) -> str:
         return _check(_TABLE, v, "table name")
 
+    @field_validator("category")
+    @classmethod
+    def _valid_category(cls, v: str) -> str:
+        return _check(_CATEGORY, v, "node category")
+
     @field_validator("id_columns", "display_properties", "property_columns")
     @classmethod
     def _valid_columns(cls, v: tuple[str, ...]) -> tuple[str, ...]:
@@ -164,8 +169,10 @@ class NodeTypeDef(_Frozen):
     @field_validator("id_columns")
     @classmethod
     def _id_arity(cls, v: tuple[str, ...]) -> tuple[str, ...]:
-        if len(v) not in (1, 2):
-            raise ValueError("id_columns must have one (plain) or two (composite) columns")
+        if not v:
+            raise ValueError("id_columns must name at least one column")
+        if len(set(v)) != len(v):
+            raise ValueError("id_columns must not repeat a column")
         return v
 
     @model_validator(mode="after")
@@ -212,7 +219,7 @@ class EdgeTypeDef(_Frozen):
     # --- query mapping (used by the repository) ---------------------------
     table: str
     alias: str
-    # One column for a plain id, or two (document, item) for a composite id.
+    # The columns holding the endpoint's id, one per id column of that node type, in the same order.
     source_columns: tuple[str, ...]
     target_columns: tuple[str, ...]
     # Rows where any of these columns is NULL are skipped.
@@ -244,8 +251,8 @@ class EdgeTypeDef(_Frozen):
     @field_validator("source_columns", "target_columns")
     @classmethod
     def _id_arity(cls, v: tuple[str, ...]) -> tuple[str, ...]:
-        if len(v) not in (1, 2):
-            raise ValueError("endpoint columns must have one (plain) or two (composite) columns")
+        if not v:
+            raise ValueError("endpoint columns must name at least one column")
         return v
 
 
@@ -280,6 +287,7 @@ class GraphDataset(_Frozen):
         if len(set(node_keys)) != len(node_keys):
             raise ValueError("duplicate node type keys")
         known = set(node_keys)
+        arity = {n.key: len(n.id_columns) for n in self.node_types}
 
         seen_edges = set()
         for e in self.edge_types:
@@ -287,6 +295,13 @@ class GraphDataset(_Frozen):
                 raise ValueError(
                     f"edge {e.key}: {e.source}->{e.target} is not between registered node types"
                 )
+            # An endpoint with a different number of columns could never match the node's id.
+            for side, node_key, columns in (("source", e.source, e.source_columns), ("target", e.target, e.target_columns)):
+                if len(columns) != arity[node_key]:
+                    raise ValueError(
+                        f"edge {e.key} {e.source}->{e.target}: {side}_columns has {len(columns)} column(s), "
+                        f"the id of {node_key} has {arity[node_key]}"
+                    )
             ident = (e.key, e.source, e.target)
             if ident in seen_edges:
                 raise ValueError(f"duplicate edge definition {ident}")
@@ -324,8 +339,8 @@ class GraphDataset(_Frozen):
 
     @property
     def terminal_node_keys(self) -> list[str]:
-        """Types a traversal reaches but does not expand through (see ``TERMINAL_CATEGORIES``)."""
-        return [n.key for n in self.node_types if n.category in TERMINAL_CATEGORIES]
+        """Types a traversal reaches but does not expand through (``NodeTypeDef.terminal``)."""
+        return [n.key for n in self.node_types if n.terminal]
 
     def get_node_type(self, key: str) -> NodeTypeDef | None:
         for n in self.node_types:
@@ -342,9 +357,6 @@ class GraphDataset(_Frozen):
             if f.id == flow_id:
                 return f
         return None
-
-    def flows_by_id(self) -> dict[str, FlowDefinition]:
-        return {f.id: f for f in self.flows}
 
     # ------------------------------------------------------------------
     # Client-facing description

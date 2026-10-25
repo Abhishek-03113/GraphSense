@@ -14,7 +14,6 @@ from __future__ import annotations
 
 from typing import Literal
 
-import structlog
 from fastapi import APIRouter, BackgroundTasks, Depends, FastAPI, HTTPException, Query
 from fastapi.concurrency import run_in_threadpool
 from pydantic import BaseModel, ConfigDict
@@ -29,8 +28,9 @@ from src.ingestion.runner import IngestOptions, IngestRun, prepare_refresh, prep
 from src.storage import schema_manager as sm
 from src.storage.engines import get_owner_sync_engine
 from src.storage.runs import fetch_run, fetch_runs
+from src.utils.logger import get_logger
 
-logger = structlog.get_logger(__name__)
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/api/admin", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -63,7 +63,7 @@ async def _execute(run: IngestRun) -> None:
     try:
         await run_in_threadpool(run.execute)
     except Exception:  # execute() reports failures itself; this is a last resort
-        logger.error("admin.run.crashed", run=run.run_id, exc_info=True)
+        logger.error("admin.run.crashed run=%s", run.run_id, exc_info=True)
         run.release()
     finally:
         await dispose_engine()

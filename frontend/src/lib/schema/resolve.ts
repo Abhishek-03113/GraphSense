@@ -7,7 +7,6 @@ import {
   type FlowMeta,
   type PaletteSlot,
   type ResolvedSchema,
-  type TypeCategory,
   type TypeMeta,
 } from './types';
 
@@ -26,8 +25,6 @@ const AUTO_SLOTS: PaletteSlot[] = [
   'red',
   'brown',
 ];
-
-const CATEGORIES: TypeCategory[] = ['party', 'document', 'item', 'master', 'finance', 'other'];
 
 /** Shown when the server gives the dataset no name of its own. */
 export const DEFAULT_DATASET_NAME = 'Your dataset';
@@ -135,7 +132,7 @@ export function resolveSchema({ payload, summary, flows }: ResolveInput): Resolv
       label,
       plural: raw.plural?.trim() || pluralize(2, label),
       description: raw.description?.trim() ?? '',
-      category: CATEGORIES.includes(raw.category as TypeCategory) ? (raw.category as TypeCategory) : 'other',
+      category: raw.category?.trim() || 'other',
       accent: accent ?? base.accent,
       icon: raw.icon ?? null,
       isPrimary: Boolean(raw.is_primary),

@@ -84,7 +84,7 @@ def schema_exists(conn: Connection, schema: str) -> bool:
 def _compatible(expected_kind: str, precision: int | None, scale: int | None, live: LiveColumn) -> bool:
     """Whether a live column can hold the package type.
 
-    ``varchar`` counts as ``text`` (databases adopted from an older layout use it),
+    ``varchar`` counts as ``text``,
     and ``numeric`` without a declared precision accepts any decimal.
     """
     if expected_kind == "text":
@@ -115,15 +115,8 @@ def _describe(live: LiveColumn) -> str:
 def detect_drift(
     pkg: DatasetPackage,
     live: dict[str, dict[str, LiveColumn]],
-    *,
-    shared_schema: bool = False,
 ) -> list[DriftIssue]:
-    """Differences between ``pkg`` and the introspected schema.
-
-    ``shared_schema`` is set when the tables live in a schema that holds other
-    things as well (the legacy ``public`` schema); tables the package does not
-    know are then not reported.
-    """
+    """Differences between ``pkg`` and the introspected schema."""
     issues: list[DriftIssue] = []
     for table in pkg.tables:
         live_cols = live.get(table.table)
@@ -161,13 +154,12 @@ def detect_drift(
                         f"column {table.table}.{name} is in the database but not in the package",
                     )
                 )
-    if not shared_schema:
-        known = {t.table for t in pkg.tables}
-        for name in sorted(set(live) - known):
-            issues.append(
-                DriftIssue(
-                    "extra_table", "warning", name, None, None, name,
-                    f"table {name} is in the database but not in the package",
-                )
+    known = {t.table for t in pkg.tables}
+    for name in sorted(set(live) - known):
+        issues.append(
+            DriftIssue(
+                "extra_table", "warning", name, None, None, name,
+                f"table {name} is in the database but not in the package",
             )
+        )
     return issues

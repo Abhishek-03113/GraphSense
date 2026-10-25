@@ -28,6 +28,7 @@ from sqlglot.optimizer.qualify import qualify
 from src.datasets.errors import LintIssue
 from src.datasets.models import DatasetPackage
 from src.datasets.relationships import package_relationships
+from src.domain.graph_schema import NodeTypeDef
 
 # Statements that change data or the session must never appear in a reference query.
 _FORBIDDEN_NODES = (
@@ -172,12 +173,30 @@ class _Linter:
                 lk = n.label_lookup
                 for col in (lk.match_column, lk.label_column, *(c for c, _ in lk.filters)):
                     self.check_column(lk.table, col, f"{where} label_lookup")
+        nodes = {n.key: n for n in graph.node_types}
         for e in graph.edge_types:
             where = f"graph.yaml: edge {e.key} {e.source}>{e.target}"
             for col in (*e.source_columns, *e.target_columns, *e.not_null):
                 self.check_column(e.table, col, where)
+            for node_key, columns in ((e.source, e.source_columns), (e.target, e.target_columns)):
+                self.endpoint_normalisation(e.table, columns, nodes[node_key], where)
         for ref in graph.entity_refs:
             self.check_column(ref.table, ref.column, f"graph.yaml: entity_ref {ref.table}.{ref.column}")
+
+    def endpoint_normalisation(self, table: str, columns: tuple[str, ...], node: NodeTypeDef, where: str) -> None:
+        """An edge endpoint is matched to the node's id by exact value, so both must be stored the same way."""
+        for ec, nc in zip(columns, node.id_columns, strict=True):
+            if ec not in self.columns.get(table, ()) or nc not in self.columns.get(node.table, ()):
+                continue  # already reported as an unknown column
+            ours = self.pkg.table(table).column(ec).normalize
+            theirs = self.pkg.table(node.table).column(nc).normalize
+            if ours != theirs:
+                self.error(
+                    "normalisation_mismatch",
+                    f"{table}.{ec} refers to {node.key} id column {node.table}.{nc} but is normalised "
+                    f"differently ({list(ours)} vs {list(theirs)})",
+                    where,
+                )
 
     def value_sets(self) -> None:
         owners: dict[tuple[str, str], list[str]] = {}

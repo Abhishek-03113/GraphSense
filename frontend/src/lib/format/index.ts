@@ -58,7 +58,6 @@ export function formatDateTime(iso: string | null | undefined): string | undefin
   return Number.isNaN(time) ? undefined : dateTimeFormat.format(new Date(time));
 }
 
-export const formatNumber = (value: number): string => numberFormat.format(value);
 export const formatInteger = (value: number): string => integerFormat.format(value);
 export const formatCompact = (value: number): string => (Math.abs(value) >= 10_000 ? compactFormat.format(value) : integerFormat.format(value));
 

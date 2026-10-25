@@ -128,6 +128,7 @@ node_types:
     display_properties: [product_description, product_type, product_group, base_unit, gross_weight]
     table: products
     id_columns: [product]
+    terminal: true
     property_columns: [net_weight, weight_unit, division, industry_sector, creation_date, product_old_id, is_marked_for_deletion]
     label_lookup: {table: product_descriptions, match_column: product, label_column: product_description, filters: [[language, EN]]}
   - key: Customer
@@ -141,6 +142,7 @@ node_types:
     display_properties: [business_partner_full_name, business_partner_category, creation_date, business_partner_is_blocked]
     table: business_partners
     id_columns: [business_partner]
+    terminal: true
     property_columns: [customer, business_partner_name, organization_bp_name1, business_partner_grouping, form_of_address, last_change_date, is_marked_for_archiving]
     label_column: business_partner_full_name
   - key: Address
@@ -153,6 +155,7 @@ node_types:
     display_properties: [street_name, city_name, postal_code, country]
     table: business_partner_addresses
     id_columns: [business_partner, address_id]
+    terminal: true
     property_columns: [region, validity_start_date, validity_end_date, address_time_zone]
 edge_types:
   - key: PLACED

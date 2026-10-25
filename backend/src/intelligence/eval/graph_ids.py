@@ -37,11 +37,10 @@ class DbGraphIds:
             engine = self._engine() if callable(self._engine) else self._engine
             nodes = {n.key: n for n in self._ctx.package.graph.node_types}
             async with engine.connect() as conn:
-                if self._ctx.schema_name:
-                    await conn.execute(
-                        text("SELECT set_config('search_path', :p, true)"),
-                        {"p": search_path_for(self._ctx.schema_name)},
-                    )
+                await conn.execute(
+                    text("SELECT set_config('search_path', :p, true)"),
+                    {"p": search_path_for(self._ctx.schema_name)},
+                )
                 for key in wanted:
                     node = nodes.get(key)
                     if node is None:

@@ -303,6 +303,14 @@ def test_joined_item_numbers_must_be_normalised_the_same_way(package_copy):
     assert "normalised differently" in _lint_errors(path)
 
 
+def test_an_edge_endpoint_must_be_normalised_like_the_id_it_refers_to(package_copy):
+    # OF_BOOK matches loans.isbn to books.isbn by exact value, so both must be stored the same way.
+    old = "{source: isbn, type: text, role: reference, refs: books.isbn,"
+    path = package_copy(edits={"tables/loans.yaml": (old, "{source: isbn, type: text, role: reference, normalize: [upper], refs: books.isbn,")})
+    errors = _lint_errors(path)
+    assert "loans.isbn refers to Book id column books.isbn but is normalised differently" in errors
+
+
 def test_warnings_flag_gaps_without_failing(toy_package):
     report = validate_package(toy_package, data_dir=TOY_DATA_DIR)
     codes = {w.code for w in report.warnings}

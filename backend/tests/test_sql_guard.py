@@ -321,8 +321,9 @@ def test_a_package_can_allow_extra_functions(snap):
     assert isinstance(check("SELECT pg_sleep(1)", snap, extra_functions=("pg_sleep",)), SqlRejected)
 
 
-def test_schema_less_dataset_only_allows_public(snap):
-    assert isinstance(GUARD.validate("SELECT * FROM public.books", snap, schema_name=None), ValidatedSql)
+def test_without_a_dataset_schema_no_qualifier_is_allowed(snap):
+    assert isinstance(GUARD.validate("SELECT * FROM books", snap, schema_name=None), ValidatedSql)
+    assert isinstance(GUARD.validate("SELECT * FROM public.books", snap, schema_name=None), SqlRejected)
     assert isinstance(GUARD.validate(f"SELECT * FROM {SCHEMA}.books", snap, schema_name=None), SqlRejected)
 
 

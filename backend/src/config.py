@@ -75,10 +75,8 @@ class Settings(BaseSettings):
     DB_ECHO: bool = False
 
     # --- datasets -------------------------------------------------------
-    # Dataset used when a request does not name one.  GRAPH_DATASET is the old name.
-    DEFAULT_DATASET: str = Field(
-        default="o2c", validation_alias=AliasChoices("DEFAULT_DATASET", "GRAPH_DATASET")
-    )
+    # Dataset used when a request does not name one.
+    DEFAULT_DATASET: str = "o2c"
     # Extra directory holding dataset packages (<id>/package.yaml), searched
     # before the packages shipped in the repository.
     PACKAGES_DIR: Path | None = None
@@ -152,7 +150,7 @@ class Settings(BaseSettings):
     @field_validator("DATABASE_DSN", "READONLY_DATABASE_DSN", "OWNER_DATABASE_DSN", mode="before")
     @classmethod
     def _asyncpg_driver(cls, v: object) -> object:
-        """Plain ``postgresql://`` (as Railway and Heroku provide) means the asyncpg driver here."""
+        """Plain ``postgresql://`` (as hosting providers usually give it) means the asyncpg driver here."""
         if isinstance(v, str):
             v = v.strip()
             if not v:

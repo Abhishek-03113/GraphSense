@@ -108,11 +108,11 @@ def test_every_cli_command_of_this_workstream_is_registered():
     names = discover_commands()
     assert {"ingest", "dataset", "db", "package"} <= set(names)
     runner = CliRunner()
-    for args in (["ingest", "--help"], ["dataset", "--help"], ["db", "--help"], ["dataset", "adopt-legacy", "--help"]):
+    for args in (["ingest", "--help"], ["dataset", "--help"], ["db", "--help"]):
         result = runner.invoke(cli, args)
         assert result.exit_code == 0, args
     listing = runner.invoke(cli, ["dataset", "--help"]).output
-    for sub in ("list", "status", "rollback", "drop", "adopt-legacy"):
+    for sub in ("list", "status", "rollback", "drop"):
         assert sub in listing
     assert "provision-roles" in runner.invoke(cli, ["db", "--help"]).output
     for flag in ("--data-root", "--force", "--dry-run", "--skip-hooks", "--max-reject-rate"):

@@ -11,11 +11,9 @@ from src.datasets.models import DatasetPackage
 class DatasetContext:
     """Which dataset to use, and where its tables live.
 
-    ``schema_name`` is the PostgreSQL schema holding the dataset's tables, or
-    ``None`` while the tables still live in the legacy ``public`` schema
-    (a database that has not been adopted yet).
+    ``schema_name`` is the PostgreSQL schema holding the dataset's tables (``ds_<id>``).
     """
 
     id: str
-    schema_name: str | None
+    schema_name: str
     package: DatasetPackage

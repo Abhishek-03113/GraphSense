@@ -2,7 +2,7 @@
 
 Graph definitions are not code: they come from dataset packages (see
 ``src/datasets``).  The dataset used when a request does not name one is the
-``DEFAULT_DATASET`` setting (``GRAPH_DATASET`` is the old name).  Packages are loaded and validated once and cached.
+``DEFAULT_DATASET`` setting.  Packages are loaded and validated once and cached.
 """
 
 from __future__ import annotations

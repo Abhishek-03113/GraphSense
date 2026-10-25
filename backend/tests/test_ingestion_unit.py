@@ -333,7 +333,7 @@ def test_schema_names():
     assert live_schema("o2c") == "ds_o2c" and previous_schema("o2c") == "ds_o2c__prev"
     assert staging_schema("o2c", run) == "ds_o2c__r0123abcd"
     assert is_dataset_schema("ds_toy_library") and not is_dataset_schema("public") and not is_dataset_schema("ds_A")
-    assert search_path_for("ds_o2c") == "ds_o2c, public"
+    assert search_path_for("ds_o2c") == "ds_o2c"  # nothing else: no fallback to another schema
     for bad in ("o2c; drop", "A", "a__b", "", "x" * 40):
         with pytest.raises(ValueError):
             check_dataset_id(bad)

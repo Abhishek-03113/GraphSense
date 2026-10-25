@@ -16,7 +16,8 @@ export const PALETTE_SLOTS = [
 
 export type PaletteSlot = (typeof PALETTE_SLOTS)[number];
 
-export type TypeCategory = 'party' | 'document' | 'item' | 'master' | 'finance' | 'other';
+/** Free-form grouping label chosen by the dataset package (e.g. "document"); 'other' when none is given. */
+export type TypeCategory = string;
 
 export interface TypeMeta {
   key: string;

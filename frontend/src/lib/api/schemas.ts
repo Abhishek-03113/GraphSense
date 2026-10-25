@@ -135,7 +135,7 @@ export const ChatResponseSchema = z.object({
 
 /* ── Dataset status (GET /api/datasets/{id}/status) ─────────
  * Read-only and safe for every client. `status` is one of
- * empty | loading | ready | failed | legacy; unknown values are kept as text. */
+ * empty | loading | ready | failed; unknown values are kept as text. */
 
 export const AiStatusSchema = z.object({
   /** full | degraded | disabled */
