@@ -36,10 +36,10 @@ def test_an_unknown_dataset_is_a_usage_error():
 
 
 def test_live_mode_needs_a_model_key():
-    with override_settings(GEMINI_API_KEY=SecretStr("")):
+    with override_settings(OPENROUTER_API_KEY=SecretStr("")):
         result = run("o2c", "--live")
     assert result.exit_code == 2
-    assert "GEMINI_API_KEY" in result.output
+    assert "OPENROUTER_API_KEY" in result.output
 
 
 def test_fail_under_is_a_fraction():

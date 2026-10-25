@@ -1,4 +1,4 @@
-"""A simple in-process rate limiter for ``/api/chat`` (per client address).
+"""A simple in-process rate limiter for ``/api/chat/messages`` (per client address).
 
 Each question costs model calls and database time, so the limit is a sliding window
 (``CHAT_RATE_LIMIT_PER_MIN`` requests per 60 seconds per client; ``0`` turns it off).

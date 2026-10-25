@@ -31,7 +31,9 @@ logger = get_logger(__name__)
 _EMBED_BATCH = 100
 _TASK_TYPES = {"document": "RETRIEVAL_DOCUMENT", "query": "RETRIEVAL_QUERY"}
 # Server errors the provider answers when a model is briefly overloaded ("high demand").
-_TRANSIENT_STATUS = frozenset({500, 502, 503, 504})
+# 504 is left out: the timeout is enforced by the provider as a deadline, so repeating the
+# call with the same deadline only multiplies the wait.
+_TRANSIENT_STATUS = frozenset({500, 502, 503})
 # Pauses before the second and third attempt; a timeout or a client error is never retried.
 _RETRY_DELAYS_S = (0.6, 1.8)
 
@@ -98,10 +100,14 @@ class GeminiLLM:
         *,
         default_timeout_s: float = 30.0,
         retry_delays_s: Sequence[float] = _RETRY_DELAYS_S,
+        thinking_budget: int | None = 0,
     ) -> None:
         self.model = model
         self._api_key = api_key
         self._default_timeout_s = default_timeout_s
+        # Hidden reasoning tokens count against max_output_tokens and add latency; the
+        # structured answers asked for here do not need them.  None keeps the model default.
+        self._thinking_budget = thinking_budget
         self._retry_delays_s = tuple(retry_delays_s)
         self._client_instance = None
 
@@ -119,6 +125,8 @@ class GeminiLLM:
             "temperature": req.temperature,
             "http_options": types.HttpOptions(timeout=int(timeout * 1000)),
         }
+        if self._thinking_budget is not None:
+            config_args["thinking_config"] = types.ThinkingConfig(thinking_budget=self._thinking_budget)
         if req.system:
             config_args["system_instruction"] = req.system
         if req.max_output_tokens:
@@ -154,6 +162,14 @@ class GeminiLLM:
         if candidates:
             finish = str(getattr(candidates[0], "finish_reason", "") or "") or None
         parsed = _decode_json(text) if req.json_schema is not None else None
+        logger.info(
+            "generation finished: finish_reason=%s input_tokens=%d output_tokens=%d thinking_tokens=%d reply_chars=%d",
+            finish,
+            usage.input_tokens,
+            usage.output_tokens,
+            int(getattr(usage_meta, "thoughts_token_count", 0) or 0),
+            len(text),
+        )
         return LLMResponse(text=text, parsed=parsed, usage=usage, finish_reason=finish)
 
 

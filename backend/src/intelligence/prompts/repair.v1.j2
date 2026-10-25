@@ -12,7 +12,8 @@ Rules specific to this dataset:
 {% endfor %}
 {% endif %}
 
-Answer with a JSON object: {"can_answer": true or false, "sql": "<one corrected query>" or null, "assumptions": ["<assumption you made>", ...], "refusal_reason": "<why not>" or null}.
+Assumptions are shown to the end user: write them in plain language, without table or column names.
+Answer with a JSON object: {"can_answer": true or false, "sql": "<one corrected query>" or null, "assumptions": ["<assumption you made, in everyday words>", ...], "refusal_reason": "<why not>" or null}.
 === USER ===
 QUESTION
 {{ question }}

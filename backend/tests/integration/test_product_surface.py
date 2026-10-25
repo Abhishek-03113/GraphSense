@@ -18,11 +18,11 @@ KNOWLEDGE_HOOK = "src.intelligence.knowledge.hooks:refresh_knowledge"
 
 GRAPH_REQUESTS = [
     ("/api/graph/summary", {}),
-    ("/api/graph/subgraph", {"root_type": "Book", "root_id": "978-0", "depth": 2}),
-    ("/api/graph/trace", {"doc_type": "Book", "doc_id": "978-0"}),
-    ("/api/graph/flow", {"flow_id": "full"}),
-    ("/api/graph/full", {}),
-    ("/api/graph/entities/Book", {}),
+    ("/api/graph/subgraphs", {"root_type": "Book", "root_id": "978-0", "depth": 2}),
+    ("/api/graph/traces", {"doc_type": "Book", "doc_id": "978-0"}),
+    ("/api/graph/flows/full/subgraph", {}),
+    ("/api/graph/samples", {}),
+    ("/api/graph/node-types/Book/entities", {}),
 ]
 
 

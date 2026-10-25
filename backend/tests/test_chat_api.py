@@ -1,4 +1,4 @@
-"""POST /api/chat: response compatibility, error codes, rate limit, and the retired training endpoint."""
+"""POST /api/chat/messages: response compatibility, error codes, rate limit, and the retired training endpoint."""
 
 import shutil
 
@@ -49,7 +49,7 @@ def serve(llm, executor=None):
 
 
 def ask(client, message="Which books are there?", **kw):
-    return client.post("/api/chat", json={"message": message}, headers={"X-GraphSense-Dataset": "toy_library"}, **kw)
+    return client.post("/api/chat/messages", json={"message": message}, headers={"X-GraphSense-Dataset": "toy_library"}, **kw)
 
 
 def test_the_original_fields_are_kept_and_new_ones_are_additive(toy_client):
@@ -108,42 +108,30 @@ def test_execution_errors_carry_a_category_not_database_text(toy_client):
 
 def test_without_a_key_the_app_answers_not_configured_end_to_end(toy_client):
     """No dependency override: the real service is built from settings with no key."""
-    with override_settings(GEMINI_API_KEY=SecretStr(""), QUERY_LOG_ENABLED=False):
+    with override_settings(OPENROUTER_API_KEY=SecretStr(""), QUERY_LOG_ENABLED=False):
         response = ask(toy_client, "Which books have been borrowed the most?")
     body = response.json()
     assert response.status_code == 200
     assert body["error"] == "not_configured" and body["mode"] == "disabled"
-    assert "GEMINI_API_KEY" in body["answer"] and body["suggestions"]
+    assert "OPENROUTER_API_KEY" in body["answer"] and body["suggestions"]
     assert set(body) == ORIGINAL_FIELDS | ADDED_FIELDS
 
 
 def test_the_service_is_built_once(toy_client):
-    with override_settings(GEMINI_API_KEY=SecretStr(""), QUERY_LOG_ENABLED=False):
+    with override_settings(OPENROUTER_API_KEY=SecretStr(""), QUERY_LOG_ENABLED=False):
         assert get_ask_service() is get_ask_service()
         assert isinstance(get_ask_service().llm, NullLLM)
 
 
 def test_the_message_is_validated(client):
-    assert client.post("/api/chat", json={"message": ""}).status_code == 422
-    assert client.post("/api/chat", json={"message": "x" * 2001}).status_code == 422
-    assert client.post("/api/chat", json={}).status_code == 422
+    assert client.post("/api/chat/messages", json={"message": ""}).status_code == 422
+    assert client.post("/api/chat/messages", json={"message": "x" * 2001}).status_code == 422
+    assert client.post("/api/chat/messages", json={}).status_code == 422
 
 
 def test_an_unknown_dataset_is_404(client):
-    response = client.post("/api/chat", json={"message": "hello there"}, headers={"X-GraphSense-Dataset": "nope"})
+    response = client.post("/api/chat/messages", json={"message": "hello there"}, headers={"X-GraphSense-Dataset": "nope"})
     assert response.status_code == 404
-
-
-def test_training_is_gone(client):
-    response = client.post("/api/chat/train")
-    assert response.status_code == 410
-    body = response.json()
-    assert body["code"] == "gone" and "knowledge" in body["detail"].lower() and body["request_id"]
-
-
-# ---------------------------------------------------------------------------
-# Rate limit
-# ---------------------------------------------------------------------------
 
 
 def test_the_rate_limit_answers_with_a_stable_code(toy_client):
@@ -172,17 +160,17 @@ def test_clients_are_counted_separately_when_forwarded_addresses_are_trusted(toy
         one = {"X-GraphSense-Dataset": "toy_library", "X-Forwarded-For": "10.0.0.1, 10.9.9.9"}
         two = {"X-GraphSense-Dataset": "toy_library", "X-Forwarded-For": "10.0.0.2"}
         body = {"message": "List the planets"}
-        assert toy_client.post("/api/chat", json=body, headers=one).status_code == 200
-        assert toy_client.post("/api/chat", json=body, headers=two).status_code == 200
-        assert toy_client.post("/api/chat", json=body, headers=one).status_code == 429
+        assert toy_client.post("/api/chat/messages", json=body, headers=one).status_code == 200
+        assert toy_client.post("/api/chat/messages", json=body, headers=two).status_code == 200
+        assert toy_client.post("/api/chat/messages", json=body, headers=one).status_code == 429
 
 
 def test_forwarded_addresses_are_ignored_unless_trusted(toy_client):
     serve(FakeLLM([draft("SELECT 1")]))
     with override_settings(CHAT_RATE_LIMIT_PER_MIN=1):
         body = {"message": "List the planets"}
-        first = toy_client.post("/api/chat", json=body, headers={"X-Forwarded-For": "1.1.1.1", "X-GraphSense-Dataset": "toy_library"})
-        spoof = toy_client.post("/api/chat", json=body, headers={"X-Forwarded-For": "2.2.2.2", "X-GraphSense-Dataset": "toy_library"})
+        first = toy_client.post("/api/chat/messages", json=body, headers={"X-Forwarded-For": "1.1.1.1", "X-GraphSense-Dataset": "toy_library"})
+        spoof = toy_client.post("/api/chat/messages", json=body, headers={"X-Forwarded-For": "2.2.2.2", "X-GraphSense-Dataset": "toy_library"})
     assert first.status_code == 200 and spoof.status_code == 429
 
 

@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { ApiError } from '../lib/api/client';
-import { sendChatMessage } from '../lib/api/queries';
+import { chatSocket, type ChatStage } from '../lib/api/chatSocket';
 import type { ChatColumn, ChatResponse } from '../lib/api/schemas';
 
 export interface RecordRef {
@@ -14,6 +14,10 @@ export interface Turn {
   question: string;
   status: 'pending' | 'done' | 'failed';
   askedAt: number;
+  /** While pending: the step the server reports it is on. */
+  stage?: ChatStage;
+  /** While pending: the part of the answer received so far. */
+  streamingAnswer?: string;
   answer?: string;
   sql?: string | null;
   rows?: Record<string, unknown>[] | null;
@@ -71,15 +75,28 @@ function recordsFrom(response: ChatResponse): RecordRef[] {
 }
 
 export const useAsk = create<AskState>((set, get) => {
+  const patch = (turnId: string, change: Partial<Turn> | ((turn: Turn) => Partial<Turn>)) =>
+    set((state) => ({
+      turns: state.turns.map((turn) =>
+        turn.id === turnId ? { ...turn, ...(typeof change === 'function' ? change(turn) : change) } : turn,
+      ),
+    }));
+
   const run = async (turnId: string, question: string) => {
+    patch(turnId, { stage: undefined, streamingAnswer: undefined });
     try {
-      const response = await sendChatMessage(question);
+      const response = await chatSocket.ask(question, {
+        onStage: (stage) => patch(turnId, { stage }),
+        onDelta: (text) => patch(turnId, (turn) => ({ streamingAnswer: (turn.streamingAnswer ?? '') + text })),
+      });
       set((state) => ({
         turns: state.turns.map((turn) =>
           turn.id === turnId
             ? {
                 ...turn,
                 status: 'done',
+                stage: undefined,
+                streamingAnswer: undefined,
                 answer: response.answer,
                 sql: response.sql ?? null,
                 rows: response.data ?? null,
@@ -103,7 +120,7 @@ export const useAsk = create<AskState>((set, get) => {
         set((state) => ({
           turns: state.turns.map((turn) =>
             turn.id === turnId
-              ? { ...turn, status: 'done', answer: error.detail ?? '', errorCode: 'rate_limited', retryAt, requestError: undefined }
+              ? { ...turn, status: 'done', stage: undefined, streamingAnswer: undefined, answer: error.detail ?? '', errorCode: 'rate_limited', retryAt, requestError: undefined }
               : turn,
           ),
         }));
@@ -113,7 +130,7 @@ export const useAsk = create<AskState>((set, get) => {
       const message = error instanceof Error ? error.message : 'Something went wrong.';
       set((state) => ({
         turns: state.turns.map((turn) =>
-          turn.id === turnId ? { ...turn, status: 'failed', requestError: { message, offline } } : turn,
+          turn.id === turnId ? { ...turn, status: 'failed', stage: undefined, streamingAnswer: undefined, requestError: { message, offline } } : turn,
         ),
       }));
     }

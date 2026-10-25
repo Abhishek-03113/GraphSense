@@ -62,7 +62,7 @@ export function useFlowList() {
 export function useFullGraph(nodeLimit: number) {
   return useQuery({
     queryKey: queryKeys.full(nodeLimit),
-    queryFn: ({ signal }) => apiGet('/graph/full', GraphDataSchema, { node_limit: nodeLimit }, signal),
+    queryFn: ({ signal }) => apiGet('/graph/samples', GraphDataSchema, { node_limit: nodeLimit }, signal),
     placeholderData: keepPreviousData,
   });
 }
@@ -72,7 +72,7 @@ export function subgraphOptions(type: string | null | undefined, id: string | nu
   return queryOptions({
     queryKey: queryKeys.subgraph(type ?? '', id ?? '', depth),
     queryFn: ({ signal }) =>
-      apiGet('/graph/subgraph', GraphDataSchema, { root_type: type, root_id: id, depth }, signal),
+      apiGet('/graph/subgraphs', GraphDataSchema, { root_type: type, root_id: id, depth }, signal),
     enabled: Boolean(type && id),
     staleTime: 60_000,
   });
@@ -86,7 +86,7 @@ export function useTraceGraph(type: string | null | undefined, id: string | null
   return useQuery({
     queryKey: ['graph', 'trace', type ?? '', id ?? '', depth],
     queryFn: ({ signal }) =>
-      apiGet('/graph/trace', GraphDataSchema, { doc_type: type, doc_id: id, depth }, signal),
+      apiGet('/graph/traces', GraphDataSchema, { doc_type: type, doc_id: id, depth }, signal),
     enabled: Boolean(type && id),
     staleTime: 60_000,
   });
@@ -95,7 +95,7 @@ export function useTraceGraph(type: string | null | undefined, id: string | null
 export function useFlowGraph(flowId: string | undefined, limit: number) {
   return useQuery({
     queryKey: queryKeys.flow(flowId ?? '', limit),
-    queryFn: ({ signal }) => apiGet('/graph/flow', GraphDataSchema, { flow_id: flowId, limit }, signal),
+    queryFn: ({ signal }) => apiGet(`/graph/flows/${encodeURIComponent(flowId ?? '')}/subgraph`, GraphDataSchema, { limit }, signal),
     enabled: Boolean(flowId),
     placeholderData: keepPreviousData,
   });
@@ -105,7 +105,7 @@ export function useEntities(type: string | undefined, limit = 100) {
   return useQuery({
     queryKey: queryKeys.entities(type ?? '', limit),
     queryFn: ({ signal }) =>
-      apiGet(`/graph/entities/${encodeURIComponent(type ?? '')}`, EntityListSchema, { limit }, signal),
+      apiGet(`/graph/node-types/${encodeURIComponent(type ?? '')}/entities`, EntityListSchema, { limit }, signal),
     enabled: Boolean(type),
     staleTime: 60_000,
   });
@@ -149,4 +149,4 @@ export function useSuggestedQuestions(datasetId: string | null | undefined, enab
 }
 
 export const sendChatMessage = (message: string, signal?: AbortSignal) =>
-  apiPost('/chat', ChatResponseSchema, { message }, signal);
+  apiPost('/chat/messages', ChatResponseSchema, { message }, signal);

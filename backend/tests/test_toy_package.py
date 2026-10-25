@@ -120,7 +120,6 @@ GENERIC_SOURCES = [
     *sorted((BACKEND_DIR / "src" / "ingestion").glob("*.py")),
     BACKEND_DIR / "src" / "api" / "admin.py",
     BACKEND_DIR / "src" / "api" / "datasets.py",
-    BACKEND_DIR / "src" / "api" / "ingest.py",
     BACKEND_DIR / "migrations" / "schema" / "V20261101000001__app_core.sql",
     BACKEND_DIR / "src" / "api" / "deps.py",
     BACKEND_DIR / "src" / "api" / "catalog.py",

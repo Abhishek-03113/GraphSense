@@ -137,6 +137,19 @@ async def test_retries_give_up_after_the_last_attempt():
     assert len(models.calls) == 3
 
 
+async def test_a_deadline_failure_is_not_retried():
+    models = FlakyModels([errors.APIError(504, {})])
+    with pytest.raises(ProviderUnavailable):
+        await llm(models).generate(LLMRequest(prompt="p"))
+    assert len(models.calls) == 1
+
+
+async def test_thinking_is_switched_off_by_default():
+    models = FakeModels(reply())
+    await llm(models).generate(LLMRequest(prompt="p"))
+    assert models.calls[0]["config"].thinking_config.thinking_budget == 0
+
+
 @pytest.mark.parametrize("error", [errors.APIError(400, {}), errors.APIError(429, {}), TimeoutError()])
 async def test_only_temporary_server_errors_are_retried(error):
     models = FlakyModels([error])

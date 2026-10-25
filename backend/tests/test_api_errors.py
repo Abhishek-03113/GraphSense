@@ -203,11 +203,11 @@ class _NoTablesSession:
 
 GRAPH_REQUESTS = [
     ("/api/graph/summary", {}),
-    ("/api/graph/subgraph", {"root_type": "Invoice", "root_id": "1", "depth": 2}),
-    ("/api/graph/trace", {"doc_type": "Invoice", "doc_id": "1"}),
-    ("/api/graph/flow", {"flow_id": "sales"}),
-    ("/api/graph/full", {}),
-    ("/api/graph/entities/Invoice", {}),
+    ("/api/graph/subgraphs", {"root_type": "Invoice", "root_id": "1", "depth": 2}),
+    ("/api/graph/traces", {"doc_type": "Invoice", "doc_id": "1"}),
+    ("/api/graph/flows/sales/subgraph", {}),
+    ("/api/graph/samples", {}),
+    ("/api/graph/node-types/Invoice/entities", {}),
 ]
 
 
@@ -283,11 +283,11 @@ def broken_db():
     "path,params",
     [
         ("/api/graph/summary", {}),
-        ("/api/graph/subgraph", {"root_type": "Invoice", "root_id": "1", "depth": 2}),
-        ("/api/graph/trace", {"doc_type": "Invoice", "doc_id": "1"}),
-        ("/api/graph/flow", {"flow_id": "sales"}),
-        ("/api/graph/full", {}),
-        ("/api/graph/entities/Invoice", {}),
+        ("/api/graph/subgraphs", {"root_type": "Invoice", "root_id": "1", "depth": 2}),
+        ("/api/graph/traces", {"doc_type": "Invoice", "doc_id": "1"}),
+        ("/api/graph/flows/sales/subgraph", {}),
+        ("/api/graph/samples", {}),
+        ("/api/graph/node-types/Invoice/entities", {}),
     ],
 )
 def test_graph_endpoints_never_leak_database_text(broken_db, path, params):
@@ -301,14 +301,14 @@ def test_graph_endpoints_never_leak_database_text(broken_db, path, params):
 
 
 def test_unknown_flow_is_a_clean_404():
-    res = TestClient(app).get("/api/graph/flow", params={"flow_id": "nope"})
+    res = TestClient(app).get("/api/graph/flows/nope/subgraph")
     assert res.status_code == 404
     assert res.json()["detail"] == "Unknown flow: nope"
     assert res.json()["code"] == "not_found"
 
 
 def test_validation_errors_keep_the_framework_shape_and_gain_the_envelope():
-    res = TestClient(app).get("/api/graph/flow")  # flow_id is required
+    res = TestClient(app).get("/api/graph/subgraphs")  # root_type and root_id are required
     assert res.status_code == 422
     body = res.json()
     assert isinstance(body["detail"], list)

@@ -91,12 +91,24 @@ class Settings(BaseSettings):
     )
 
     # --- models ---------------------------------------------------------
-    LLM_PROVIDER: str = "gemini"
-    EMBEDDING_PROVIDER: str = "gemini"
+    # LLM_PROVIDER / EMBEDDING_PROVIDER: openrouter | openai_compatible | gemini | none
+    LLM_PROVIDER: str = "openrouter"
+    EMBEDDING_PROVIDER: str = "openrouter"
+    # OpenRouter (https://openrouter.ai) and any other OpenAI-compatible server.
+    OPENROUTER_API_KEY: SecretStr = SecretStr("")
+    OPENROUTER_MODEL: str = "openai/gpt-4o-mini"
+    # For LLM_PROVIDER=openai_compatible: the server's /v1 URL, key and model.
+    LLM_BASE_URL: str = "https://api.openai.com/v1"
+    LLM_API_KEY: SecretStr = SecretStr("")
+    LLM_MODEL: str = "gpt-4o-mini"
+    # Reasoning effort for models that think (minimal | low | medium | high); empty = model default.
+    LLM_REASONING_EFFORT: str = ""
+    EMBEDDING_BASE_URL: str = ""  # empty: the LLM provider's base URL
+    EMBEDDING_API_KEY: SecretStr = SecretStr("")  # empty: the LLM provider's key
     GEMINI_API_KEY: SecretStr = SecretStr("")
     GEMINI_MODEL: str = "gemini-2.0-flash"
     EMBEDDING_MODEL: str = Field(
-        default="text-embedding-004",
+        default="openai/text-embedding-3-small",
         validation_alias=AliasChoices("EMBEDDING_MODEL", "GEMINI_EMBEDDING_MODEL"),
     )
 

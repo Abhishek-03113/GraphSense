@@ -117,7 +117,7 @@ if (suggestions) compareShape('suggested-questions', SUGGESTED_QUESTIONS, sugges
 else console.warn('Skipped the suggested questions check: the endpoint is not served.');
 
 // Any answer has the same fields. A refusal is enough to see them (no model key is needed).
-const chat = await tryJson('/chat', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'How many records are there?' }) });
+const chat = await tryJson('/chat/messages', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ message: 'How many records are there?' }) });
 if (chat) compareShape('chat', chatReply('Which customer has the most orders?'), chat);
 else console.warn('Skipped the chat check: POST /chat did not answer.');
 

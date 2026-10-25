@@ -28,7 +28,7 @@ The value is compiled into the bundle, so set it when building. For the Docker i
 | --- | --- | --- |
 | `/` | Overview | Dataset summary, counts per record type, relationship totals, shortcuts and flow cards. Shows a first-run "Load data" state when the dataset is empty. |
 | `/explore` | Explore | The graph canvas with a floating toolbar (zoom, fit, layout), filters (record types, sample size, search), a legend, and a details panel. `?focus=<record id>` deep-links to a record. |
-| `/ask` | Ask | Conversational analyst over `POST /api/chat`: suggested prompts, answer, sortable result table, query viewer, record chips that open Explore with a highlight. Also available as a side panel in Explore. |
+| `/ask` | Ask | Conversational analyst over `POST /api/chat/messages`: suggested prompts, answer, sortable result table, query viewer, record chips that open Explore with a highlight. Also available as a side panel in Explore. |
 | `/flows`, `/flows/:flowId` | Flows | Predefined business flows; a flow opens as a left-to-right graph with a legend and explanation. |
 | `/trace?type=&id=` | Trace | Pick a record type and ID (with typeahead), see its lifecycle as a graph plus a step-by-step timeline. The URL is shareable. |
 | `/records/:type?` | Records | Browse record types and a sample table; a row opens the same details panel. |
@@ -70,7 +70,7 @@ No record type, relationship or property name appears in the components. Everyth
 - **Labels**: `label` and `plural` for each record type, `label` for each relationship ("placed", "contains").
 - **Colour**: the schema's `accent` slot (`blue`, `indigo`, ...) maps to a design token. A type without one gets a stable colour from a hash of its key, assigned so that types in one dataset do not share a colour where avoidable.
 - **Primary types**: `is_primary` decides which types get overview tiles and appear first in trace pickers.
-- **Details**: `display_properties` decides which properties the details panel shows first. The values come from `properties` on each graph node, and Records adds the display properties to every row of `GET /api/graph/entities/{type}`. A record with a natural name (`label` other than "<Type> <id>") is titled with it. Amounts show two decimals, with the currency of the same record when it has one. Without properties the panel says so and still lists relationships.
+- **Details**: `display_properties` decides which properties the details panel shows first. The values come from `properties` on each graph node, and Records adds the display properties to every row of `GET /api/graph/node-types/{type}/entities`. A record with a natural name (`label` other than "<Type> <id>") is titled with it. Amounts show two decimals, with the currency of the same record when it has one. Without properties the panel says so and still lists relationships.
 - **Flows**: flow definitions come with the schema; the order of `node_types` is treated as process order.
 
 Responses are validated with Zod, and every field except `key` is optional. If the endpoint is missing (older server) or a type is not described, the app degrades instead of failing: record types come from `GET /api/graph/summary`, flows from `GET /api/graph/flows`, labels from humanising the key (`SalesOrderItem` becomes "Sales order item"), and colours from the hash. The sidebar and Overview report the dataset as "Your dataset" in that case.

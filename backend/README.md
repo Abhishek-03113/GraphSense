@@ -15,4 +15,4 @@ graphsense ingest o2c --data-root /tmp/demo-data
 
 Ingestion creates the dataset's tables in the `ds_o2c` schema from the package; migrations
 never create dataset tables. The Ask endpoint additionally needs `GEMINI_API_KEY`; without
-it `POST /api/chat` answers with `error: "not_configured"`.
+it `POST /api/chat/messages` answers with `error: "not_configured"`.

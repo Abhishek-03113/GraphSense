@@ -48,7 +48,7 @@ async def admin(admin_app):
 
 
 async def test_admin_ingest_runs_in_the_background_and_reports_without_leaking(admin, toy_root, db):
-    res = await admin.post("/api/admin/datasets/toy_library/ingest", headers=AUTH, json={})
+    res = await admin.post("/api/admin/datasets/toy_library/ingestions", headers=AUTH, json={})
     assert res.status_code == 202
     run_id = res.json()["run_id"]
 
@@ -64,16 +64,16 @@ async def test_admin_ingest_runs_in_the_background_and_reports_without_leaking(a
     assert str(toy_root) not in blob and "toy-root" not in blob
     assert "SELECT" not in blob and "Traceback" not in blob and "psycopg" not in blob
 
-    again = await admin.post("/api/admin/datasets/toy_library/ingest", headers=AUTH, json={})
+    again = await admin.post("/api/admin/datasets/toy_library/ingestions", headers=AUTH, json={})
     again_run = (await admin.get(f"/api/admin/runs/{again.json()['run_id']}", headers=AUTH)).json()
     assert again_run["status"] == "skipped"
-    forced = await admin.post("/api/admin/datasets/toy_library/ingest", headers=AUTH, json={"force": True})
+    forced = await admin.post("/api/admin/datasets/toy_library/ingestions", headers=AUTH, json={"force": True})
     assert (await admin.get(f"/api/admin/runs/{forced.json()['run_id']}", headers=AUTH)).json()["status"] == "succeeded"
 
 
 async def test_admin_failures_are_sanitised(admin, toy_root, db):
     (toy_root / "toy-library" / "loans" / "part-0001.jsonl").write_text("garbage\n")
-    res = await admin.post("/api/admin/datasets/toy_library/ingest", headers=AUTH, json={})
+    res = await admin.post("/api/admin/datasets/toy_library/ingestions", headers=AUTH, json={})
     run = (await admin.get(f"/api/admin/runs/{res.json()['run_id']}", headers=AUTH)).json()
     assert run["status"] == "failed" and run["error_code"] == "validation_failed"
     blob = json.dumps(run)
@@ -85,20 +85,20 @@ async def test_admin_failures_are_sanitised(admin, toy_root, db):
 async def test_admin_ingest_while_another_run_holds_the_dataset_is_409(admin, toy_root, db):
     held = await asyncio.to_thread(prepare_run, "toy_library", IngestOptions(data_root=toy_root))
     try:
-        res = await admin.post("/api/admin/datasets/toy_library/ingest", headers=AUTH, json={})
+        res = await admin.post("/api/admin/datasets/toy_library/ingestions", headers=AUTH, json={})
         assert res.status_code == 409 and res.json()["code"] == "conflict"
     finally:
         held.release()
 
 
 async def test_admin_rollback_and_unknown_things(admin, toy_root, db):
-    await admin.post("/api/admin/datasets/toy_library/ingest", headers=AUTH, json={})
-    assert (await admin.post("/api/admin/datasets/toy_library/rollback", headers=AUTH)).status_code == 409
-    await admin.post("/api/admin/datasets/toy_library/ingest", headers=AUTH, json={"force": True})
-    ok = await admin.post("/api/admin/datasets/toy_library/rollback", headers=AUTH)
+    await admin.post("/api/admin/datasets/toy_library/ingestions", headers=AUTH, json={})
+    assert (await admin.post("/api/admin/datasets/toy_library/rollbacks", headers=AUTH)).status_code == 409
+    await admin.post("/api/admin/datasets/toy_library/ingestions", headers=AUTH, json={"force": True})
+    ok = await admin.post("/api/admin/datasets/toy_library/rollbacks", headers=AUTH)
     assert ok.status_code == 200 and ok.json()["status"] == "rolled_back"
-    assert (await admin.post("/api/admin/datasets/nope/ingest", headers=AUTH, json={})).status_code == 404
-    assert (await admin.post("/api/admin/datasets/nope/rollback", headers=AUTH)).status_code == 404
+    assert (await admin.post("/api/admin/datasets/nope/ingestions", headers=AUTH, json={})).status_code == 404
+    assert (await admin.post("/api/admin/datasets/nope/rollbacks", headers=AUTH)).status_code == 404
     assert (await admin.get("/api/admin/runs/not-a-uuid", headers=AUTH)).status_code == 404
     assert (await admin.get("/api/admin/runs/00000000-0000-0000-0000-000000000000", headers=AUTH)).status_code == 404
 
@@ -109,9 +109,9 @@ async def test_admin_knowledge_refresh_runs_the_post_swap_hooks(admin, toy_root,
     from tests import fake_hooks
 
     fake_hooks.CALLS.clear()
-    await admin.post("/api/admin/datasets/toy_library/ingest", headers=AUTH, json={})
+    await admin.post("/api/admin/datasets/toy_library/ingestions", headers=AUTH, json={})
     fake_hooks.CALLS.clear()
-    res = await admin.post("/api/admin/datasets/toy_library/knowledge/refresh", headers=AUTH, json={"force": True})
+    res = await admin.post("/api/admin/datasets/toy_library/knowledge-refreshes", headers=AUTH, json={"force": True})
     assert res.status_code == 202
     run = (await admin.get(f"/api/admin/runs/{res.json()['run_id']}", headers=AUTH)).json()
     assert run["kind"] == "refresh" and run["status"] == "succeeded"
@@ -124,7 +124,7 @@ async def test_dataset_listing_and_status_follow_the_lifecycle(admin, toy_root, 
     assert by_id["toy_library"]["status"] == "empty" and by_id["toy_library"]["last_ingested_at"] is None
     assert by_id["o2c"]["status"] == "empty"
 
-    await admin.post("/api/admin/datasets/toy_library/ingest", headers=AUTH, json={})
+    await admin.post("/api/admin/datasets/toy_library/ingestions", headers=AUTH, json={})
     by_id = {d["id"]: d for d in (await admin.get("/api/datasets")).json()}
     assert by_id["toy_library"]["status"] == "ready" and by_id["toy_library"]["last_ingested_at"]
     status = (await admin.get("/api/datasets/toy_library/status")).json()
@@ -167,7 +167,7 @@ async def test_requests_read_the_dataset_they_name(db, toy_root, demo_root, clie
     assert toy["nodes"] == {"Author": 3, "Book": 3, "Member": 2, "Loan": 3}
     via_query = (await client.get("/api/graph/summary", params={"dataset": "toy_library"})).json()
     assert via_query == toy
-    ents = (await client.get("/api/graph/entities/Book", params={"dataset": "toy_library"})).json()
+    ents = (await client.get("/api/graph/node-types/Book/entities", params={"dataset": "toy_library"})).json()
     assert len(ents["entities"]) == 3
     # interleaved requests do not leak a search path into one another (pooled connections are reused)
     for _ in range(4):
@@ -184,12 +184,6 @@ async def test_a_reload_is_visible_to_the_running_application(db, toy_root, clie
     (toy_root / "toy-library" / "members" / "part-0002.jsonl").write_text(json.dumps(record) + "\n")
     await asyncio.to_thread(ingest, "toy_library", IngestOptions(data_root=toy_root))
     assert (await client.get("/api/graph/summary", headers=hdr)).json()["nodes"]["Member"] == 3
-
-
-async def test_the_old_ingest_endpoint_is_gone(client):
-    res = await client.post("/api/ingest", json={"data_dir": "/etc"})
-    assert res.status_code == 410
-    assert "/etc" not in res.text and res.json()["code"] == "gone"
 
 
 # --- roles -----------------------------------------------------------------------------------

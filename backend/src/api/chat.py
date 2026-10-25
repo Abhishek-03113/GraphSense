@@ -1,6 +1,6 @@
 """Chat API: ask a question about the dataset in plain language.
 
-``POST /api/chat`` keeps the original eight response fields (``answer``, ``sql``,
+``POST /api/chat/messages`` keeps the original eight response fields (``answer``, ``sql``,
 ``data``, ``entities``, ``graph_nodes``, ``error``, ``row_count``, ``summary``);
 the rest are additive.  ``error`` is ``null`` or a stable code: ``guardrail``,
 ``not_configured``, ``sql_generation_failed``, ``sql_rejected``,
@@ -11,20 +11,27 @@ Internal detail (SQL errors, provider messages) is logged, never returned.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from src.api.deps import get_dataset_context
 from src.api.errors import REQUEST_ID_HEADER, current_request_id
 from src.api.ratelimit import client_address, get_chat_limiter
+from src.config import get_settings
 from src.datasets.context import DatasetContext
+from src.datasets.errors import UnknownDatasetError
+from src.datasets.registry import default_dataset_id, get_package
 from src.intelligence.models import AskResult, ErrorCode
 from src.intelligence.runtime import get_ask_service
+from src.utils.logger import get_logger
 from src.intelligence.service import AskService
 
+logger = get_logger(__name__)
 router = APIRouter(prefix="/api/chat", tags=["chat"])
 
 RATE_LIMITED_MESSAGE = "You're asking questions faster than they can be answered. Please wait a moment and try again."
@@ -95,7 +102,7 @@ def to_response(result: AskResult) -> ChatResponseModel:
     )
 
 
-@router.post("", response_model=ChatResponseModel)
+@router.post("/messages", response_model=ChatResponseModel)
 async def handle_chat(
     body: ChatRequest,
     request: Request,
@@ -121,11 +128,114 @@ async def handle_chat(
     return to_response(result)
 
 
-@router.post("/train", include_in_schema=True)
-async def train_model():
-    """Gone: knowledge is refreshed after ingestion or with ``graphsense knowledge refresh``."""
-    raise HTTPException(
-        status_code=410,
-        detail="Training was replaced. Knowledge is refreshed automatically after a data load; "
-        "operators can run `graphsense knowledge refresh <dataset>`.",
-    )
+def _origin_allowed(origin: str | None) -> bool:
+    """Browsers do not apply CORS to WebSockets, so the server checks the Origin itself."""
+    if not origin:
+        return True  # not a browser
+    allowed = get_settings().cors_origins()
+    return "*" in allowed or origin in allowed
+
+
+@router.websocket("/ws")
+async def chat_socket(websocket: WebSocket):
+    """Ask over one long-lived connection, with progress and the answer streamed back.
+
+    Client -> server (JSON text frames)::
+
+        {"type": "ask", "id": "<client id>", "message": "..."}
+        {"type": "cancel", "id": "<client id>"}
+        {"type": "ping"}
+
+    Server -> client, every frame except ``pong`` carries the ``id`` of the question::
+
+        {"type": "status", "id": ..., "stage": "retrieving|writing_query|running_query|answering"}
+        {"type": "delta",  "id": ..., "text": "..."}      # a piece of the answer
+        {"type": "result", "id": ..., "result": <same body as POST /api/chat/messages>}
+        {"type": "error",  "id": ..., "code": "...", "detail": "..."}
+        {"type": "cancelled", "id": ...}
+
+    The dataset is chosen with ``?dataset=`` when connecting.  One question runs at a time
+    per connection; ``result`` replaces whatever the deltas built up.
+    """
+    if not _origin_allowed(websocket.headers.get("origin")):
+        await websocket.close(code=1008)
+        return
+    dataset_id = websocket.query_params.get("dataset") or default_dataset_id()
+    try:
+        package = get_package(dataset_id)
+    except UnknownDatasetError:
+        await websocket.close(code=1008, reason="unknown dataset")
+        return
+    ctx = DatasetContext(id=package.id, schema_name=package.schema_name, package=package)
+    service = get_ask_service()
+    address = client_address(websocket)  # type: ignore[arg-type]
+    await websocket.accept()
+
+    send_lock = asyncio.Lock()
+    current: tuple[str, asyncio.Task] | None = None
+
+    async def send(frame: dict[str, Any]) -> None:
+        async with send_lock:
+            await websocket.send_json(frame)
+
+    async def run(question_id: str, message: str) -> None:
+        retry_after = get_chat_limiter().check(address)
+        if retry_after is not None:
+            limited = ChatResponseModel(
+                answer=RATE_LIMITED_MESSAGE, error=ErrorCode.RATE_LIMITED, mode=service.mode
+            ).model_dump()
+            await send({"type": "result", "id": question_id, "result": limited,
+                        "retry_after": max(1, int(retry_after + 0.999))})
+            return
+
+        async def emit(event: dict[str, Any]) -> None:
+            await send({**event, "id": question_id})
+
+        try:
+            result = await service.ask(ctx, message, client_id=address, emit=emit)
+            await send({"type": "result", "id": question_id, "result": to_response(result).model_dump()})
+        except asyncio.CancelledError:
+            with contextlib.suppress(Exception):
+                await send({"type": "cancelled", "id": question_id})
+            raise
+        except WebSocketDisconnect:
+            raise
+        except Exception:
+            logger.exception("Chat socket failed while answering")
+            await send({"type": "error", "id": question_id, "code": ErrorCode.INTERNAL_ERROR,
+                        "detail": "An unexpected error occurred while processing your question. Please try again."})
+
+    try:
+        while True:
+            try:
+                frame = await websocket.receive_json()
+            except ValueError:
+                await send({"type": "error", "id": None, "code": "bad_request", "detail": "Send JSON frames."})
+                continue
+            kind = frame.get("type") if isinstance(frame, dict) else None
+            question_id = str(frame.get("id", "")) if isinstance(frame, dict) else ""
+            if kind == "ping":
+                await send({"type": "pong"})
+            elif kind == "cancel":
+                if current and current[0] == question_id and not current[1].done():
+                    current[1].cancel()
+            elif kind == "ask":
+                message = frame.get("message")
+                if not question_id or not isinstance(message, str) or not 1 <= len(message) <= 2000:
+                    await send({"type": "error", "id": question_id or None, "code": "bad_request",
+                                "detail": "An ask needs an id and a message of 1 to 2000 characters."})
+                elif current and not current[1].done():
+                    await send({"type": "error", "id": question_id, "code": "busy",
+                                "detail": "Wait for the current question to finish."})
+                else:
+                    current = (question_id, asyncio.create_task(run(question_id, message)))
+            else:
+                await send({"type": "error", "id": question_id or None, "code": "bad_request",
+                            "detail": "Unknown frame type."})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        if current and not current[1].done():
+            current[1].cancel()
+            with contextlib.suppress(BaseException):
+                await current[1]

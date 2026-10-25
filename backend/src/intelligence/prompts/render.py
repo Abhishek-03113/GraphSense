@@ -236,4 +236,6 @@ def parse_answer(response: LLMResponse) -> str | None:
         except ValidationError:
             return None
     text = response.text.strip()
+    if text.startswith(("{", "[")):
+        return None  # a cut-off or malformed JSON reply is never shown as the answer
     return text or None

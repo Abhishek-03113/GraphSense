@@ -78,7 +78,7 @@ async def _start(prepare, dataset_id: str, options: IngestOptions, background: B
     return {"run_id": run.run_id, "status": "queued", "dataset_id": dataset_id}
 
 
-@router.post("/datasets/{dataset_id}/ingest", status_code=202)
+@router.post("/datasets/{dataset_id}/ingestions", status_code=202)
 async def start_ingest(dataset_id: str, background: BackgroundTasks, body: IngestRequest | None = None) -> dict:
     """Start a full ingestion of the dataset from the operator's data root.  Returns the run id."""
     body = body or IngestRequest()
@@ -86,7 +86,7 @@ async def start_ingest(dataset_id: str, background: BackgroundTasks, body: Inges
     return await _start(prepare_run, dataset_id, options, background)
 
 
-@router.post("/datasets/{dataset_id}/knowledge/refresh", status_code=202)
+@router.post("/datasets/{dataset_id}/knowledge-refreshes", status_code=202)
 async def refresh_knowledge(dataset_id: str, background: BackgroundTasks, body: RefreshRequest | None = None) -> dict:
     """Re-run the post-ingest hooks (such as the knowledge refresh) on the live data."""
     body = body or RefreshRequest()
@@ -128,7 +128,7 @@ def _rollback(dataset_id: str) -> dict:
     return {"dataset_id": dataset_id, "status": "rolled_back"}
 
 
-@router.post("/datasets/{dataset_id}/rollback")
+@router.post("/datasets/{dataset_id}/rollbacks")
 async def rollback_dataset(dataset_id: str) -> dict:
     """Make the previous generation live again (calling it twice rolls forward)."""
     from src.datasets.errors import PackageError, UnknownDatasetError

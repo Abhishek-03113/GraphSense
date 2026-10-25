@@ -88,7 +88,7 @@ export const SchemaPayloadSchema = z.object({
   flows: z.array(FlowSchema).default([]),
 });
 
-/* ── Conversational query (POST /api/chat) ───────────────── */
+/* ── Conversational query (POST /api/chat/messages) ───────────────── */
 
 const stringList = z
   .array(z.string())
