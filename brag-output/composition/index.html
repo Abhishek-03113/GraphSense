@@ -5,96 +5,126 @@
 <meta name="viewport" content="width=1920, height=1080" />
 <script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
 <style>
-:root{--ground:#0b0b12;--ink:#f5f5fa;--muted:#a3a3bd;--accent:#8b89ff;--font:'Inter',sans-serif}
+/* Brik design system: grey-on-white instrument panel, square corners, one electric-blue action. ink-soft darkens Brik ink-3 so the faded headline line still reads (3.4:1). */
+@font-face{font-family:'Geist';src:url('assets/fonts/Geist-Regular.woff2') format('woff2');font-weight:400}
+@font-face{font-family:'Geist';src:url('assets/fonts/Geist-Medium.woff2') format('woff2');font-weight:500}
+@font-face{font-family:'Geist Mono';src:url('assets/fonts/GeistMono-Medium.woff2') format('woff2');font-weight:500}
+:root{--canvas:#fafafa;--surface:#ffffff;--panel:#ededed;--ink:#262626;--ink-2:#595959;--ink-3:#b2b2b2;--ink-soft:#8a8a8a;--dark:#1f1f1f;--electric:#193ef9;
+ --sans:'Geist',system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,monospace}
 *{margin:0;padding:0;box-sizing:border-box}
-html,body{width:1920px;height:1080px;overflow:hidden;background:var(--ground)}
-#root{position:relative;width:1920px;height:1080px;overflow:hidden;font-family:var(--font);color:var(--ink);background:var(--ground)}
-.frame{position:absolute;left:240px;top:56px;width:1440px;height:810px;border-radius:14px;object-fit:cover;
- box-shadow:0 0 0 1px rgba(255,255,255,.08),0 24px 60px rgba(0,0,0,.55);background:#000;opacity:0}
-.cap{position:absolute;left:240px;top:890px;width:1440px;opacity:0}
-.eyebrow{font-size:28px;font-weight:600;letter-spacing:.14em;text-transform:uppercase;color:var(--accent);margin-bottom:10px}
-.title{font-size:52px;font-weight:600;letter-spacing:-.02em;line-height:1.05}
-.sub{font-size:30px;font-weight:400;color:var(--muted);margin-top:10px}
-.center{position:absolute;left:0;width:1920px;text-align:center;opacity:0}
-.brand{font-size:132px;font-weight:600;letter-spacing:-.04em}
-.brand span{color:var(--accent)}
-.line{font-size:36px;font-weight:400;color:var(--muted)}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--canvas)}
+#root{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--canvas);color:var(--ink);font-family:var(--sans)}
+.chrome{position:absolute;left:96px;right:96px;top:56px;display:flex;justify-content:space-between;font-family:var(--mono);font-weight:500;font-size:28px;letter-spacing:.02em;color:var(--ink-2)}
+.chrome b{color:var(--ink);font-weight:500}
+.rule{position:absolute;left:96px;right:96px;top:112px;height:1px;background:var(--panel)}
+.frame{position:absolute;left:672px;top:200px;width:1152px;height:648px;object-fit:cover;border:1px solid var(--panel);background:var(--surface);opacity:0}
+.copy{position:absolute;left:96px;top:200px;width:548px;height:648px}
+.eyebrow{font-family:var(--mono);font-weight:500;font-size:28px;letter-spacing:.02em;color:var(--ink-2);opacity:0}
+.head{margin-top:28px;font-size:56px;line-height:62px;letter-spacing:-1.4px;font-weight:400}
+.head span{display:block;opacity:0}
+.l1{color:var(--ink)} .l2{color:var(--ink-soft)}
+.progress{position:absolute;left:96px;right:96px;top:952px;height:2px;background:var(--panel)}
+#bar{position:absolute;left:0;top:0;height:2px;width:1728px;background:var(--electric);transform-origin:0 0;transform:scaleX(0)}
+.steps{position:absolute;left:96px;right:96px;top:976px;display:flex;justify-content:space-between;font-family:var(--mono);font-weight:500;font-size:28px;color:var(--ink-2)}
+.center{position:absolute;left:0;width:1920px;text-align:center}
+.brand{font-size:150px;line-height:1;letter-spacing:-4px;font-weight:400;color:var(--ink)}
+.tag{font-size:64px;line-height:68px;letter-spacing:-1.6px;color:var(--ink-soft)}
+.cta{display:inline-block;margin-top:44px;padding:18px 30px;background:var(--electric);color:#fff;font-family:var(--mono);font-weight:500;font-size:28px}
 </style>
 </head>
 <body>
-<div id="root" data-composition-id="main" data-start="0" data-duration="64" data-width="1920" data-height="1080">
-  <video id="v_overview" class="frame clip" data-track-index="1" src="assets/footage/overview.mp4" data-start="4" data-duration="6.8" data-media-start="1.4" muted playsinline></video>
-  <video id="v_explore" class="frame clip" data-track-index="2" src="assets/footage/explore.mp4" data-start="10" data-duration="6.8" data-media-start="2.5" muted playsinline></video>
-  <video id="v_details" class="frame clip" data-track-index="3" src="assets/footage/details.mp4" data-start="16" data-duration="7.3" data-media-start="4.8" muted playsinline></video>
-  <video id="v_layouts" class="frame clip" data-track-index="4" src="assets/footage/layouts.mp4" data-start="22.5" data-duration="7.3" data-media-start="4.0" muted playsinline></video>
-  <video id="v_ask" class="frame clip" data-track-index="5" src="assets/footage/ask.mp4" data-start="29" data-duration="8.3" data-media-start="1.9" muted playsinline></video>
-  <video id="v_trust" class="frame clip" data-track-index="6" src="assets/footage/trust.mp4" data-start="36.5" data-duration="6.3" data-media-start="1.9" muted playsinline></video>
-  <video id="v_map" class="frame clip" data-track-index="7" src="assets/footage/map.mp4" data-start="42" data-duration="8.3" data-media-start="1.8" muted playsinline></video>
-  <video id="v_flows" class="frame clip" data-track-index="8" src="assets/footage/flows.mp4" data-start="49.5" data-duration="5.8" data-media-start="2.6" muted playsinline></video>
-  <video id="v_trace" class="frame clip" data-track-index="9" src="assets/footage/trace.mp4" data-start="54.5" data-duration="5.8" data-media-start="2.0" muted playsinline></video>
-  <audio id="music" src="assets/music/happy-beats-business-moves-vol-12-by-ende-dot-app.mp3" data-start="0" data-duration="64" data-track-index="9" data-volume="0.55" data-fade-in="1" data-fade-out="3"></audio>
-  <div id="intro" class="clip" data-start="0" data-duration="4.4" data-track-index="18">
-    <div id="i1" class="center brand" style="top:380px">Graph<span>Sense</span></div>
-    <div id="i2" class="center line" style="top:560px">Your order-to-cash data, connected.</div>
+<div id="root" data-composition-id="main" data-start="0" data-duration="43.62" data-width="1920" data-height="1080">
+  <div class="chrome"><span><b>GraphSense</b></span><span>ORDER TO CASH</span></div>
+  <div class="rule"></div>
+  <video id="v_overview" class="frame clip" data-track-index="1" src="assets/footage/overview.mp4" data-start="3.181" data-duration="4.603" data-media-start="0" muted playsinline></video>
+  <video id="v_explore" class="frame clip" data-track-index="2" src="assets/footage/explore.mp4" data-start="7.384" data-duration="4.614" data-media-start="0" muted playsinline></video>
+  <video id="v_details" class="frame clip" data-track-index="3" src="assets/footage/details.mp4" data-start="11.598" data-duration="4.615" data-media-start="0" muted playsinline></video>
+  <video id="v_layouts" class="frame clip" data-track-index="4" src="assets/footage/layouts.mp4" data-start="15.813" data-duration="4.603" data-media-start="0" muted playsinline></video>
+  <video id="v_ask" class="frame clip" data-track-index="5" src="assets/footage/ask.mp4" data-start="20.016" data-duration="5.671" data-media-start="0" muted playsinline></video>
+  <video id="v_trust" class="frame clip" data-track-index="6" src="assets/footage/trust.mp4" data-start="25.287" data-duration="4.08" data-media-start="0" muted playsinline></video>
+  <video id="v_map" class="frame clip" data-track-index="7" src="assets/footage/map.mp4" data-start="28.967" data-duration="5.137" data-media-start="0" muted playsinline></video>
+  <video id="v_flows" class="frame clip" data-track-index="8" src="assets/footage/flows.mp4" data-start="33.704" data-duration="3.558" data-media-start="0" muted playsinline></video>
+  <video id="v_trace" class="frame clip" data-track-index="9" src="assets/footage/trace.mp4" data-start="36.862" data-duration="3.558" data-media-start="0" muted playsinline></video>
+  <audio id="music" src="assets/music/happy-beats-business-moves-vol-11-by-ende-dot-app.mp3" data-start="0" data-duration="43.62" data-track-index="9" data-volume="0.6" data-fade-out="2"></audio>
+  <div id="intro" class="clip" data-start="0" data-duration="3.181" data-track-index="18">
+    <div class="center brand" id="i1" style="top:380px">GraphSense</div>
+    <div class="center tag" id="i2" style="top:560px">Your order-to-cash, connected.</div>
   </div>
-  <div id="c_overview" class="cap clip" data-start="4" data-duration="6" data-track-index="20">
-    <div class="eyebrow">01 · Overview</div><div class="title">Your business at a glance</div><div class="sub">Every order, delivery, invoice and payment in one view.</div>
+  <div id="c_overview" class="copy clip" data-start="3.181" data-duration="4.203" data-track-index="20">
+    <div class="eyebrow">[ 01 ] OVERVIEW</div>
+    <div class="head"><span class="l1">Your business,</span><span class="l2">at a glance.</span></div>
   </div>
-  <div id="c_explore" class="cap clip" data-start="10" data-duration="6" data-track-index="21">
-    <div class="eyebrow">02 · Connections</div><div class="title">See how everything connects</div><div class="sub">Each record linked to the ones it touches.</div>
+  <div id="c_explore" class="copy clip" data-start="7.384" data-duration="4.214" data-track-index="21">
+    <div class="eyebrow">[ 02 ] CONNECTIONS</div>
+    <div class="head"><span class="l1">Every record,</span><span class="l2">connected.</span></div>
   </div>
-  <div id="c_details" class="cap clip" data-start="16" data-duration="6.5" data-track-index="22">
-    <div class="eyebrow">03 · Record details</div><div class="title">Open any record</div><div class="sub">Key details and every relationship, side by side.</div>
+  <div id="c_details" class="copy clip" data-start="11.598" data-duration="4.215" data-track-index="22">
+    <div class="eyebrow">[ 03 ] RECORD DETAILS</div>
+    <div class="head"><span class="l1">Open any record.</span><span class="l2">See all it touches.</span></div>
   </div>
-  <div id="c_layouts" class="cap clip" data-start="22.5" data-duration="6.5" data-track-index="23">
-    <div class="eyebrow">04 · Views</div><div class="title">View it your way</div><div class="sub">Clusters, circles or a left-to-right process view.</div>
+  <div id="c_layouts" class="copy clip" data-start="15.813" data-duration="4.203" data-track-index="23">
+    <div class="eyebrow">[ 04 ] VIEWS</div>
+    <div class="head"><span class="l1">Your data,</span><span class="l2">your view.</span></div>
   </div>
-  <div id="c_ask" class="cap clip" data-start="29" data-duration="7.5" data-track-index="24">
-    <div class="eyebrow">05 · Ask</div><div class="title">Ask in plain English</div><div class="sub">Clear answers in seconds, with the data behind them.</div>
+  <div id="c_ask" class="copy clip" data-start="20.016" data-duration="5.271" data-track-index="24">
+    <div class="eyebrow">[ 05 ] ASK</div>
+    <div class="head"><span class="l1">Just ask,</span><span class="l2">in plain English.</span></div>
   </div>
-  <div id="c_trust" class="cap clip" data-start="36.5" data-duration="5.5" data-track-index="25">
-    <div class="eyebrow">06 · Trust</div><div class="title">Focused on your data</div><div class="sub">Off-topic questions are politely declined.</div>
+  <div id="c_trust" class="copy clip" data-start="25.287" data-duration="3.68" data-track-index="25">
+    <div class="eyebrow">[ 06 ] TRUST</div>
+    <div class="head"><span class="l1">Stays on your data.</span><span class="l2">Nothing else.</span></div>
   </div>
-  <div id="c_map" class="cap clip" data-start="42" data-duration="7.5" data-track-index="26">
-    <div class="eyebrow">07 · Action</div><div class="title">From answer to records</div><div class="sub">One click shows the results on the map.</div>
+  <div id="c_map" class="copy clip" data-start="28.967" data-duration="4.737" data-track-index="26">
+    <div class="eyebrow">[ 07 ] ACTION</div>
+    <div class="head"><span class="l1">Answer to records,</span><span class="l2">in one click.</span></div>
   </div>
-  <div id="c_flows" class="cap clip" data-start="49.5" data-duration="5" data-track-index="27">
-    <div class="eyebrow">08 · Flows</div><div class="title">Follow your process</div><div class="sub">Order to cash, step by step.</div>
+  <div id="c_flows" class="copy clip" data-start="33.704" data-duration="3.158" data-track-index="27">
+    <div class="eyebrow">[ 08 ] FLOWS</div>
+    <div class="head"><span class="l1">Follow the process,</span><span class="l2">order to cash.</span></div>
   </div>
-  <div id="c_trace" class="cap clip" data-start="54.5" data-duration="5" data-track-index="28">
-    <div class="eyebrow">09 · Trace</div><div class="title">Trace any record</div><div class="sub">From customer to payment, end to end.</div>
+  <div id="c_trace" class="copy clip" data-start="36.862" data-duration="3.158" data-track-index="28">
+    <div class="eyebrow">[ 09 ] TRACE</div>
+    <div class="head"><span class="l1">Trace any order</span><span class="l2">to payment.</span></div>
   </div>
-  <div id="outro" class="clip" data-start="59.5" data-duration="4.5" data-track-index="19">
-    <div id="o1" class="center brand" style="top:380px">Graph<span>Sense</span></div>
-    <div id="o2" class="center line" style="top:560px">Know your business, end to end.</div>
+  <div id="outro" class="clip" data-start="40.02" data-duration="3.6" data-track-index="19">
+    <div class="center brand" id="o1" style="top:330px">GraphSense</div>
+    <div class="center tag" id="o2" style="top:510px">Know your business, end to end.</div>
+    <div class="center" id="o3" style="top:600px"><span class="cta">[ SEE IT IN ACTION ]</span></div>
   </div>
+  <div class="progress" id="prog"><div id="bar"></div></div>
+  <div class="steps" id="steps"><span id="stepno">00 / 09</span><span>OVERVIEW · CONNECTIONS · DETAILS · VIEWS · ASK · TRUST · ACTION · FLOWS · TRACE</span></div>
 </div>
 <script>
 const tl=gsap.timeline({paused:true});
-const X=0.8;
-// calm crossfade in, slow drift, nothing flashes
-function fadeFrame(id,s,d){
-  tl.fromTo(id,{opacity:0,scale:1.0},{opacity:1,duration:X,ease:"power1.inOut"},s);
-  tl.fromTo(id,{scale:1.0},{scale:1.012,duration:d,ease:"none",immediateRender:false},s);
+const X=0.4, N=9, FIRST=3.181, OUT=40.02;
+const EASE="power3.out";
+function scene(v,c,s,d,i){
+  tl.fromTo(v,{opacity:0,y:16},{opacity:1,y:0,duration:X+.1,ease:EASE},s);
+  tl.fromTo(c+" .eyebrow",{opacity:0,y:10},{opacity:1,y:0,duration:.35,ease:EASE},s+.05);
+  tl.fromTo(c+" .l1",{opacity:0,y:18},{opacity:1,y:0,duration:.45,ease:EASE},s+.12);
+  tl.fromTo(c+" .l2",{opacity:0,y:18},{opacity:1,y:0,duration:.45,ease:EASE},s+.24);
+  tl.to(c,{opacity:0,duration:.25,ease:"power1.in"},s+d-.25);
+  tl.set("#stepno",{textContent:String(i).padStart(2,"0")+" / "+String(N).padStart(2,"0")},s);
 }
-function caption(id,s,d){
-  tl.fromTo(id,{opacity:0,y:12},{opacity:1,y:0,duration:.9,ease:"power2.out"},s+.5);
-  tl.to(id,{opacity:0,duration:.5,ease:"power1.in"},s+d-.5);
-}
+// intro: brand on screen from frame 0, tagline settles in
 tl.set("#i1",{opacity:1},0);
-tl.fromTo("#i2",{opacity:0},{opacity:1,duration:1,ease:"power1.out"},1.4);
-tl.to(["#i1","#i2"],{opacity:0,duration:.7,ease:"power1.in"},3.5);
-fadeFrame("#v_overview",4,6.8); caption("#c_overview",4,6);
-fadeFrame("#v_explore",10,6.8); caption("#c_explore",10,6);
-fadeFrame("#v_details",16,7.3); caption("#c_details",16,6.5);
-fadeFrame("#v_layouts",22.5,7.3); caption("#c_layouts",22.5,6.5);
-fadeFrame("#v_ask",29,8.3); caption("#c_ask",29,7.5);
-fadeFrame("#v_trust",36.5,6.3); caption("#c_trust",36.5,5.5);
-fadeFrame("#v_map",42,8.3); caption("#c_map",42,7.5);
-fadeFrame("#v_flows",49.5,5.8); caption("#c_flows",49.5,5);
-fadeFrame("#v_trace",54.5,5.8); caption("#c_trace",54.5,5);
-tl.fromTo("#o1",{opacity:0,y:10},{opacity:1,y:0,duration:1.2,ease:"power2.out"},60.0);
-tl.fromTo("#o2",{opacity:0},{opacity:1,duration:1,ease:"power1.out"},61.0);
+tl.fromTo("#i2",{opacity:0,y:14},{opacity:1,y:0,duration:.5,ease:EASE},0.5);
+tl.to(["#i1","#i2"],{opacity:0,duration:.3,ease:"power1.in"},FIRST-.3);
+// the electric-blue bar fills across the feature tour
+tl.fromTo("#bar",{scaleX:0},{scaleX:1,duration:OUT-FIRST,ease:"none"},FIRST);
+scene("#v_overview","#c_overview",3.181,4.203,1); // beat-locked: 3.181s
+scene("#v_explore","#c_explore",7.384,4.214,2); // beat-locked: 7.384s
+scene("#v_details","#c_details",11.598,4.215,3); // beat-locked: 11.598s
+scene("#v_layouts","#c_layouts",15.813,4.203,4); // beat-locked: 15.813s
+scene("#v_ask","#c_ask",20.016,5.271,5); // beat-locked: 20.016s
+scene("#v_trust","#c_trust",25.287,3.68,6); // beat-locked: 25.287s
+scene("#v_map","#c_map",28.967,4.737,7); // beat-locked: 28.967s
+scene("#v_flows","#c_flows",33.704,3.158,8); // beat-locked: 33.704s
+scene("#v_trace","#c_trace",36.862,3.158,9); // beat-locked: 36.862s
+tl.to(["#prog","#steps"],{opacity:0,duration:.3},OUT);
+tl.fromTo("#o1",{opacity:0,y:14},{opacity:1,y:0,duration:.5,ease:EASE},OUT+.1);
+tl.fromTo("#o2",{opacity:0,y:14},{opacity:1,y:0,duration:.5,ease:EASE},OUT+.35);
+tl.fromTo("#o3",{opacity:0,y:14},{opacity:1,y:0,duration:.5,ease:EASE},OUT+.7);
 window.__timelines=window.__timelines||{};
 window.__timelines["main"]=tl;
 tl.seek(0);

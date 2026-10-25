@@ -48,16 +48,17 @@ Turned a pile of SAP tables into a graph you can explore and interrogate in plai
 - SFX posture: sparse; music carries it
 - Restraint rule: no text change faster than reading floor
 
-## Storyboard (v4: minimal business launch, 64s)
-Tone: calm and minimal. Real-time footage, soft 0.8s crossfades, slow drift, no flashes. Calm bundled track (Business Moves vol. 12).
-- 0-4 GraphSense: Your order-to-cash data, connected.
-- 01 Overview: Your business at a glance
-- 02 Connections: See how everything connects
-- 03 Record details: Open any record
-- 04 Views: View it your way
-- 05 Ask: Ask in plain English
-- 06 Trust: Focused on your data
-- 07 Action: From answer to records
-- 08 Flows: Follow your process
-- 09 Trace: Trace any record
-- 59.5-64 GraphSense: Know your business, end to end.
+## Storyboard (v5: Brik design system, 43.6s)
+Design system: Brik (grey-on-white instrument panel, Geist + Geist Mono, square corners, two-tone headlines, one electric-blue action). Chosen over the earlier dark looks so this launch reads fresh; the product's colourful graph carries the colour.
+Footage: re-recorded in the app's light theme. Pacing: ~4s per feature, 0.4s crossfades, scene starts snapped to the beat grid of Business Moves vol. 11; an electric-blue progress bar fills across the tour with a mono step counter.
+- Intro: GraphSense / Your order-to-cash, connected.
+- [01] Overview: Your business, / at a glance.
+- [02] Connections: Every record, / connected.
+- [03] Record details: Open any record. / See all it touches.
+- [04] Views: Your data, / your view.
+- [05] Ask: Just ask, / in plain English.
+- [06] Trust: Stays on your data. / Nothing else.
+- [07] Action: Answer to records, / in one click.
+- [08] Flows: Follow the process, / order to cash.
+- [09] Trace: Trace any order / to payment.
+- Outro: GraphSense / Know your business, end to end. / [ SEE IT IN ACTION ]
