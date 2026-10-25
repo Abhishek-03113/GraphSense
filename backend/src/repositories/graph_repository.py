@@ -72,32 +72,21 @@ class GraphRepository:
     # Record details (properties and natural labels)
     # ------------------------------------------------------------------
 
-    async def _fetch_details(
+    async def _query_details(
         self, node_def: NodeTypeDef, node_ids: list[str]
     ) -> dict[str, tuple[str | None, dict[str, Any]]]:
-        """``id -> (label, properties)`` for many records of one type, in one query.
+        """``id -> (label, properties)`` for many records of one type, in one query (raises on failure).
 
-        Records that have no row (dangling references) are simply absent.  A
-        failure here must not take the whole graph response down, so it is
-        logged and treated as "no details"; the savepoint keeps the request's
-        transaction usable afterwards.
+        Records that have no row (dangling references) are simply absent.
         """
-        if not node_ids:
-            return {}
         sql, params = self.sql.details_query(node_def, node_ids)
-        try:
-            async with self.db.begin_nested():
-                rows = (await self.db.execute(text(sql), params)).mappings().all()
-        except Exception as exc:
-            logger.error("details | node_type=%s ids=%d — query FAILED: %s", node_def.key, len(node_ids), exc)
-            return {}
+        rows = (await self.db.execute(text(sql), params)).mappings().all()
 
         derived_key = node_def.label_lookup.label_column if node_def.label_lookup else None
+        detail_columns = node_def.detail_columns
         details: dict[str, tuple[str | None, dict[str, Any]]] = {}
         for row in rows:
-            properties = {
-                col: json_value(row[col]) for col in node_def.detail_columns if row[col] is not None
-            }
+            properties = {col: json_value(row[col]) for col in detail_columns if row[col] is not None}
             name = row[self.sql.DETAIL_LABEL] if self.sql.DETAIL_LABEL in row else None
             label = str(name).strip() if name is not None and str(name).strip() else None
             if derived_key and label:
@@ -105,17 +94,49 @@ class GraphRepository:
             details[row[self.sql.DETAIL_ID]] = (label, properties)
         return details
 
+    async def _fetch_details(
+        self, node_def: NodeTypeDef, node_ids: list[str]
+    ) -> dict[str, tuple[str | None, dict[str, Any]]]:
+        """Like ``_query_details``, but a failure is logged and treated as "no details".
+
+        A failure here must not take the whole graph response down; the savepoint
+        keeps the request's transaction usable afterwards.
+        """
+        if not node_ids:
+            return {}
+        try:
+            async with self.db.begin_nested():
+                return await self._query_details(node_def, node_ids)
+        except Exception as exc:
+            logger.error("details | node_type=%s ids=%d — query FAILED: %s", node_def.key, len(node_ids), exc)
+            return {}
+
     async def _attach_details(self, nodes_map: NodesMap) -> None:
-        """Fill ``label`` and ``properties`` on the collected nodes, one query per node type."""
+        """Fill ``label`` and ``properties`` on the collected nodes, one query per node type.
+
+        All types share one savepoint; only when one of them fails is each type
+        fetched again under its own, so the others still get their details.
+        """
         ids_by_type: dict[str, list[str]] = {}
         for node_type, node_id in nodes_map:
             ids_by_type.setdefault(node_type, []).append(node_id)
+        wanted = [
+            (node_type, node_def, ids)
+            for node_type, ids in ids_by_type.items()
+            if (node_def := self.dataset.get_node_type(node_type)) is not None
+        ]
+        if not wanted:
+            return
 
-        for node_type, ids in ids_by_type.items():
-            node_def = self.dataset.get_node_type(node_type)
-            if node_def is None:
-                continue
-            details = await self._fetch_details(node_def, ids)
+        found: dict[str, dict[str, tuple[str | None, dict[str, Any]]]] = {}
+        try:
+            async with self.db.begin_nested():
+                for node_type, node_def, ids in wanted:
+                    found[node_type] = await self._query_details(node_def, ids)
+        except Exception:
+            found = {node_type: await self._fetch_details(node_def, ids) for node_type, node_def, ids in wanted}
+
+        for node_type, details in found.items():
             for node_id, (label, properties) in details.items():
                 node = nodes_map[(node_type, node_id)]
                 if label:

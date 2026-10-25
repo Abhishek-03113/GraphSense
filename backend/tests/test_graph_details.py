@@ -196,11 +196,12 @@ class _Savepoint:
 class ScriptedSession:
     """Answers statements by looking at their text; records every statement."""
 
-    def __init__(self, edges=(), ids=(), details=None, fail_details=False):
+    def __init__(self, edges=(), ids=(), details=None, fail_details=False, fail_tables=()):
         self.edges = list(edges)
         self.ids = list(ids)
         self.details = details or {}
         self.fail_details = fail_details
+        self.fail_tables = set(fail_tables)
         self.statements: list[tuple[str, dict]] = []
 
     def begin_nested(self):
@@ -210,9 +211,9 @@ class ScriptedSession:
         sql = str(statement)
         self.statements.append((sql, dict(params or {})))
         if "_gs_id" in sql:
-            if self.fail_details:
-                raise RuntimeError("column does not exist")
             table = re.search(r"\nFROM (\w+)", sql).group(1)
+            if self.fail_details or table in self.fail_tables:
+                raise RuntimeError("column does not exist")
             wanted = set(params["ids"])
             return _Rows([r for r in self.details.get(table, []) if r["_gs_id"] in wanted])
         if sql.lstrip().startswith("SELECT DISTINCT") and "LIMIT :limit" in sql:
@@ -293,6 +294,32 @@ async def test_failed_details_query_degrades_to_empty_properties():
     assert len(graph.nodes) == 2
     assert all(n.properties == {} for n in graph.nodes)
     assert graph.nodes[0].label == "Customer 1"
+
+
+async def test_one_failing_type_leaves_the_others_their_details():
+    session = ScriptedSession(
+        edges=[("310000100", "Customer", "740500", "SalesOrder", "PLACED")],
+        details={
+            "business_partners": [_full(CUSTOMER_ROW, "Customer")],
+            "sales_order_headers": [_full(SALES_ORDER_ROW, "SalesOrder")],
+        },
+        fail_tables={"sales_order_headers"},
+    )
+    graph = await GraphRepository(session).get_subgraph("Customer", "310000100", 1)
+    by_id = {n.id: n for n in graph.nodes}
+    assert by_id["Customer:310000100"].label == "Cardenas, Parker and Avila"
+    assert by_id["SalesOrder:740500"].properties == {}
+
+
+async def test_details_of_every_type_share_one_savepoint():
+    session = ScriptedSession(
+        edges=[("310000100", "Customer", "740500", "SalesOrder", "PLACED")],
+        details={"business_partners": [_full(CUSTOMER_ROW, "Customer")]},
+    )
+    savepoints = []
+    session.begin_nested = lambda: savepoints.append(1) or _Savepoint()
+    await GraphRepository(session).get_subgraph("Customer", "310000100", 1)
+    assert len(session.detail_statements()) == 2 and len(savepoints) == 1
 
 
 async def test_unknown_node_types_are_left_alone():

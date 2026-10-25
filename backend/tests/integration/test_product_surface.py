@@ -20,7 +20,7 @@ GRAPH_REQUESTS = [
     ("/api/graph/summary", {}),
     ("/api/graph/subgraphs", {"root_type": "Book", "root_id": "978-0", "depth": 2}),
     ("/api/graph/traces", {"doc_type": "Book", "doc_id": "978-0"}),
-    ("/api/graph/flows/full/subgraph", {}),
+    ("/api/graph/flows/lending/subgraph", {}),
     ("/api/graph/samples", {}),
     ("/api/graph/node-types/Book/entities", {}),
 ]
