@@ -9,6 +9,7 @@ import { flowRank, useSchema } from '../../lib/schema';
 import styles from './GraphCanvas.module.css';
 import { buildStylesheet } from './graphStyle';
 import { layoutOptions, type LayoutName } from './layouts';
+import { attachPhysics, type Physics } from './physics';
 import { useThemeColors } from './useThemeColors';
 
 cytoscape.use(dagre);
@@ -54,6 +55,7 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
 
   const containerRef = useRef<HTMLDivElement>(null);
   const cyRef = useRef<Core | null>(null);
+  const physicsRef = useRef<Physics | null>(null);
   const hoveredRef = useRef<string | null>(null);
   const latest = useRef({ onSelect, onExpand, layout, reducedMotion, insetRight });
   const structureRef = useRef('');
@@ -111,6 +113,13 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
     const cy = cyRef.current;
     if (!cy || cy.nodes().length === 0) return;
     const { layout: name, reducedMotion: reduce } = latest.current;
+    if (name === 'physics') {
+      physicsRef.current ??= attachPhysics(cy);
+      physicsRef.current.run({ scatter: randomize, animate: animate && !reduce });
+      return;
+    }
+    physicsRef.current?.destroy();
+    physicsRef.current = null;
     cy.layout(layoutOptions(name, { animate: animate && !reduce && cy.nodes().length < 220, randomize })).run();
   }, []);
 
@@ -150,6 +159,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
 
     return () => {
       observer.disconnect();
+      physicsRef.current?.destroy();
+      physicsRef.current = null;
       cy.destroy();
       cyRef.current = null;
     };
@@ -200,7 +211,8 @@ export const GraphCanvas = forwardRef<GraphCanvasHandle, GraphCanvasProps>(funct
       firstLayout.current = false;
       return;
     }
-    runLayout(true);
+    // Physics starts from the current arrangement, so switching to it morphs rather than jumps.
+    runLayout(layout !== 'physics');
   }, [layout, runLayout]);
 
   // ── Emphasis: selection, hover, search, highlights ───────

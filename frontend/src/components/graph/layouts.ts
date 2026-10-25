@@ -1,8 +1,9 @@
 import type { LayoutOptions } from 'cytoscape';
 
-export type LayoutName = 'organic' | 'leftToRight' | 'topDown' | 'circle';
+export type LayoutName = 'physics' | 'organic' | 'leftToRight' | 'topDown' | 'circle';
 
 export const LAYOUT_CHOICES: { value: LayoutName; label: string }[] = [
+  { value: 'physics', label: 'Physics' },
   { value: 'organic', label: 'Clusters' },
   { value: 'leftToRight', label: 'Horizontal' },
   { value: 'topDown', label: 'Vertical' },
@@ -15,7 +16,8 @@ interface LayoutRun {
   randomize: boolean;
 }
 
-export function layoutOptions(name: LayoutName, { animate, randomize }: LayoutRun): LayoutOptions {
+/** Options for the static layouts. `physics` is not a Cytoscape layout: `attachPhysics` drives it. */
+export function layoutOptions(name: Exclude<LayoutName, 'physics'>, { animate, randomize }: LayoutRun): LayoutOptions {
   const base = { fit: true, padding: 48, animate };
   switch (name) {
     case 'leftToRight':

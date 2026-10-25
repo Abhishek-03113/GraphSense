@@ -37,7 +37,7 @@ React 19 + TypeScript + Vite, React Router for real URLs, TanStack Query for ser
   - `inspector/` - `RecordInspector`, the details panel shared by Explore, Flows, Trace and Records
   - `onboarding/` - first-run "Load data" state (`POST /api/ingest`)
 - **`src/components/ui/`** - Button, IconButton, Card, Badge, TypeBadge, Input/Select, Checkbox, Slider, Table, Sheet, Tooltip, EmptyState/ErrorState, Skeleton, Kbd, Combobox, Disclosure, CommandPalette
-- **`src/components/graph/`** - `GraphCanvas` (the only Cytoscape wrapper; used by Explore, Flows and Trace), `CanvasToolbar`, `Legend`, `layouts.ts`, `graphStyle.ts`, `useThemeColors.ts`
+- **`src/components/graph/`** - `GraphCanvas` (the only Cytoscape wrapper; used by Explore, Flows and Trace), `CanvasToolbar`, `Legend`, `layouts.ts`, `physics.ts` (live d3-force simulation behind the "Physics" layout), `graphStyle.ts`, `useThemeColors.ts`
 - **`src/lib/api/`** - `client.ts` (fetch + `VITE_API_BASE_URL`), `schemas.ts` (Zod), `queries.ts` (TanStack Query hooks)
 - **`src/lib/schema/`** - `useSchema()` and helpers (`getTypeMeta`, `colorForType`, `typeLabel`, `edgeLabel`); built from `GET /api/graph/schema`, with a fallback derived from `/summary` and `/flows`
 - **`src/lib/format/`** - `humanize`, value/number/date formatting, CSV
@@ -142,7 +142,7 @@ Accepts `{ message }`, returns `{ answer, sql, data, entities, graph_nodes, erro
 **Changing the app schema:** add a new `migrations/schema/V<timestamp>__<name>.sql` (later timestamp than the existing ones) and update `src/storage/app_tables.py` to match.
 
 **Updating frontend visualization:**
-- Graph rendering lives in `src/components/graph/GraphCanvas.tsx` (Cytoscape, no wrapper library); node/edge styling is in `graphStyle.ts`, layouts in `layouts.ts`
+- Graph rendering lives in `src/components/graph/GraphCanvas.tsx` (Cytoscape, no wrapper library); node/edge styling is in `graphStyle.ts`, layouts in `layouts.ts`, the live force simulation in `physics.ts`
 - Colours come from design tokens, resolved at runtime by `useThemeColors.ts` so the canvas follows light/dark
 - Node/edge data is a `GraphData` (`lib/api/schemas.ts`); feed it to `GraphCanvas` and the Explore, Flow and Trace screens all work the same way
 - Never hard-code a record type name or colour: use `useSchema()` (`colorForType`, `typeLabel`, `edgeLabel`)

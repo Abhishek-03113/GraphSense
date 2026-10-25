@@ -91,7 +91,7 @@ Accessibility rules the code follows:
 - Visible focus ring on every interactive element, full keyboard paths, skip link, focus moves to the page after navigation.
 - Icon-only buttons take a required `label` prop (used as `aria-label` and tooltip).
 - Status is never colour alone: the connection dot changes shape and always has text; badges carry an icon; highlighted graph records also get a heavier label.
-- Every animation has a `prefers-reduced-motion` answer: CSS animations are shortened globally, graph layout and transitions are not animated.
+- Every animation has a `prefers-reduced-motion` answer: CSS animations are shortened globally, graph layout and transitions are not animated (the Physics layout runs to rest at once and dragging does not reheat it).
 - Records in the graph can be reached without a pointer through the Explore search results and the details panel's relationship lists.
 
 ## Visual check
