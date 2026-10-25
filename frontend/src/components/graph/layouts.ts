@@ -21,9 +21,9 @@ export function layoutOptions(name: Exclude<LayoutName, 'physics'>, { animate, r
   const base = { fit: true, padding: 48, animate };
   switch (name) {
     case 'leftToRight':
-      return { name: 'dagre', rankDir: 'LR', nodeSep: 20, rankSep: 96, edgeSep: 8, ranker: 'network-simplex', ...base } as LayoutOptions;
+      return { name: 'dagre', rankDir: 'LR', nodeSep: 32, rankSep: 96, edgeSep: 8, ranker: 'network-simplex', ...base } as LayoutOptions;
     case 'topDown':
-      return { name: 'dagre', rankDir: 'TB', nodeSep: 24, rankSep: 72, edgeSep: 8, ranker: 'network-simplex', ...base } as LayoutOptions;
+      return { name: 'dagre', rankDir: 'TB', nodeSep: 40, rankSep: 72, edgeSep: 8, ranker: 'network-simplex', ...base } as LayoutOptions;
     case 'circle':
       return { name: 'circle', spacingFactor: 1.1, ...base } as LayoutOptions;
     case 'organic':
@@ -34,14 +34,14 @@ export function layoutOptions(name: Exclude<LayoutName, 'physics'>, { animate, r
         animate: animate ? 'end' : false,
         animationDuration: 450,
         nodeRepulsion: 9000,
-        idealEdgeLength: 64,
+        idealEdgeLength: 80,
         edgeElasticity: 0.1,
         gravity: 0.3,
         gravityRange: 3.8,
         numIter: 2500,
         tile: true,
         randomize,
-        nodeDimensionsIncludeLabels: false,
+        nodeDimensionsIncludeLabels: true,
       } as LayoutOptions;
   }
 }

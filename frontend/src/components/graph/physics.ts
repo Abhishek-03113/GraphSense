@@ -14,6 +14,7 @@ import {
 interface PhysicsNode extends SimulationNodeDatum {
   id: string;
   radius: number;
+  degree: number;
 }
 
 type PhysicsLink = SimulationLinkDatum<PhysicsNode>;
@@ -36,6 +37,22 @@ const WARMUP_TICKS = 80;
 /** How hot a drag keeps the simulation: neighbours follow the dragged record while it moves. */
 const DRAG_ALPHA = 0.3;
 const SPAWN_JITTER = 24;
+/** Shortest spring between two records. */
+const LINK_BASE = 72;
+/** Arc each neighbour of a hub needs on its ring: a record plus its label. */
+const NEIGHBOUR_ARC = 58;
+/** Room kept around a record for its label, so titles do not land on other records. */
+const LABEL_CLEARANCE = 16;
+/** Milliseconds between label re-placements while the graph is moving. */
+const RESHAPE_EVERY_MS = 300;
+
+/** Spring length: a hub's ring grows with its neighbour count so their labels have space. */
+const linkDistance = (link: PhysicsLink) => {
+  const source = link.source as PhysicsNode;
+  const target = link.target as PhysicsNode;
+  const ring = (Math.max(source.degree, target.degree) * NEIGHBOUR_ARC) / (2 * Math.PI);
+  return Math.max(LINK_BASE, ring) + source.radius + target.radius;
+};
 
 const jitter = () => (Math.random() - 0.5) * SPAWN_JITTER;
 
@@ -44,20 +61,22 @@ const jitter = () => (Math.random() - 0.5) * SPAWN_JITTER;
  * like springs and a weak gravity keeps islands close. It keeps running while it settles, and dragging
  * a record reheats it so the neighbourhood follows.
  */
-export function attachPhysics(cy: Core): Physics {
+export function attachPhysics(cy: Core, onReshape: () => void = () => undefined): Physics {
   const known = new Map<string, PhysicsNode>();
   let elements = new Map<string, NodeSingular>();
   /** Off under reduced motion: records then stay where they are dropped instead of reheating the graph. */
   let live = true;
 
   const simulation: Simulation<PhysicsNode, PhysicsLink> = forceSimulation<PhysicsNode>()
-    .force('charge', forceManyBody<PhysicsNode>().strength((node) => -60 - node.radius * 6).distanceMax(700))
-    .force('link', forceLink<PhysicsNode, PhysicsLink>().id((node) => node.id).distance(56))
-    .force('collide', forceCollide<PhysicsNode>((node) => node.radius + 4))
-    .force('x', forceX<PhysicsNode>(0).strength(0.045))
-    .force('y', forceY<PhysicsNode>(0).strength(0.045))
+    .force('charge', forceManyBody<PhysicsNode>().strength((node) => -140 - node.radius * 8).distanceMax(900))
+    .force('link', forceLink<PhysicsNode, PhysicsLink>().id((node) => node.id).distance(linkDistance))
+    .force('collide', forceCollide<PhysicsNode>((node) => node.radius + LABEL_CLEARANCE).strength(0.9))
+    // Weak gravity: enough to keep islands on screen, not so much that unrelated clusters mesh together.
+    .force('x', forceX<PhysicsNode>(0).strength(0.025))
+    .force('y', forceY<PhysicsNode>(0).strength(0.025))
     .stop();
 
+  let lastReshape = 0;
   const apply = () => {
     cy.batch(() => {
       for (const node of simulation.nodes()) {
@@ -66,7 +85,16 @@ export function attachPhysics(cy: Core): Physics {
       }
     });
   };
-  simulation.on('tick', apply);
+  simulation.on('tick', () => {
+    apply();
+    // Labels wait while a record is held; the canvas places them again when it is let go.
+    const now = performance.now();
+    if (now - lastReshape >= RESHAPE_EVERY_MS && cy.nodes(':grabbed').empty()) {
+      lastReshape = now;
+      onReshape();
+    }
+  });
+  simulation.on('end', onReshape);
 
   /** Build the simulation's records from the canvas, keeping the state of ones it already knows. */
   const sync = (scatter: boolean) => {
@@ -77,13 +105,15 @@ export function attachPhysics(cy: Core): Physics {
     const fresh: [PhysicsNode, NodeSingular][] = [];
     for (const [id, element] of elements) {
       const radius = Number(element.data('size') ?? 20) / 2;
+      const degree = element.degree(false);
       const existing = known.get(id);
       if (existing) {
         existing.radius = radius;
+        existing.degree = degree;
         nodes.push(existing);
         continue;
       }
-      const node: PhysicsNode = { id, radius };
+      const node: PhysicsNode = { id, radius, degree };
       if (!scatter) {
         const { x, y } = element.position();
         node.x = x + jitter();
@@ -120,12 +150,14 @@ export function attachPhysics(cy: Core): Physics {
       const ticks = Math.ceil(Math.log(simulation.alphaMin()) / Math.log(1 - simulation.alphaDecay()));
       simulation.tick(ticks);
       apply();
+      onReshape();
       if (scatter) cy.fit(undefined, FIT_PADDING);
       return;
     }
     if (scatter) {
       simulation.tick(WARMUP_TICKS);
       apply();
+      onReshape();
       cy.fit(undefined, FIT_PADDING);
     }
     simulation.restart();
