@@ -16,6 +16,7 @@ never show them.  Use :func:`dsn_host` when a DSN has to appear in a log line.
 from __future__ import annotations
 
 import json
+from urllib.parse import parse_qs, urlsplit
 from collections.abc import Iterator
 from contextlib import contextmanager
 from functools import lru_cache
@@ -52,6 +53,8 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
         populate_by_name=True,
+        # A validation error must not echo the value: a malformed DSN still carries its password.
+        hide_input_in_errors=True,
     )
 
     # --- environment ----------------------------------------------------
@@ -61,13 +64,13 @@ class Settings(BaseSettings):
     # --- database -------------------------------------------------------
     # postgresql+asyncpg://user:pass@host:5432/db (DATABASE_URL is accepted too).
     DATABASE_DSN: PostgresDsn | None = Field(
-        default=None, validation_alias=AliasChoices("DATABASE_DSN", "DATABASE_URL")
+        default=None, validation_alias=AliasChoices("DATABASE_DSN", "DATABASE_URL"), repr=False
     )
     # Role used for LLM-generated SQL only (SELECT-only).
-    READONLY_DATABASE_DSN: PostgresDsn | None = None
+    READONLY_DATABASE_DSN: PostgresDsn | None = Field(default=None, repr=False)
     # Role that creates schemas and loads data (ingestion, migrations, role setup).
     # Defaults to DATABASE_DSN, so a single-role deployment needs no extra setting.
-    OWNER_DATABASE_DSN: PostgresDsn | None = None
+    OWNER_DATABASE_DSN: PostgresDsn | None = Field(default=None, repr=False)
     DB_POOL_SIZE: int = 10
     DB_MAX_OVERFLOW: int = 20
     DB_POOL_TIMEOUT: int = 30
@@ -251,5 +254,17 @@ def override_settings(**values: object) -> Iterator[Settings]:
 
 
 def dsn_host(dsn: object) -> str:
-    """The ``host:port/db`` part of a DSN, safe to log (credentials removed)."""
-    return str(dsn).split("@")[-1]
+    """The ``host:port/db`` part of a DSN, safe to log.
+
+    User, password and query string are dropped (libpq accepts ``?password=``),
+    and anything that does not parse as a URL is not shown at all.
+    """
+    try:
+        parts = urlsplit(str(dsn))
+        host = parts.hostname or parse_qs(parts.query).get("host", ["localhost"])[0]
+        port = f":{parts.port}" if parts.port else ""
+    except ValueError:
+        return "<unparseable dsn>"
+    if not parts.scheme:
+        return "<unparseable dsn>"
+    return f"{host}{port}{parts.path}"

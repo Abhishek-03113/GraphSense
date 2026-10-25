@@ -88,6 +88,39 @@ def test_dsn_host_hides_credentials():
     assert dsn_host("postgresql+asyncpg://user:pw@db.example:5432/app") == "db.example:5432/app"
 
 
+@pytest.mark.parametrize(
+    ("dsn", "expected"),
+    [
+        ("postgresql://user@db.example/app?password=pw&sslmode=require", "db.example/app"),
+        ("postgresql:///app?user=user&password=pw&host=db.example", "db.example/app"),
+        ("postgresql://user:p@ss@db.example:5432/app", "db.example:5432/app"),
+        ("not a dsn pw", "<unparseable dsn>"),
+    ],
+)
+def test_dsn_host_never_shows_a_password(dsn, expected):
+    shown = dsn_host(dsn)
+    assert shown == expected
+    assert "pw" not in shown and "p@ss" not in shown
+
+
+def test_settings_repr_does_not_show_database_passwords():
+    settings = Settings(
+        _env_file=None,
+        DATABASE_DSN="postgresql://u:pw1@h/db",
+        READONLY_DATABASE_DSN="postgresql://u:pw2@h/db",
+        OWNER_DATABASE_DSN="postgresql://u:pw3@h/db",
+    )
+    text = repr(settings) + str(settings)
+    assert not any(pw in text for pw in ("pw1", "pw2", "pw3"))
+
+
+def test_an_invalid_dsn_error_does_not_echo_the_password():
+    with pytest.raises(ValueError) as excinfo:
+        Settings(_env_file=None, DATABASE_DSN="postgresql://u:pw@h:notaport/db")
+    assert "pw" not in str(excinfo.value)
+    assert "DATABASE_DSN" in str(excinfo.value)
+
+
 def test_override_settings_applies_and_restores():
     before = get_settings().DEFAULT_DATASET
     with override_settings(DEFAULT_DATASET="zzz") as patched:
