@@ -130,7 +130,8 @@ async def test_a_failed_synthesis_still_returns_the_rows(ctx):
     llm = FakeLLM([draft(BOOKS_SQL), ProviderUnavailable("down")])
     result = await make_service(llm, StubExecutor(books_result())).ask(ctx, QUESTION)
     assert result.error is None and result.row_count == 2
-    assert result.answer.startswith("2 records found")
+    assert result.answer.startswith("I found 2 matching records")
+    assert "table below" in result.answer
     assert "answer_unavailable" in result.warnings
 
 

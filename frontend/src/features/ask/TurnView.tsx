@@ -31,6 +31,7 @@ import { useAsk, type RecordRef, type Turn } from '../../store/ask';
 import styles from './Ask.module.css';
 import { Notice } from './Notice';
 import { RichText } from './RichText';
+import { readableWarnings } from './warnings';
 
 const STAGES = ['Reading your question', 'Finding the right data', 'Running the lookup', 'Writing up the answer'];
 const MAX_ROWS = 200;
@@ -354,7 +355,7 @@ export function TurnView({ turn, suggestions, onPickPrompt, onOpenRecord }: Turn
   const retry = useAsk((s) => s.retry);
   const hasRows = Boolean(turn.rows && turn.rows.length > 0);
   const assumptions = turn.assumptions ?? [];
-  const warnings = turn.warnings ?? [];
+  const warnings = readableWarnings(turn.warnings ?? []);
   const followUps = (turn.suggestions ?? []).slice(0, 3);
 
   return (

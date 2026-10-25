@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import asyncio
 import json
-from collections.abc import Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from typing import Any
 
 from pydantic import SecretStr
@@ -30,6 +30,10 @@ logger = get_logger(__name__)
 
 _EMBED_BATCH = 100
 _TASK_TYPES = {"document": "RETRIEVAL_DOCUMENT", "query": "RETRIEVAL_QUERY"}
+# Server errors the provider answers when a model is briefly overloaded ("high demand").
+_TRANSIENT_STATUS = frozenset({500, 502, 503, 504})
+# Pauses before the second and third attempt; a timeout or a client error is never retried.
+_RETRY_DELAYS_S = (0.6, 1.8)
 
 
 def _client(api_key: SecretStr):
@@ -57,6 +61,25 @@ def _translate(exc: BaseException) -> Exception:
     return ProviderUnavailable(f"{type(exc).__name__} while calling the provider")
 
 
+def _is_transient(exc: BaseException) -> bool:
+    from google.genai import errors
+
+    return isinstance(exc, errors.APIError) and getattr(exc, "code", None) in _TRANSIENT_STATUS
+
+
+async def _with_retries[T](call: Callable[[], Awaitable[T]], delays: Sequence[float], what: str) -> T:
+    """Run ``call``, retrying temporary server errors after each of ``delays``; failures are translated."""
+    for attempt, delay in enumerate((*delays, None), start=1):
+        try:
+            return await call()
+        except Exception as exc:
+            if delay is None or not _is_transient(exc):
+                raise _translate(exc) from exc
+            logger.info("%s attempt %d failed (HTTP %s); retrying", what, attempt, getattr(exc, "code", "?"))
+            await asyncio.sleep(delay)
+    raise AssertionError("unreachable")
+
+
 def _decode_json(text: str) -> dict[str, Any] | None:
     try:
         value = json.loads(text)
@@ -68,10 +91,18 @@ def _decode_json(text: str) -> dict[str, Any] | None:
 class GeminiLLM:
     name = "gemini"
 
-    def __init__(self, api_key: SecretStr, model: str, *, default_timeout_s: float = 30.0) -> None:
+    def __init__(
+        self,
+        api_key: SecretStr,
+        model: str,
+        *,
+        default_timeout_s: float = 30.0,
+        retry_delays_s: Sequence[float] = _RETRY_DELAYS_S,
+    ) -> None:
         self.model = model
         self._api_key = api_key
         self._default_timeout_s = default_timeout_s
+        self._retry_delays_s = tuple(retry_delays_s)
         self._client_instance = None
 
     def _get_client(self):
@@ -95,17 +126,18 @@ class GeminiLLM:
         if req.json_schema is not None:
             config_args["response_mime_type"] = "application/json"
             config_args["response_json_schema"] = req.json_schema
-        try:
-            response = await asyncio.wait_for(
+        response = await _with_retries(
+            lambda: asyncio.wait_for(
                 client.aio.models.generate_content(
                     model=self.model,
                     contents=req.prompt,
                     config=types.GenerateContentConfig(**config_args),
                 ),
                 timeout=timeout + 5,
-            )
-        except Exception as exc:
-            raise _translate(exc) from exc
+            ),
+            self._retry_delays_s,
+            "generation",
+        )
 
         try:
             text = (response.text or "").strip()
@@ -128,10 +160,18 @@ class GeminiLLM:
 class GeminiEmbedder:
     name = "gemini"
 
-    def __init__(self, api_key: SecretStr, model: str, *, dims: int | None = None) -> None:
+    def __init__(
+        self,
+        api_key: SecretStr,
+        model: str,
+        *,
+        dims: int | None = None,
+        retry_delays_s: Sequence[float] = _RETRY_DELAYS_S,
+    ) -> None:
         self.model = model
         self._api_key = api_key
         self._dims = dims
+        self._retry_delays_s = tuple(retry_delays_s)
         self._client_instance = None
 
     @property
@@ -155,17 +195,18 @@ class GeminiEmbedder:
         vectors: list[list[float]] = []
         for start in range(0, len(texts), _EMBED_BATCH):
             batch = list(texts[start : start + _EMBED_BATCH])
-            try:
-                response = await asyncio.wait_for(
+            response = await _with_retries(
+                lambda batch=batch: asyncio.wait_for(
                     client.aio.models.embed_content(
                         model=self.model,
                         contents=batch,
                         config=types.EmbedContentConfig(**config_args),
                     ),
                     timeout=60,
-                )
-            except Exception as exc:
-                raise _translate(exc) from exc
+                ),
+                self._retry_delays_s,
+                "embedding",
+            )
             embeddings = getattr(response, "embeddings", None) or []
             if len(embeddings) != len(batch):
                 raise ProviderUnavailable("the provider returned a different number of embeddings")
