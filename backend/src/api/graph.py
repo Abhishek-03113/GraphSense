@@ -11,6 +11,7 @@ from src.domain.graph_models import (
     GraphSubgraphResponse,
     GraphSummaryResponse,
 )
+from src.repositories.graph_cache import graph_cache
 from src.repositories.graph_repository import GraphRepository
 
 router = APIRouter(prefix="/api/graph", tags=["graph"])
@@ -30,10 +31,17 @@ def get_repository(
     return GraphRepository(db, ctx.package.graph_dataset())
 
 
+# Counts, samples and entity listings only change when a load swaps in new data, so they
+# are computed once per loaded generation (see src/repositories/graph_cache.py).
+
+
 @router.get("/summary", response_model=GraphSummaryResponse)
-async def get_graph_summary(repo: GraphRepository = Depends(get_repository)):
+async def get_graph_summary(
+    repo: GraphRepository = Depends(get_repository),
+    ctx: DatasetContext = Depends(get_dataset_context),
+):
     """Returns an overview of the dataset sizes (node and edge counts)."""
-    return await repo.get_summary()
+    return await graph_cache.get(repo.db, ctx.schema_name, ("summary",), repo.get_summary)
 
 
 @router.get("/subgraphs", response_model=GraphSubgraphResponse)
@@ -67,11 +75,14 @@ async def get_flow(
     flow_id: str,
     limit: int = Query(50, ge=1, le=200, description="Max nodes per edge bucket"),
     repo: GraphRepository = Depends(get_repository),
+    ctx: DatasetContext = Depends(get_dataset_context),
 ):
     """Returns a sampled subgraph for a predefined flow of the active dataset."""
     if repo.dataset.get_flow(flow_id) is None:
         raise HTTPException(status_code=404, detail=f"Unknown flow: {flow_id}")
-    return await repo.get_flow(flow_id, limit)
+    return await graph_cache.get(
+        repo.db, ctx.schema_name, ("flow", flow_id, limit), lambda: repo.get_flow(flow_id, limit)
+    )
 
 
 @router.get("/traces", response_model=GraphSubgraphResponse)
@@ -90,10 +101,12 @@ async def get_full_graph(
     node_limit: int = Query(20, ge=1, le=500, description="Max entities sampled per node type"),
     type_filter: str | None = Query(None, description="Comma-separated node types to include"),
     repo: GraphRepository = Depends(get_repository),
+    ctx: DatasetContext = Depends(get_dataset_context),
 ):
     """Returns a sampled knowledge graph across all entity types."""
     types = [t.strip() for t in type_filter.split(",")] if type_filter else None
-    return await repo.get_full_graph(node_limit, types)
+    key = ("samples", node_limit, tuple(types) if types else None)
+    return await graph_cache.get(repo.db, ctx.schema_name, key, lambda: repo.get_full_graph(node_limit, types))
 
 
 @router.get("/node-types/{node_type}/entities", response_model=GraphEntityResponse)
@@ -101,6 +114,9 @@ async def get_entities(
     node_type: str,
     limit: int = Query(50, ge=1, le=100),
     repo: GraphRepository = Depends(get_repository),
+    ctx: DatasetContext = Depends(get_dataset_context),
 ):
     """Returns a sample of entity IDs for a given type."""
-    return await repo.get_entities(node_type, limit)
+    return await graph_cache.get(
+        repo.db, ctx.schema_name, ("entities", node_type, limit), lambda: repo.get_entities(node_type, limit)
+    )

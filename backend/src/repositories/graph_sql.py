@@ -7,7 +7,7 @@ and every edge endpoint that refers to it are built the same way.
 
 from __future__ import annotations
 
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 
 from src.domain.graph_schema import EdgeTypeDef, GraphDataset, NodeTypeDef
 
@@ -51,15 +51,15 @@ class GraphSqlBuilder:
             return f"{alias}.{columns[0]}"
         return composite([f"{alias}.{col}" for col in columns])
 
-    def edge_select(self, edge: EdgeTypeDef) -> str:
-        """One edge definition as a SELECT yielding ``EDGE_COLUMNS``."""
+    def edge_select(self, edge: EdgeTypeDef, conditions: Sequence[str] = ()) -> str:
+        """One edge definition as a SELECT yielding ``EDGE_COLUMNS`` (``conditions`` are ANDed to its WHERE)."""
         source = self._endpoint(edge.alias, edge.source_columns)
         target = self._endpoint(edge.alias, edge.target_columns)
         distinct = "DISTINCT " if edge.distinct else ""
         where = ""
-        if edge.not_null:
-            checks = " AND ".join(f"{edge.alias}.{c} IS NOT NULL" for c in edge.not_null)
-            where = f"\nWHERE {checks}"
+        checks = [f"{edge.alias}.{c} IS NOT NULL" for c in edge.not_null] + list(conditions)
+        if checks:
+            where = f"\nWHERE {' AND '.join(checks)}"
         return (
             f"SELECT {distinct}\n"
             f"    {source}::text AS source_id,\n"
@@ -93,17 +93,80 @@ class GraphSqlBuilder:
             selects.extend(self.edge_select(e) for e in edges)
         return selects, unknown
 
-    def traversal_expand_filter(self) -> str:
-        """Extra WHERE terms for the traversal step: do not expand through terminal types.
+    # ------------------------------------------------------------------
+    # Traversal
+    # ------------------------------------------------------------------
+    #
+    # A subgraph is walked one hop at a time: each hop asks only for the edges
+    # touching the records found by the previous one, so every lookup goes
+    # through the indexes on the edge columns instead of reading every edge.
 
-        The root is always expanded, so tracing from a party record still works.
-        Empty when the dataset has no terminal types.
+    def _id_param(self, node_type: str) -> str:
+        return f"ids_{self.dataset.node_keys.index(node_type)}"
+
+    def _matches(self, alias: str, columns: Sequence[str], param: str) -> str:
+        """``alias.columns`` is one of the ids bound as ``:param``.
+
+        A composite id is first narrowed on its leading column (``:param_lead``)
+        so the lookup can use the index; the exact id check follows.
         """
-        keys = self.dataset.terminal_node_keys
-        if not keys:
-            return ""
-        listed = ", ".join(f"'{k}'" for k in keys)
-        return f"AND (t.depth = 0 OR t.type NOT IN ({listed}))"
+        where = f"{self._endpoint(alias, columns)}::text = ANY(CAST(:{param} AS text[]))"
+        if len(columns) > 1:
+            where = f"{alias}.{columns[0]}::text = ANY(CAST(:{param}_lead AS text[])) AND {where}"
+        return where
+
+    def _id_params(self, records: Mapping[str, Sequence[str]]) -> dict:
+        params: dict = {}
+        for node_type, ids in records.items():
+            node = self.dataset.get_node_type(node_type)
+            if node is None:
+                continue
+            param = self._id_param(node_type)
+            params[param] = list(ids)
+            if len(node.id_columns) > 1:
+                params[f"{param}_lead"] = sorted({v for i in ids for v in self.leading_values(node, i)})
+        return params
+
+    def neighbours_query(self, frontier: Mapping[str, Sequence[str]]) -> tuple[str | None, dict]:
+        """Every edge with an endpoint among ``frontier`` (node type -> ids), as ``EDGE_COLUMNS``.
+
+        ``None`` when no edge definition touches the frontier's types.
+        """
+        blocks = []
+        for edge in self.dataset.edge_types:
+            if edge.source in frontier:
+                blocks.append(self.edge_select(
+                    edge, [self._matches(edge.alias, edge.source_columns, self._id_param(edge.source))]
+                ))
+            if edge.target in frontier:
+                blocks.append(self.edge_select(
+                    edge, [self._matches(edge.alias, edge.target_columns, self._id_param(edge.target))]
+                ))
+        if not blocks:
+            return None, {}
+        return "\n\nUNION ALL\n\n".join(blocks), self._id_params(frontier)
+
+    def edges_between_query(self, records: Mapping[str, Sequence[str]]) -> tuple[str | None, dict]:
+        """Every edge whose two endpoints are among ``records``, de-duplicated and in a total order.
+
+        ``None`` when no edge definition connects the records' types.
+        """
+        blocks = [
+            self.edge_select(edge, [
+                self._matches(edge.alias, edge.source_columns, self._id_param(edge.source)),
+                self._matches(edge.alias, edge.target_columns, self._id_param(edge.target)),
+            ])
+            for edge in self.dataset.edge_types
+            if edge.source in records and edge.target in records
+        ]
+        if not blocks:
+            return None, {}
+        union = "\n\nUNION ALL\n\n".join(blocks)
+        sql = (
+            f"SELECT DISTINCT {EDGE_COLUMNS}\nFROM (\n{union}\n) AS ge\n"
+            "ORDER BY source_type, source_id, target_type, target_id, type"
+        )
+        return sql, self._id_params(records)
 
     # ------------------------------------------------------------------
     # Nodes
@@ -125,6 +188,28 @@ class GraphSqlBuilder:
         else:
             source = node.table
         return f"SELECT COUNT(*) FROM {source} AS _t"
+
+    def edge_count(self, edge: EdgeTypeDef) -> str:
+        """The number of rows ``edge_select(edge)`` yields, without building their ids."""
+        if edge.distinct:
+            return f"SELECT COUNT(*) FROM ({self.edge_select(edge)}) AS _d"
+        where = ""
+        if edge.not_null:
+            where = " WHERE " + " AND ".join(f"{edge.alias}.{c} IS NOT NULL" for c in edge.not_null)
+        return f"SELECT COUNT(*) FROM {edge.table} {edge.alias}{where}"
+
+    def summary_query(self) -> str:
+        """Node counts (kind 0, in definition order) and edge counts per key (kind 1, by key), as one statement."""
+        parts = [
+            f"SELECT 0 AS kind, {index} AS ord, '{node.key}'::text AS key, ({self.count_query(node)}) AS n"
+            for index, node in enumerate(self.dataset.node_types)
+        ]
+        if self.dataset.edge_types:
+            counts = " UNION ALL ".join(
+                f"SELECT '{edge.key}'::text AS type, ({self.edge_count(edge)}) AS n" for edge in self.dataset.edge_types
+            )
+            parts.append(f"SELECT 1, 0, type, SUM(n) FROM ({counts}) AS _edges GROUP BY type")
+        return "SELECT kind, key, n FROM (\n" + "\nUNION ALL\n".join(parts) + "\n) AS _summary ORDER BY kind, ord, key"
 
     def entities_query(self, node: NodeTypeDef) -> str:
         # ORDER BY makes the sample (and so the listing) the same on every call.

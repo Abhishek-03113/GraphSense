@@ -39,7 +39,7 @@
  "entities:NotAType": [],
  "flow:lending": [
   [
-   "WITH flow_edges AS (SELECT l.member_id::text AS source_id,'Member'::text AS source_type,l.loan_id::text AS target_id,'Loan'::text AS target_type,'BORROWED'::text AS type FROM loans l WHERE l.member_id IS NOT NULL UNION ALL SELECT l.loan_id::text AS source_id,'Loan'::text AS source_type,l.isbn::text AS target_id,'Book'::text AS target_type,'OF_BOOK'::text AS type FROM loans l WHERE l.isbn IS NOT NULL UNION ALL SELECT b.author_id::text AS source_id,'Author'::text AS source_type,b.isbn::text AS target_id,'Book'::text AS target_type,'WROTE'::text AS type FROM books b WHERE b.author_id IS NOT NULL),filtered AS (SELECT * FROM flow_edges WHERE source_type IN ('Member','Loan','Book','Author') AND target_type IN ('Member','Loan','Book','Author')),ranked AS (SELECT *,ROW_NUMBER() OVER (PARTITION BY source_type ORDER BY source_id,target_id,type) AS rn FROM filtered) SELECT source_id,source_type,target_id,target_type,type FROM ranked WHERE rn <= :limit ORDER BY source_type,source_id,target_id,type",
+   "WITH flow_edges AS ((SELECT * FROM (SELECT l.member_id::text AS source_id,'Member'::text AS source_type,l.loan_id::text AS target_id,'Loan'::text AS target_type,'BORROWED'::text AS type FROM loans l WHERE l.member_id IS NOT NULL) AS _alias WHERE source_type IN ('Member','Loan','Book','Author') AND target_type IN ('Member','Loan','Book','Author') ORDER BY source_id,target_id,type LIMIT :limit) UNION ALL (SELECT * FROM (SELECT l.loan_id::text AS source_id,'Loan'::text AS source_type,l.isbn::text AS target_id,'Book'::text AS target_type,'OF_BOOK'::text AS type FROM loans l WHERE l.isbn IS NOT NULL) AS _alias WHERE source_type IN ('Member','Loan','Book','Author') AND target_type IN ('Member','Loan','Book','Author') ORDER BY source_id,target_id,type LIMIT :limit) UNION ALL (SELECT * FROM (SELECT b.author_id::text AS source_id,'Author'::text AS source_type,b.isbn::text AS target_id,'Book'::text AS target_type,'WROTE'::text AS type FROM books b WHERE b.author_id IS NOT NULL) AS _alias WHERE source_type IN ('Member','Loan','Book','Author') AND target_type IN ('Member','Loan','Book','Author') ORDER BY source_id,target_id,type LIMIT :limit)),ranked AS (SELECT *,ROW_NUMBER() OVER (PARTITION BY source_type ORDER BY source_id,target_id,type) AS rn FROM flow_edges) SELECT source_id,source_type,target_id,target_type,type FROM ranked WHERE rn <= :limit ORDER BY source_type,source_id,target_id,type",
    {
     "limit": 25
    }
@@ -64,11 +64,11 @@
  ],
  "subgraph": [
   [
-   "WITH RECURSIVE graph_edges AS (SELECT b.author_id::text AS source_id,'Author'::text AS source_type,b.isbn::text AS target_id,'Book'::text AS target_type,'WROTE'::text AS type FROM books b WHERE b.author_id IS NOT NULL UNION ALL SELECT l.member_id::text AS source_id,'Member'::text AS source_type,l.loan_id::text AS target_id,'Loan'::text AS target_type,'BORROWED'::text AS type FROM loans l WHERE l.member_id IS NOT NULL UNION ALL SELECT l.loan_id::text AS source_id,'Loan'::text AS source_type,l.isbn::text AS target_id,'Book'::text AS target_type,'OF_BOOK'::text AS type FROM loans l WHERE l.isbn IS NOT NULL),bidirectional_edges AS (SELECT source_id,source_type,target_id,target_type,type FROM graph_edges UNION ALL SELECT target_id,target_type,source_id,source_type,type FROM graph_edges),traversal(id,type,depth,path) AS (SELECT :root_id,:root_type,0,ARRAY[:root_id || ':' || :root_type] UNION ALL SELECT be.target_id,be.target_type,t.depth + 1,t.path || (be.target_id || ':' || be.target_type) FROM bidirectional_edges be JOIN traversal t ON be.source_id = t.id AND be.source_type = t.type WHERE t.depth < :depth AND NOT (be.target_id || ':' || be.target_type = ANY(t.path)) AND (t.depth = 0 OR t.type NOT IN ('Author','Book','Member'))) SELECT DISTINCT ge.source_id,ge.source_type,ge.target_id,ge.target_type,ge.type FROM graph_edges ge JOIN (SELECT DISTINCT id,type FROM traversal) t1 ON ge.source_id = t1.id AND ge.source_type = t1.type JOIN (SELECT DISTINCT id,type FROM traversal) t2 ON ge.target_id = t2.id AND ge.target_type = t2.type ORDER BY ge.source_type,ge.source_id,ge.target_type,ge.target_id,ge.type",
+   "SELECT b.author_id::text AS source_id,'Author'::text AS source_type,b.isbn::text AS target_id,'Book'::text AS target_type,'WROTE'::text AS type FROM books b WHERE b.author_id IS NOT NULL AND b.author_id::text = ANY(CAST(:ids_0 AS text[]))",
    {
-    "depth": 3,
-    "root_id": "1",
-    "root_type": "Author"
+    "ids_0": [
+     "1"
+    ]
    }
   ],
   [
@@ -82,23 +82,7 @@
  ],
  "summary": [
   [
-   "SELECT COUNT(*) FROM authors AS _t",
-   {}
-  ],
-  [
-   "SELECT COUNT(*) FROM books AS _t",
-   {}
-  ],
-  [
-   "SELECT COUNT(*) FROM members AS _t",
-   {}
-  ],
-  [
-   "SELECT COUNT(*) FROM loans AS _t",
-   {}
-  ],
-  [
-   "SELECT type,COUNT(*) FROM (SELECT b.author_id::text AS source_id,'Author'::text AS source_type,b.isbn::text AS target_id,'Book'::text AS target_type,'WROTE'::text AS type FROM books b WHERE b.author_id IS NOT NULL UNION ALL SELECT l.member_id::text AS source_id,'Member'::text AS source_type,l.loan_id::text AS target_id,'Loan'::text AS target_type,'BORROWED'::text AS type FROM loans l WHERE l.member_id IS NOT NULL UNION ALL SELECT l.loan_id::text AS source_id,'Loan'::text AS source_type,l.isbn::text AS target_id,'Book'::text AS target_type,'OF_BOOK'::text AS type FROM loans l WHERE l.isbn IS NOT NULL) AS all_edges GROUP BY type ORDER BY type",
+   "SELECT kind,key,n FROM (SELECT 0 AS kind,0 AS ord,'Author'::text AS key,(SELECT COUNT(*) FROM authors AS _t) AS n UNION ALL SELECT 0 AS kind,1 AS ord,'Book'::text AS key,(SELECT COUNT(*) FROM books AS _t) AS n UNION ALL SELECT 0 AS kind,2 AS ord,'Member'::text AS key,(SELECT COUNT(*) FROM members AS _t) AS n UNION ALL SELECT 0 AS kind,3 AS ord,'Loan'::text AS key,(SELECT COUNT(*) FROM loans AS _t) AS n UNION ALL SELECT 1,0,type,SUM(n) FROM (SELECT 'WROTE'::text AS type,(SELECT COUNT(*) FROM books b WHERE b.author_id IS NOT NULL) AS n UNION ALL SELECT 'BORROWED'::text AS type,(SELECT COUNT(*) FROM loans l WHERE l.member_id IS NOT NULL) AS n UNION ALL SELECT 'OF_BOOK'::text AS type,(SELECT COUNT(*) FROM loans l WHERE l.isbn IS NOT NULL) AS n) AS _alias GROUP BY type) AS _alias ORDER BY kind,ord,key",
    {}
   ]
  ],

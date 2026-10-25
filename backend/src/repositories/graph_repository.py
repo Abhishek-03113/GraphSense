@@ -10,7 +10,6 @@ from src.domain.graph_models import Edge, GraphEntityResponse, GraphSubgraphResp
 from src.domain.graph_registry import get_dataset
 from src.domain.graph_schema import GraphDataset, NodeTypeDef
 from src.repositories.graph_sql import GraphSqlBuilder
-from src.storage.readiness import is_missing_relation
 from src.utils.logger import get_logger
 from src.utils.serialization import json_value
 
@@ -129,31 +128,15 @@ class GraphRepository:
 
     async def get_summary(self) -> GraphSummaryResponse:
         """Returns node and edge counts for every type in the graph."""
+        # One statement: every count is an index-only or sequential count of one table.
         node_counts: dict[str, int] = {}
-        empty_tables: list[str] = []
-        for node in self.dataset.node_types:
-            try:
-                result = await self.db.execute(text(self.sql.count_query(node)))
-                count = result.scalar()
-            except Exception as exc:
-                if is_missing_relation(exc):
-                    # The data is not loaded. Say so instead of counting zeros: the failed
-                    # statement would also abort every later query of this transaction.
-                    raise
-                logger.error("get_summary | FAILED to count node_type=%s table=%s — %s", node.key, node.table, exc)
-                count = 0
-            node_counts[node.key] = count
-            if count == 0:
-                empty_tables.append(node.key)
+        edge_counts: dict[str, int] = {}
+        for kind, key, count in (await self.db.execute(text(self.sql.summary_query()))).fetchall():
+            (node_counts if kind == 0 else edge_counts)[key] = int(count or 0)
 
+        empty_tables = [key for key, count in node_counts.items() if count == 0]
         if empty_tables:
             logger.warning("get_summary | empty node types (data may not be loaded): %s", ", ".join(empty_tables))
-
-        edges_union = self.sql.edges_union()
-        result = await self.db.execute(
-            text(f"SELECT type, COUNT(*) FROM ({edges_union}) AS all_edges GROUP BY type ORDER BY type")
-        )
-        edge_counts: dict[str, int] = {row[0]: row[1] for row in result}
         return GraphSummaryResponse(nodes=node_counts, edges=edge_counts)
 
     async def get_subgraph(self, root_type: str, root_id: str, depth: int) -> GraphSubgraphResponse:
@@ -166,52 +149,33 @@ class GraphRepository:
         but not expanded through, so a trace follows the document chain instead
         of fanning out to everything else that party or item touches.
         """
-        edges_union = self.sql.edges_union()
-        subgraph_query = f"""
-        WITH RECURSIVE graph_edges AS (
-            {edges_union}
-        ),
-        -- Traverse in both directions so the user can expand from any node
-        bidirectional_edges AS (
-            SELECT source_id, source_type, target_id, target_type, type FROM graph_edges
-            UNION ALL
-            SELECT target_id, target_type, source_id, source_type, type FROM graph_edges
-        ),
-        traversal(id, type, depth, path) AS (
-            -- Seed with the root node
-            SELECT
-                :root_id,
-                :root_type,
-                0,
-                ARRAY[:root_id || ':' || :root_type]
-            UNION ALL
-            -- Expand one hop at a time; path array prevents cycles
-            SELECT
-                be.target_id,
-                be.target_type,
-                t.depth + 1,
-                t.path || (be.target_id || ':' || be.target_type)
-            FROM bidirectional_edges be
-            JOIN traversal t ON be.source_id = t.id AND be.source_type = t.type
-            WHERE t.depth < :depth
-              AND NOT (be.target_id || ':' || be.target_type = ANY(t.path))
-              {self.sql.traversal_expand_filter()}
-        )
-        -- Return only edges where both endpoints were reached by the traversal
-        SELECT DISTINCT
-            ge.source_id, ge.source_type,
-            ge.target_id, ge.target_type,
-            ge.type
-        FROM graph_edges ge
-        JOIN (SELECT DISTINCT id, type FROM traversal) t1
-            ON ge.source_id = t1.id AND ge.source_type = t1.type
-        JOIN (SELECT DISTINCT id, type FROM traversal) t2
-            ON ge.target_id = t2.id AND ge.target_type = t2.type
-        ORDER BY ge.source_type, ge.source_id, ge.target_type, ge.target_id, ge.type
-        """
+        # Breadth first: each hop fetches only the edges touching the newest records.
+        # A record is expanded once, at its shortest distance from the root, which
+        # reaches exactly the records some path of at most ``depth`` hops reaches.
+        terminal = set(self.dataset.terminal_node_keys)
+        reached: dict[str, dict[str, None]] = {root_type: {root_id: None}}  # type -> ids, in discovery order
+        frontier: dict[str, list[str]] = {root_type: [root_id]}  # the root is expanded even when terminal
+        for _ in range(depth):
+            hop_sql, hop_params = self.sql.neighbours_query(frontier)
+            if hop_sql is None:
+                break
+            found: dict[str, list[str]] = {}
+            for s_id, s_type, t_id, t_type, _ in await self.db.execute(text(hop_sql), hop_params):
+                for node_type, node_id in ((s_type, s_id), (t_type, t_id)):
+                    ids = reached.setdefault(node_type, {})
+                    if node_id is None or node_id in ids:
+                        continue
+                    ids[node_id] = None
+                    if node_type not in terminal:
+                        found.setdefault(node_type, []).append(node_id)
+            if not found:
+                break
+            frontier = found
 
-        params = {"root_id": root_id, "root_type": root_type, "depth": depth}
-        rows = (await self.db.execute(text(subgraph_query), params)).fetchall()
+        # Every edge between two reached records, including those between records
+        # at the last hop or between shared reference records.
+        edges_sql, edges_params = self.sql.edges_between_query({t: list(ids) for t, ids in reached.items()})
+        rows = (await self.db.execute(text(edges_sql), edges_params)).fetchall() if edges_sql else []
 
         nodes_map: NodesMap = {}
         edges: list[Edge] = []
@@ -247,24 +211,30 @@ class GraphRepository:
         if not query_parts:
             return GraphSubgraphResponse(nodes=[], edges=[])
 
-        union_sql = " UNION ALL ".join(query_parts)
-        # Filter to only include edges where both endpoints are in node_types for this flow,
-        # then sample up to `limit` rows per source_type
+        # Keep only edges whose endpoints are both flow types, then sample up to `limit`
+        # rows per source_type.  Each edge definition is cut to its own first `limit`
+        # rows before ranking: a definition has one source type, so the rows that make
+        # a type's first `limit` are among them, and no more than that is ever sorted.
         node_type_list = ", ".join(f"'{t}'" for t in node_types)
+        union_sql = " UNION ALL ".join(
+            f"""
+                (SELECT * FROM ({sql}) AS _f{index}
+                 WHERE source_type IN ({node_type_list}) AND target_type IN ({node_type_list})
+                 ORDER BY source_id, target_id, type
+                 LIMIT :limit)
+            """
+            for index, sql in enumerate(query_parts)
+        )
 
         query = f"""
         WITH flow_edges AS (
             {union_sql}
         ),
-        filtered AS (
-            SELECT * FROM flow_edges
-            WHERE source_type IN ({node_type_list}) AND target_type IN ({node_type_list})
-        ),
         ranked AS (
             SELECT *, ROW_NUMBER() OVER (
                 PARTITION BY source_type ORDER BY source_id, target_id, type
             ) AS rn
-            FROM filtered
+            FROM flow_edges
         )
         SELECT source_id, source_type, target_id, target_type, type FROM ranked WHERE rn <= :limit
         ORDER BY source_type, source_id, target_id, type

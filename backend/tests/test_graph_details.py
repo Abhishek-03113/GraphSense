@@ -181,6 +181,9 @@ class _Rows:
     def all(self):
         return list(self._rows)
 
+    def scalar(self):
+        return None
+
 
 class _Savepoint:
     async def __aenter__(self):
