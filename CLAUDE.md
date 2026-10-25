@@ -35,7 +35,7 @@ React 19 + TypeScript + Vite, React Router for real URLs, TanStack Query for ser
 - **`src/features/`** - one folder per screen:
   - `overview/` (`/`), `explore/` (`/explore`, graph + filters), `ask/` (`/ask` and the Explore side panel), `flows/` (`/flows`, `/flows/:flowId`), `trace/` (`/trace?type=&id=`), `records/` (`/records/:type?`)
   - `inspector/` - `RecordInspector`, the details panel shared by Explore, Flows, Trace and Records
-  - `onboarding/` - first-run "Load data" state (`POST /api/ingest`)
+  - `onboarding/` - first-run "Load data" state (operators load data with `graphsense ingest`)
 - **`src/components/ui/`** - Button, IconButton, Card, Badge, TypeBadge, Input/Select, Checkbox, Slider, Table, Sheet, Tooltip, EmptyState/ErrorState, Skeleton, Kbd, Combobox, Disclosure, CommandPalette
 - **`src/components/graph/`** - `GraphCanvas` (the only Cytoscape wrapper; used by Explore, Flows and Trace), `CanvasToolbar`, `Legend`, `layouts.ts`, `physics.ts` (live d3-force simulation behind the "Physics" layout), `labelPlacement.ts` (puts each record label on its freest side after every layout), `graphStyle.ts`, `useThemeColors.ts`
 - **`src/lib/api/`** - `client.ts` (fetch + `VITE_API_BASE_URL`), `schemas.ts` (Zod), `queries.ts` (TanStack Query hooks)
@@ -46,7 +46,7 @@ React 19 + TypeScript + Vite, React Router for real URLs, TanStack Query for ser
 
 The UI contains no dataset-specific type names. Record type labels, colours, primary types, display properties, relationship labels and flows all come from the schema endpoint. When adding UI, read these from `useSchema()` rather than naming a type.
 
-Data flow: `SchemaProvider` loads schema + summary once; pages fetch their own data through the hooks in `lib/api/queries.ts`; `GraphCanvas` renders any `{nodes, edges}` payload; `RecordInspector` fetches a record's neighbourhood via `/graph/subgraph`.
+Data flow: `SchemaProvider` loads schema + summary once; pages fetch their own data through the hooks in `lib/api/queries.ts`; `GraphCanvas` renders any `{nodes, edges}` payload; `RecordInspector` fetches a record's neighbourhood via `/graph/subgraphs`.
 
 ## Development
 
@@ -115,19 +115,21 @@ npm run e2e:screens -- ./e2e/screens   # Playwright screenshots against mocked A
 
 ### Graph API Endpoints
 
+Naming: resources are plural nouns, the HTTP method is the verb, actions are modelled as resources (`POST /api/admin/datasets/{id}/ingestions`, `/knowledge-refreshes`, `/rollbacks`), and identifiers sit in the path where they name one resource.
+
 - `GET /api/graph/schema` - describes the dataset (no DB access): `domain`, `node_types` (key, label, plural, description, category, accent, icon, is_primary, display_properties, value_labels), `edge_types`, `flows`. Join with `/summary` for counts
 - `GET /api/graph/summary` - node/edge counts by type
-- `GET /api/graph/subgraph?root_type=&root_id=&depth=` - records reachable from a root (depth 1-5). Every graph endpoint fills `Node.properties` and, where the type declares a natural name, `Node.label`; details are fetched with one batched query per node type
-- `GET /api/graph/entities/{node_type}?limit=` - sample records: `{id, label}` plus the type's `display_properties`
-- `GET /api/graph/flows`, `GET /api/graph/flow?flow_id=&limit=` - the package's flows and a sampled subgraph for one
-- `GET /api/graph/trace?doc_type=&doc_id=&depth=` - subgraph traversal from a record (default depth 4)
-- `GET /api/graph/full?node_limit=&type_filter=` - sampled graph, up to `node_limit` records per type
+- `GET /api/graph/subgraphs?root_type=&root_id=&depth=` - records reachable from a root (depth 1-5). Every graph endpoint fills `Node.properties` and, where the type declares a natural name, `Node.label`; details are fetched with one batched query per node type
+- `GET /api/graph/node-types/{node_type}/entities?limit=` - sample records: `{id, label}` plus the type's `display_properties`
+- `GET /api/graph/flows`, `GET /api/graph/flows/{flow_id}/subgraph?limit=` - the package's flows and a sampled subgraph for one
+- `GET /api/graph/traces?doc_type=&doc_id=&depth=` - subgraph traversal from a record (default depth 4)
+- `GET /api/graph/samples?node_limit=&type_filter=` - sampled graph, up to `node_limit` records per type
 
-### Ask (`POST /api/chat`, `WS /api/chat/ws`)
+### Ask (`POST /api/chat/messages`, `WS /api/chat/ws`)
 
-The UI asks over a WebSocket (`/api/chat/ws`, frames documented on `chat_socket` in `src/api/chat.py`): `status` frames per pipeline stage, `delta` frames with the answer as the model writes it, then a `result` with the same body as the REST endpoint. The frontend falls back to `POST /api/chat` when the socket cannot open. Models: `LLM_PROVIDER=openrouter` (default, `OPENROUTER_API_KEY`/`OPENROUTER_MODEL`), `openai_compatible` (`LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`) or legacy `gemini`; `providers/openai_compat.py` also does embeddings.
+The UI asks over a WebSocket (`/api/chat/ws`, frames documented on `chat_socket` in `src/api/chat.py`): `status` frames per pipeline stage, `delta` frames with the answer as the model writes it, then a `result` with the same body as the REST endpoint. The frontend falls back to `POST /api/chat/messages` when the socket cannot open. Models: `LLM_PROVIDER=openrouter` (default, `OPENROUTER_API_KEY`/`OPENROUTER_MODEL`), `openai_compatible` (`LLM_BASE_URL`/`LLM_API_KEY`/`LLM_MODEL`) or legacy `gemini`; `providers/openai_compat.py` also does embeddings.
 
-Accepts `{ message }`, returns `{ answer, sql, data, entities, graph_nodes, error, row_count, summary }`. Pipeline: scope and injection guardrails, retrieval over the dataset's knowledge items, SQL generation, the SQL guard, execution on the read-only role, synthesis. `error` is `null` or a stable code (`guardrail`, `sql_generation_failed`, `sql_rejected`, `sql_execution_error: <category>`, `not_configured`, `dataset_not_ready`, `rate_limited`, `provider_unavailable`, `internal_error`). Knowledge is refreshed after each load by the post-ingest hooks or with `graphsense knowledge refresh <id>`; `POST /api/chat/train` and `POST /api/ingest` answer 410.
+Accepts `{ message }`, returns `{ answer, sql, data, entities, graph_nodes, error, row_count, summary }`. Pipeline: scope and injection guardrails, retrieval over the dataset's knowledge items, SQL generation, the SQL guard, execution on the read-only role, synthesis. `error` is `null` or a stable code (`guardrail`, `sql_generation_failed`, `sql_rejected`, `sql_execution_error: <category>`, `not_configured`, `dataset_not_ready`, `rate_limited`, `provider_unavailable`, `internal_error`). Knowledge is refreshed after each load by the post-ingest hooks or with `graphsense knowledge refresh <id>`.
 
 ## Common Tasks
 

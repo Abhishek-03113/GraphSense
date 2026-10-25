@@ -357,7 +357,7 @@ def test_entities_endpoint_stays_backward_compatible():
 
     app.dependency_overrides[get_db_session] = fake_session
     try:
-        res = TestClient(app).get("/api/graph/entities/SalesOrder", params={"limit": 5})
+        res = TestClient(app).get("/api/graph/node-types/SalesOrder/entities", params={"limit": 5})
     finally:
         app.dependency_overrides.pop(get_db_session, None)
     assert res.status_code == 200

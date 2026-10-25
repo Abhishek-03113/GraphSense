@@ -624,25 +624,25 @@ curl http://localhost:8000/health
 |--------|----------|-------------|
 | `GET` | `/api/graph/schema` | Active dataset: domain, node types, edge types, flows (no counts) |
 | `GET` | `/api/graph/summary` | Node/edge counts by type |
-| `GET` | `/api/graph/subgraph?root_type=X&root_id=Y&depth=2` | Subgraph from a root entity |
-| `GET` | `/api/graph/entities/{node_type}?limit=50` | List entity IDs of a type |
+| `GET` | `/api/graph/subgraphs?root_type=X&root_id=Y&depth=2` | Subgraph from a root entity |
+| `GET` | `/api/graph/node-types/{node_type}/entities?limit=50` | List entity IDs of a type |
 | `GET` | `/api/graph/flows` | List the dataset's predefined flow definitions |
-| `GET` | `/api/graph/flow?flow_id=full_o2c&limit=50` | Sampled subgraph for a flow |
-| `GET` | `/api/graph/trace?doc_type=Invoice&doc_id=X&depth=4` | Document lifecycle trace |
-| `GET` | `/api/graph/full?node_limit=20&type_filter=Customer,Invoice` | Sampled knowledge graph |
+| `GET` | `/api/graph/flows/{flow_id}/subgraph?limit=50` | Sampled subgraph for a flow |
+| `GET` | `/api/graph/traces?doc_type=Invoice&doc_id=X&depth=4` | Document lifecycle trace |
+| `GET` | `/api/graph/samples?node_limit=20&type_filter=Customer,Invoice` | Sampled knowledge graph |
 
 ### Chat endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/chat` | Natural language query → `{answer, sql, data, entities}` |
-| `POST` | `/api/chat/train` | Reload RAG training data |
+| `POST` | `/api/chat/messages` | Natural language query → `{answer, sql, data, entities}` |
+| `WS` | `/api/chat/ws` | Same, with progress and the answer streamed |
 
 ### Other
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
-| `POST` | `/api/ingest` | Trigger JSONL data ingestion |
+| `POST` | `/api/admin/datasets/{id}/ingestions` | Start an ingestion (operator token) |
 | `GET` | `/health` | Health check |
 
 ---

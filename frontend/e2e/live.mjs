@@ -38,7 +38,7 @@ if (Object.values(summary.nodes).every((n) => n === 0)) {
   console.error('The backend has no data. Load some first: graphsense ingest o2c --data-root <dir>.');
   process.exit(2);
 }
-const first = async (type) => (await get(`/graph/entities/${type}?limit=1`)).entities[0]?.id;
+const first = async (type) => (await get(`/graph/node-types/${type}/entities?limit=1`)).entities[0]?.id;
 const sample = {
   customer: await first('Customer'),
   salesOrder: await first('SalesOrder'),
@@ -156,7 +156,7 @@ for (const scheme of ['light', 'dark']) {
   await shot(page, name('ask-live'));
 
   // Mocked chat for a populated Ask screenshot.
-  await page.route('**/api/chat', async (route) => {
+  await page.route('**/api/chat/messages', async (route) => {
     const body = JSON.parse(route.request().postData() ?? '{}');
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(chatReply(body.message ?? '')) });
   });

@@ -36,7 +36,7 @@ async def get_graph_summary(repo: GraphRepository = Depends(get_repository)):
     return await repo.get_summary()
 
 
-@router.get("/subgraph", response_model=GraphSubgraphResponse)
+@router.get("/subgraphs", response_model=GraphSubgraphResponse)
 async def get_graph_subgraph(
     root_type: str = Query(..., description="Type of the root node (e.g., SalesOrder)"),
     root_id: str = Query(..., description="ID of the root node"),
@@ -62,9 +62,9 @@ async def list_flows(ctx: DatasetContext = Depends(get_dataset_context)):
     return FlowListResponse(flows=list(ctx.package.graph_dataset().flows))
 
 
-@router.get("/flow", response_model=GraphSubgraphResponse)
+@router.get("/flows/{flow_id}/subgraph", response_model=GraphSubgraphResponse)
 async def get_flow(
-    flow_id: str = Query(..., description="Flow identifier (e.g., full_o2c, sales, billing)"),
+    flow_id: str,
     limit: int = Query(50, ge=1, le=200, description="Max nodes per edge bucket"),
     repo: GraphRepository = Depends(get_repository),
 ):
@@ -74,7 +74,7 @@ async def get_flow(
     return await repo.get_flow(flow_id, limit)
 
 
-@router.get("/trace", response_model=GraphSubgraphResponse)
+@router.get("/traces", response_model=GraphSubgraphResponse)
 async def trace_document(
     doc_type: str = Query(..., description="Type of the document to trace (e.g., Invoice)"),
     doc_id: str = Query(..., description="ID of the document"),
@@ -85,7 +85,7 @@ async def trace_document(
     return await repo.get_subgraph(doc_type, doc_id, depth)
 
 
-@router.get("/full", response_model=GraphSubgraphResponse)
+@router.get("/samples", response_model=GraphSubgraphResponse)
 async def get_full_graph(
     node_limit: int = Query(20, ge=1, le=500, description="Max entities sampled per node type"),
     type_filter: str | None = Query(None, description="Comma-separated node types to include"),
@@ -96,7 +96,7 @@ async def get_full_graph(
     return await repo.get_full_graph(node_limit, types)
 
 
-@router.get("/entities/{node_type}", response_model=GraphEntityResponse)
+@router.get("/node-types/{node_type}/entities", response_model=GraphEntityResponse)
 async def get_entities(
     node_type: str,
     limit: int = Query(50, ge=1, le=100),

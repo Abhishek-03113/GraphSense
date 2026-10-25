@@ -24,7 +24,7 @@ let counter = 0;
 /**
  * One long-lived WebSocket to `/api/chat/ws`. Questions go out as `ask` frames and come back as
  * `status` / `delta` frames and a final `result`. Opened on first use and reopened after a drop.
- * When the socket cannot be opened at all the question falls back to `POST /api/chat`.
+ * When the socket cannot be opened at all the question falls back to `POST /api/chat/messages`.
  */
 class ChatSocket {
   private socket: WebSocket | null = null;

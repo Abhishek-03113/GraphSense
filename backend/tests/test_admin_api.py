@@ -36,7 +36,7 @@ def test_without_a_token_the_admin_routes_do_not_exist():
         app = make_app()
         assert not any(p.startswith("/api/admin") for p in app.openapi()["paths"])
         client = TestClient(app)
-        assert client.post("/api/admin/datasets/o2c/ingest", json={}).status_code == 404
+        assert client.post("/api/admin/datasets/o2c/ingestions", json={}).status_code == 404
         assert client.get("/api/admin/runs", headers={"Authorization": "Bearer anything"}).status_code == 404
 
 
@@ -54,8 +54,8 @@ def test_the_shipped_application_has_no_admin_routes_by_default():
     {"Authorization": f"Bearer {TOKEN[:-1]}"},
 ])
 def test_missing_or_wrong_tokens_are_401(enabled, headers):
-    for method, path in (("get", "/api/admin/runs"), ("post", "/api/admin/datasets/o2c/ingest"),
-                         ("post", "/api/admin/datasets/o2c/rollback")):
+    for method, path in (("get", "/api/admin/runs"), ("post", "/api/admin/datasets/o2c/ingestions"),
+                         ("post", "/api/admin/datasets/o2c/rollbacks")):
         res = getattr(enabled, method)(path, headers=headers)
         assert res.status_code == 401, path
         assert res.json()["code"] == "unauthorized" and res.headers["www-authenticate"] == "Bearer"
@@ -77,26 +77,23 @@ def test_the_ingest_body_cannot_name_a_path(enabled, monkeypatch):
     monkeypatch.setattr("src.api.admin.prepare_run", lambda *a, **k: started.append(a))
     auth = {"Authorization": f"Bearer {TOKEN}"}
     for body in ({"data_dir": "/etc"}, {"path": "/etc"}, {"source": "../x"}, {"force": True, "data_root": "/"}):
-        res = enabled.post("/api/admin/datasets/o2c/ingest", headers=auth, json=body)
+        res = enabled.post("/api/admin/datasets/o2c/ingestions", headers=auth, json=body)
         assert res.status_code == 422, body
     assert started == []
-    assert enabled.post("/api/admin/datasets/o2c/ingest", headers=auth, json={"mode": "partial"}).status_code == 422
+    assert enabled.post("/api/admin/datasets/o2c/ingestions", headers=auth, json={"mode": "partial"}).status_code == 422
 
 
 def test_dataset_ids_that_are_not_ids_do_not_reach_the_database(enabled):
     auth = {"Authorization": f"Bearer {TOKEN}"}
-    res = enabled.post("/api/admin/datasets/..%2F..%2Fetc/ingest", headers=auth, json={})
+    res = enabled.post("/api/admin/datasets/..%2F..%2Fetc/ingestions", headers=auth, json={})
     assert res.status_code in (404, 409)
 
 
-def test_the_old_ingest_endpoint_answers_410_and_ignores_the_body():
+def test_the_retired_verb_routes_are_gone():
     client = TestClient(main_app)
-    res = client.post("/api/ingest", json={"data_dir": "/Users/someone/data"})
-    assert res.status_code == 410
-    body = res.json()
-    assert body["code"] == "gone" and "graphsense ingest" in body["detail"]
-    assert "/Users" not in res.text
-    assert client.post("/api/ingest").status_code == 410
+    for method, path in (("post", "/api/ingest"), ("post", "/api/chat"), ("post", "/api/chat/train"),
+                         ("get", "/api/graph/subgraph"), ("get", "/api/graph/flow"), ("get", "/api/graph/full")):
+        assert getattr(client, method)(path).status_code in (404, 405), path
 
 
 def test_every_cli_command_of_this_workstream_is_registered():

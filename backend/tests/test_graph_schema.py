@@ -297,7 +297,7 @@ def test_flows_endpoint_still_matches_schema_flows(client):
 
 
 def test_unknown_flow_is_404(client):
-    assert client.get("/api/graph/flow", params={"flow_id": "nope"}).status_code == 404
+    assert client.get("/api/graph/flows/nope/subgraph").status_code == 404
 
 
 def test_app_title():

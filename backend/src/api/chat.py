@@ -1,6 +1,6 @@
 """Chat API: ask a question about the dataset in plain language.
 
-``POST /api/chat`` keeps the original eight response fields (``answer``, ``sql``,
+``POST /api/chat/messages`` keeps the original eight response fields (``answer``, ``sql``,
 ``data``, ``entities``, ``graph_nodes``, ``error``, ``row_count``, ``summary``);
 the rest are additive.  ``error`` is ``null`` or a stable code: ``guardrail``,
 ``not_configured``, ``sql_generation_failed``, ``sql_rejected``,
@@ -15,7 +15,7 @@ import asyncio
 import contextlib
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -102,7 +102,7 @@ def to_response(result: AskResult) -> ChatResponseModel:
     )
 
 
-@router.post("", response_model=ChatResponseModel)
+@router.post("/messages", response_model=ChatResponseModel)
 async def handle_chat(
     body: ChatRequest,
     request: Request,
@@ -150,7 +150,7 @@ async def chat_socket(websocket: WebSocket):
 
         {"type": "status", "id": ..., "stage": "retrieving|writing_query|running_query|answering"}
         {"type": "delta",  "id": ..., "text": "..."}      # a piece of the answer
-        {"type": "result", "id": ..., "result": <same body as POST /api/chat>}
+        {"type": "result", "id": ..., "result": <same body as POST /api/chat/messages>}
         {"type": "error",  "id": ..., "code": "...", "detail": "..."}
         {"type": "cancelled", "id": ...}
 
@@ -239,13 +239,3 @@ async def chat_socket(websocket: WebSocket):
             current[1].cancel()
             with contextlib.suppress(BaseException):
                 await current[1]
-
-
-@router.post("/train", include_in_schema=True)
-async def train_model():
-    """Gone: knowledge is refreshed after ingestion or with ``graphsense knowledge refresh``."""
-    raise HTTPException(
-        status_code=410,
-        detail="Training was replaced. Knowledge is refreshed automatically after a data load; "
-        "operators can run `graphsense knowledge refresh <dataset>`.",
-    )

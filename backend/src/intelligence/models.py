@@ -3,7 +3,7 @@
 Nothing here knows about a particular dataset or provider.  These are plain
 dataclasses so they can be built, compared and serialised without a database or
 network.  The HTTP layer (``src/api/chat.py``) turns an :class:`AskResult` into
-the ``/api/chat`` response.
+the ``/api/chat/messages`` response.
 """
 
 from __future__ import annotations
@@ -17,7 +17,7 @@ from typing import Any, Literal
 
 
 class ErrorCode:
-    """Stable ``error`` values of ``POST /api/chat``.  Clients may match on these."""
+    """Stable ``error`` values of ``POST /api/chat/messages``.  Clients may match on these."""
 
     GUARDRAIL = "guardrail"  # the question is outside the dataset's scope (or hostile)
     NOT_CONFIGURED = "not_configured"  # no language model key on this server
@@ -243,7 +243,7 @@ class AskResult:
 
     @property
     def error(self) -> str | None:
-        """The value of the ``error`` field of ``/api/chat``."""
+        """The value of the ``error`` field of ``/api/chat/messages``."""
         if self.error_code == ErrorCode.SQL_EXECUTION_ERROR and self.error_category:
             return f"{self.error_code}: {self.error_category}"
         return self.error_code

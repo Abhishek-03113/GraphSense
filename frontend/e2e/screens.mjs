@@ -63,17 +63,19 @@ async function installApi(context) {
     if (path === '/graph/schema') return state.noSchema ? json({ detail: 'Not Found' }, 404) : json(SCHEMA);
     if (path === '/graph/flows') return json({ flows: SCHEMA.flows });
     if (path.startsWith('/graph/') && notReady) return json(NOT_READY, 409);
-    if (path === '/graph/full') return json(fullGraph(Number(q.get('node_limit') ?? 12)));
-    if (path === '/graph/subgraph') return json(subgraph(q.get('root_type'), q.get('root_id'), Number(q.get('depth') ?? 1)));
-    if (path === '/graph/trace') return json(subgraph(q.get('doc_type'), q.get('doc_id'), Number(q.get('depth') ?? 4)));
-    if (path === '/graph/flow') {
-      const graph = flowGraph(q.get('flow_id'));
+    if (path === '/graph/samples') return json(fullGraph(Number(q.get('node_limit') ?? 12)));
+    if (path === '/graph/subgraphs') return json(subgraph(q.get('root_type'), q.get('root_id'), Number(q.get('depth') ?? 1)));
+    if (path === '/graph/traces') return json(subgraph(q.get('doc_type'), q.get('doc_id'), Number(q.get('depth') ?? 4)));
+    const flowMatch = path.match(/^\/graph\/flows\/([^/]+)\/subgraph$/);
+    if (flowMatch) {
+      const graph = flowGraph(decodeURIComponent(flowMatch[1]));
       return graph ? json(graph) : json({ detail: 'Unknown flow' }, 404);
     }
-    if (path.startsWith('/graph/entities/')) return json(entities(decodeURIComponent(path.split('/').pop()), Number(q.get('limit') ?? 50)));
+    const entityMatch = path.match(/^\/graph\/node-types\/([^/]+)\/entities$/);
+    if (entityMatch) return json(entities(decodeURIComponent(entityMatch[1]), Number(q.get('limit') ?? 50)));
     if (path === `/datasets/${DATASET_ID}/status`) return state.noStatus ? json({ detail: 'Not Found', code: 'not_found' }, 404) : json(datasetStatus(state.dataset, state.ai));
     if (path === `/datasets/${DATASET_ID}/suggested-questions`) return state.noStatus ? json({ detail: 'Not Found', code: 'not_found' }, 404) : json(SUGGESTED_QUESTIONS);
-    if (path === '/chat') {
+    if (path === '/chat/messages') {
       const body = JSON.parse(request.postData() ?? '{}');
       await new Promise((r) => setTimeout(r, 450));
       if (state.chatError === 'rate_limited') {
@@ -88,7 +90,6 @@ async function installApi(context) {
       if (state.chatError) return json(chatError(state.chatError, { answer: '' }));
       return json(chatReply(body.message ?? ''));
     }
-    if (path === '/ingest') return json({ detail: 'Gone', code: 'gone' }, 410);
     return json({ detail: 'Not mocked' }, 404);
   });
 }
