@@ -94,7 +94,7 @@ def classify(exc: BaseException) -> ExecutionError:
 class ReadOnlyExecutor:
     """Pooled, read-only executor.  One instance per process; call :meth:`close` on shutdown."""
 
-    def __init__(self, settings: Settings | None = None, *, dsn: str | None = None, pool_size: int = 5) -> None:
+    def __init__(self, settings: Settings | None = None, *, dsn: str | None = None, pool_size: int | None = None) -> None:
         self._settings = settings
         self._explicit_dsn = dsn
         self._pool_size = pool_size
@@ -143,7 +143,7 @@ class ReadOnlyExecutor:
             self._pool = await asyncpg.create_pool(
                 asyncpg_dsn(dsn),
                 min_size=0,
-                max_size=self._pool_size,
+                max_size=self._pool_size or self.settings.SQL_POOL_SIZE,
                 # No prepared-statement cache: a schema swap must never serve a stale plan.
                 statement_cache_size=0,
                 max_inactive_connection_lifetime=300,

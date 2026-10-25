@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
 from src.api.admin import mount_admin
 from src.api.catalog import router as catalog_router
@@ -46,6 +47,9 @@ app.add_middleware(
     # Browsers on another origin can only read these response headers.
     expose_headers=["X-Request-ID", "Retry-After"],
 )
+# Graph payloads are large and repetitive JSON (a sampled graph is 100+ KB): compressed
+# they travel in a fraction of the bytes.  WebSocket frames are not affected.
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 # Added last so it is the outermost layer: every response, including CORS
 # preflights and errors, carries a request id.
 install_error_handling(app)

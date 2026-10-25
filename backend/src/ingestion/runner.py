@@ -13,8 +13,9 @@ immediately and run the rest in the background.
 from __future__ import annotations
 
 import asyncio
+import multiprocessing
 import time
-from concurrent.futures import ThreadPoolExecutor
+from concurrent.futures import ProcessPoolExecutor, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -154,6 +155,14 @@ class IngestRun:
         if self.lock is not None:
             self.lock.release()
             self.lock = None
+
+    def abandon(self, message: str) -> None:
+        """Record the run as failed when the process executing it died, then release the lock.
+
+        A staging schema it left behind is dropped by the next run.
+        """
+        self._fail("internal_error", message)
+        self.release()
 
     def _phase(self, name: str, *, running: bool = False) -> float:
         self.store.set_phase(self.run_id, name, **({"status": "running"} if running else {}))  # type: ignore[call-arg]
@@ -444,6 +453,40 @@ def prepare_refresh(dataset_id: str, options: IngestOptions | None = None, *, en
     return _prepare(dataset_id, options or IngestOptions(), "refresh", engine, needs_data=False)
 
 
+def _execute_prepared(dataset_id: str, kind: str, run_id: str, options: IngestOptions, data_root: Path | None) -> str:
+    """Entry point of a worker process: execute a run another process prepared (and holds the lock of)."""
+    engine = get_owner_sync_engine()
+    try:
+        run = IngestRun(_package_for(dataset_id), options, engine, SqlRunStore(engine), None, run_id, data_root, kind)
+        return run.execute().status
+    finally:
+        engine.dispose()
+
+
+async def execute_in_worker_process(run: IngestRun) -> str:
+    """Execute a prepared run in a new process; the caller's process keeps the dataset lock meanwhile.
+
+    Parsing and coercing rows is CPU bound.  In a server process it would hold the
+    interpreter lock its event loop needs, and requests would stall for the whole load.
+    Returns the outcome's status.  The lock is released either way; when the worker
+    dies the run is recorded as failed.
+    """
+    loop = asyncio.get_running_loop()
+    pool = ProcessPoolExecutor(max_workers=1, mp_context=multiprocessing.get_context("spawn"))
+    try:
+        status = await loop.run_in_executor(
+            pool, _execute_prepared, run.package.id, run.kind, run.run_id, run.options, run.data_root
+        )
+    except Exception:
+        logger.error("ingest.worker_failed dataset=%s run=%s", run.package.id, run.run_id, exc_info=True)
+        run.abandon("The ingestion worker stopped unexpectedly. See the server log for details.")
+        return "failed"
+    finally:
+        pool.shutdown(wait=False)
+    run.release()
+    return status
+
+
 def ingest(dataset_id: str, options: IngestOptions | None = None, *, engine: Engine | None = None) -> IngestOutcome:
     """Prepare and execute a run in one call."""
     run = prepare_run(dataset_id, options, engine=engine)
@@ -454,6 +497,7 @@ __all__ = [
     "IngestOptions",
     "IngestOutcome",
     "IngestRun",
+    "execute_in_worker_process",
     "ingest",
     "prepare_refresh",
     "prepare_run",

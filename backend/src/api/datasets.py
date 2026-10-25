@@ -49,13 +49,15 @@ async def _latest_runs(db: AsyncSession, dataset_id: str | None = None) -> dict[
     """Latest run per dataset."""
     try:
         async with db.begin_nested():
-            query = select(ingestion_runs).order_by(ingestion_runs.c.started_at.desc())
+            # One row per dataset (its most recent run), not the whole history.
+            query = (
+                select(ingestion_runs)
+                .distinct(ingestion_runs.c.dataset_id)
+                .order_by(ingestion_runs.c.dataset_id, ingestion_runs.c.started_at.desc())
+            )
             if dataset_id:
                 query = query.where(ingestion_runs.c.dataset_id == dataset_id)
-            latest: dict[str, Any] = {}
-            for row in (await db.execute(query)).all():
-                latest.setdefault(row.dataset_id, row)
-            return latest
+            return {row.dataset_id: row for row in (await db.execute(query)).all()}
     except Exception:
         return {}
 

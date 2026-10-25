@@ -32,7 +32,8 @@ async def fake_pre(ctx: HookContext) -> HookResult:
 async def fake_post(ctx: HookContext) -> HookResult:
     CALLS.append({"phase": ctx.phase, "schema": ctx.schema, "run_id": ctx.run_id, "rows": await _row_counts(ctx, ctx.schema),
                   "options": dict(ctx.options)})
-    return HookResult(status="ok")
+    # Also in the run report, for runs executed in a worker process (the admin API).
+    return HookResult(status="ok", details={"options": dict(ctx.options)})
 
 
 @dataclass

@@ -24,7 +24,7 @@ from src.config import get_settings
 from src.db.engine import dispose_engine
 from src.db.session import get_db_session
 from src.ingestion.report import IngestBusy, IngestError
-from src.ingestion.runner import IngestOptions, IngestRun, prepare_refresh, prepare_run
+from src.ingestion.runner import IngestOptions, IngestRun, execute_in_worker_process, prepare_refresh, prepare_run
 from src.storage import schema_manager as sm
 from src.storage.engines import get_owner_sync_engine
 from src.storage.runs import fetch_run, fetch_runs
@@ -59,10 +59,17 @@ def _http_error(exc: IngestError) -> HTTPException:
 
 
 async def _execute(run: IngestRun) -> None:
-    """Run in the background; afterwards drop pooled connections so none keeps statements of the old generation."""
+    """Run in the background, in a worker process so the load never stalls this server's requests.
+
+    Afterwards drop pooled connections so none keeps statements of the old generation.
+    A dry run (no run record, nothing to load) stays in this process.
+    """
     try:
-        await run_in_threadpool(run.execute)
-    except Exception:  # execute() reports failures itself; this is a last resort
+        if run.options.dry_run:
+            await run_in_threadpool(run.execute)
+        else:
+            await execute_in_worker_process(run)
+    except Exception:  # failures are recorded on the run; this is a last resort
         logger.error("admin.run.crashed run=%s", run.run_id, exc_info=True)
         run.release()
     finally:

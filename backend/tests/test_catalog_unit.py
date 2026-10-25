@@ -74,10 +74,19 @@ def test_relationship_sql_counts_keyed_and_matched_rows(toy_package):
     sql = match_query("ds_toy_library", toy_package, rel, 100)
     assert 'f."isbn" IS NOT NULL' in sql
     assert 'EXISTS (SELECT 1 FROM "ds_toy_library"."books" t WHERE t."isbn" = f."isbn")' in sql
-    assert 'FROM (SELECT "isbn" FROM "ds_toy_library"."loans" ORDER BY "loan_id" LIMIT 100) AS f' in sql
+    assert sql.startswith('WITH f AS (SELECT "isbn" FROM "ds_toy_library"."loans" ORDER BY "loan_id" LIMIT 100)')
     back = coverage_query("ds_toy_library", toy_package, rel, 100)
     assert 'EXISTS (SELECT 1 FROM "ds_toy_library"."loans" f WHERE f."isbn" = t."isbn")' in back
-    assert 'ORDER BY "isbn" LIMIT 100) AS t' in back
+    assert back.startswith('WITH t AS (SELECT "isbn" FROM "ds_toy_library"."books" ORDER BY "isbn" LIMIT 100)')
+
+
+def test_relationship_lookups_stand_in_where_clauses_so_they_become_joins(toy_package):
+    """An EXISTS inside count(*) FILTER is evaluated per row; in WHERE it can be a hash semi-join."""
+    snap = CatalogSnapshot.from_package(toy_package)
+    rel = next(r for r in snap.relationships if r.expression == "loans.isbn = books.isbn")
+    for sql in (match_query("ds_x", toy_package, rel, 10), coverage_query("ds_x", toy_package, rel, 10)):
+        assert "FILTER" not in sql
+        assert "AND EXISTS (SELECT 1 FROM" in sql and "WHERE" in sql.split("EXISTS")[0]
 
 
 def test_composite_relationship_joins_every_column(toy_package):

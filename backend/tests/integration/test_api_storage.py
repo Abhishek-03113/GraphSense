@@ -115,7 +115,9 @@ async def test_admin_knowledge_refresh_runs_the_post_swap_hooks(admin, toy_root,
     assert res.status_code == 202
     run = (await admin.get(f"/api/admin/runs/{res.json()['run_id']}", headers=AUTH)).json()
     assert run["kind"] == "refresh" and run["status"] == "succeeded"
-    assert fake_hooks.CALLS and fake_hooks.CALLS[0]["options"]["force"] is True
+    # The run executed in a worker process: what the hook saw comes back through the run report.
+    (hook,) = [h for h in run["hooks"] if h["name"] == "fake_post"]
+    assert hook["status"] == "ok" and hook["details"]["options"]["force"] is True
 
 
 async def test_dataset_listing_and_status_follow_the_lifecycle(admin, toy_root, db):
