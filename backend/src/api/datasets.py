@@ -24,6 +24,7 @@ from src.datasets.errors import PackageError, UnknownDatasetError
 from src.datasets.registry import get_package, list_packages
 from src.db.session import get_db_session
 from src.intelligence.status import ai_status
+from src.repositories.graph_cache import graph_cache
 from src.storage.app_tables import RUN_ACTIVE, ingestion_runs
 from src.storage.readiness import is_missing_relation
 from src.storage.runs import DatasetRow, fetch_dataset_rows, run_summary
@@ -35,33 +36,6 @@ logger = get_logger(__name__)
 router = APIRouter(prefix="/api/datasets", tags=["datasets"])
 
 
-async def _dataset_rows(db: AsyncSession) -> dict[str, DatasetRow]:
-    """``app.datasets`` rows, or none when the application schema has not been created yet."""
-    try:
-        async with db.begin_nested():
-            return await fetch_dataset_rows(db)
-    except Exception:
-        logger.info("datasets.app_schema_unavailable")
-        return {}
-
-
-async def _latest_runs(db: AsyncSession, dataset_id: str | None = None) -> dict[str, Any]:
-    """Latest run per dataset."""
-    try:
-        async with db.begin_nested():
-            # One row per dataset (its most recent run), not the whole history.
-            query = (
-                select(ingestion_runs)
-                .distinct(ingestion_runs.c.dataset_id)
-                .order_by(ingestion_runs.c.dataset_id, ingestion_runs.c.started_at.desc())
-            )
-            if dataset_id:
-                query = query.where(ingestion_runs.c.dataset_id == dataset_id)
-            return {row.dataset_id: row for row in (await db.execute(query)).all()}
-    except Exception:
-        return {}
-
-
 def _status(row: DatasetRow | None, latest: Any) -> str:
     if latest is not None and latest.status in RUN_ACTIVE:
         return "loading"
@@ -70,27 +44,43 @@ def _status(row: DatasetRow | None, latest: Any) -> str:
     return "empty"
 
 
-async def _active_run(db: AsyncSession, row: DatasetRow | None) -> Any:
-    if row is None or row.active_run_id is None:
-        return None
+async def _status_rows(db: AsyncSession, dataset_id: str) -> tuple[DatasetRow | None, Any, Any]:
+    """The dataset's record, its latest run and its active run, under one savepoint.
+
+    The three reads only fail together (when the application schema has not been
+    created yet), so one savepoint is enough; that case answers ``(None, None, None)``.
+    """
     try:
         async with db.begin_nested():
-            return (await db.execute(select(ingestion_runs).where(ingestion_runs.c.id == row.active_run_id))).first()
+            row = (await fetch_dataset_rows(db)).get(dataset_id)
+            query = (
+                select(ingestion_runs)
+                .where(ingestion_runs.c.dataset_id == dataset_id)
+                .order_by(ingestion_runs.c.started_at.desc())
+                .limit(1)
+            )
+            latest = (await db.execute(query)).first()
+            active = None
+            if row is not None and row.active_run_id is not None:
+                active = (
+                    await db.execute(select(ingestion_runs).where(ingestion_runs.c.id == row.active_run_id))
+                ).first()
+            return row, latest, active
     except Exception:
-        return None
+        logger.info("datasets.app_schema_unavailable")
+        return None, None, None
 
 
 @router.get("")
 async def list_datasets(db: AsyncSession = Depends(get_db_session)) -> list[dict[str, Any]]:
     """Every available dataset with its load status."""
-    rows = await _dataset_rows(db)
-    latest = await _latest_runs(db)
+    rows, latest, finished = await _listing_rows(db)
     out = []
     for info in list_packages():
         if not info.valid:
             continue
         row = rows.get(info.id)
-        active = await _active_run(db, row)
+        done = finished.get(row.active_run_id) if row is not None and row.active_run_id else None
         out.append(
             {
                 "id": info.id,
@@ -98,10 +88,37 @@ async def list_datasets(db: AsyncSession = Depends(get_db_session)) -> list[dict
                 "description": info.description,
                 "status": _status(row, latest.get(info.id)),
                 "package_version": info.version,
-                "last_ingested_at": active.finished_at.isoformat() if active is not None and active.finished_at else None,
+                "last_ingested_at": done.isoformat() if done else None,
             }
         )
     return out
+
+
+async def _listing_rows(db: AsyncSession) -> tuple[dict[str, DatasetRow], dict[str, Any], dict[str, Any]]:
+    """Dataset records, the latest run of each, and when each active run finished, under one savepoint.
+
+    All empty when the application schema has not been created yet.
+    """
+    try:
+        async with db.begin_nested():
+            rows = await fetch_dataset_rows(db)
+            query = (
+                select(ingestion_runs)
+                .distinct(ingestion_runs.c.dataset_id)
+                .order_by(ingestion_runs.c.dataset_id, ingestion_runs.c.started_at.desc())
+            )
+            latest = {row.dataset_id: row for row in (await db.execute(query)).all()}
+            active_ids = [r.active_run_id for r in rows.values() if r.active_run_id]
+            finished: dict[str, Any] = {}
+            if active_ids:
+                found = await db.execute(
+                    select(ingestion_runs.c.id, ingestion_runs.c.finished_at).where(ingestion_runs.c.id.in_(active_ids))
+                )
+                finished = {str(run_id): at for run_id, at in found.all()}
+            return rows, latest, finished
+    except Exception:
+        logger.info("datasets.app_schema_unavailable")
+        return {}, {}, {}
 
 
 @router.get("/{dataset_id}/status")
@@ -114,11 +131,8 @@ async def dataset_status(dataset_id: str, db: AsyncSession = Depends(get_db_sess
     except PackageError:
         raise HTTPException(status_code=409, detail="The dataset package is not valid.") from None
 
-    rows = await _dataset_rows(db)
-    row = rows.get(dataset_id)
-    latest = (await _latest_runs(db, dataset_id)).get(dataset_id)
+    row, latest, active = await _status_rows(db, dataset_id)
     status = _status(row, latest)
-    active = await _active_run(db, row)
 
     last_run = None
     if latest is not None:
@@ -163,6 +177,20 @@ async def _has_rows(db: AsyncSession, table: str) -> bool:
         return True
 
 
+async def _types_with_rows(db: AsyncSession, tables: dict[str, str]) -> dict[str, bool]:
+    """``record type -> has rows``, in one statement; one statement per table when that fails (a table is missing)."""
+    if not tables:
+        return {}
+    keys = list(tables)
+    checks = ", ".join(f"EXISTS (SELECT 1 FROM {tables[key]}) AS has_{i}" for i, key in enumerate(keys))
+    try:
+        async with db.begin_nested():
+            row = (await db.execute(text(f"SELECT {checks}"))).one()
+        return {key: bool(row[i]) for i, key in enumerate(keys)}
+    except Exception:  # noqa: BLE001 - answered table by table below
+        return {key: await _has_rows(db, table) for key, table in tables.items()}
+
+
 @router.get("/{dataset_id}/suggested-questions")
 async def suggested_questions(dataset_id: str, db: AsyncSession = Depends(get_db_session)) -> dict[str, Any]:
     """Starter questions written by the dataset's package.
@@ -182,11 +210,12 @@ async def suggested_questions(dataset_id: str, db: AsyncSession = Depends(get_db
     needed = {key for q in questions for key in q.requires}
     if needed:
         graph = pkg.graph_dataset()
+        tables = {key: node.table for key in sorted(needed) if (node := graph.get_node_type(key)) is not None}
         await use_dataset(db, DatasetContext(id=pkg.id, schema_name=pkg.schema_name, package=pkg))
-        available: dict[str, bool] = {}
-        for key in sorted(needed):
-            node = graph.get_node_type(key)
-            available[key] = True if node is None else await _has_rows(db, node.table)
+        # Which record types have rows only changes when a load swaps in new data.
+        available = await graph_cache.get(
+            db, pkg.schema_name, ("record_types_with_rows", tuple(tables.items())), lambda: _types_with_rows(db, tables)
+        )
         questions = [q for q in questions if all(available.get(key, True) for key in q.requires)]
 
     return {

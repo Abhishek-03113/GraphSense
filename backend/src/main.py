@@ -1,9 +1,11 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 
+from src import warmup
 from src.api.admin import mount_admin
 from src.api.catalog import router as catalog_router
 from src.api.chat import router as chat_router
@@ -21,7 +23,10 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     ask_runtime.check_startup()
+    datasets = warmup.load_packages()
+    warming = asyncio.create_task(warmup.warm_database(datasets))
     yield
+    warming.cancel()
     await ask_runtime.shutdown()
     await dispose_all()
 

@@ -193,6 +193,12 @@ class _Savepoint:
         return False
 
 
+def _selected_names(sql: str) -> list[str]:
+    """Output column names of a details query, in select order (rows come back as tuples)."""
+    select = sql.split("\nFROM ", 1)[0].split("\n")[1:]
+    return [line.strip().rstrip(",").rsplit(" AS ", 1)[-1].rsplit(".", 1)[-1] for line in select]
+
+
 class ScriptedSession:
     """Answers statements by looking at their text; records every statement."""
 
@@ -215,7 +221,8 @@ class ScriptedSession:
             if self.fail_details or table in self.fail_tables:
                 raise RuntimeError("column does not exist")
             wanted = set(params["ids"])
-            return _Rows([r for r in self.details.get(table, []) if r["_gs_id"] in wanted])
+            names = _selected_names(sql)
+            return _Rows([tuple(r[n] for n in names) for r in self.details.get(table, []) if r["_gs_id"] in wanted])
         if sql.lstrip().startswith("SELECT DISTINCT") and "LIMIT :limit" in sql:
             return _Rows([(i,) for i in self.ids])
         return _Rows(self.edges)

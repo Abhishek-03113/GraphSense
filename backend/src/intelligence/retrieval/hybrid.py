@@ -117,8 +117,9 @@ class HybridRetriever:
 
         if self.store is not None:
             try:
-                if await self.store.count(dataset_id) > 0:
-                    lexical = await self.store.search_lexical(dataset_id, terms, limit)
+                # Lexical hits prove the store holds this dataset's items; only without them is it counted.
+                lexical = await self.store.search_lexical(dataset_id, terms, limit)
+                if lexical or await self.store.count(dataset_id) > 0:
                     vector_hits: list[Hit] = []
                     vector = await query.get() if query is not None else None
                     if vector is not None:

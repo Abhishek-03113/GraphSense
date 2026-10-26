@@ -10,6 +10,9 @@ class _Scalar:
     def scalar(self):
         return self.value
 
+    def fetchall(self):
+        return [(self.value,)]
+
 
 class GenerationSession:
     """Answers the generation lookup with the current value of ``oids`` (one per call, the last one repeats)."""

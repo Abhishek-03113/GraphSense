@@ -3,13 +3,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.graph_models import Edge, GraphEntityResponse, GraphSubgraphResponse, GraphSummaryResponse, Node
 from src.domain.graph_registry import get_dataset
 from src.domain.graph_schema import GraphDataset, NodeTypeDef
 from src.repositories.graph_sql import GraphSqlBuilder
+from src.storage.session import fetch
 from src.utils.logger import get_logger
 from src.utils.serialization import json_value
 
@@ -54,19 +54,10 @@ class GraphRepository:
             s_node_id = f"{s_type}:{s_id}"
             t_node_id = f"{t_type}:{t_id}"
             if (s_type, s_id) not in nodes_map:
-                nodes_map[(s_type, s_id)] = Node(
-                    id=s_node_id, type=s_type, label=f"{s_type} {s_id}"
-                )
+                nodes_map[(s_type, s_id)] = Node(id=s_node_id, type=s_type, label=f"{s_type} {s_id}")
             if (t_type, t_id) not in nodes_map:
-                nodes_map[(t_type, t_id)] = Node(
-                    id=t_node_id, type=t_type, label=f"{t_type} {t_id}"
-                )
-            edges.append(Edge(
-                id=f"{s_node_id}-{t_node_id}-{e_type}",
-                source=s_node_id,
-                target=t_node_id,
-                type=e_type,
-            ))
+                nodes_map[(t_type, t_id)] = Node(id=t_node_id, type=t_type, label=f"{t_type} {t_id}")
+            edges.append(Edge(id=f"{s_node_id}-{t_node_id}-{e_type}", source=s_node_id, target=t_node_id, type=e_type))
 
     # ------------------------------------------------------------------
     # Record details (properties and natural labels)
@@ -80,18 +71,24 @@ class GraphRepository:
         Records that have no row (dangling references) are simply absent.
         """
         sql, params = self.sql.details_query(node_def, node_ids)
-        rows = (await self.db.execute(text(sql), params)).mappings().all()
+        rows = await fetch(self.db, sql, params)
 
+        # Rows are (id, *detail_columns[, label]) in the order details_query selects them.
         derived_key = node_def.label_lookup.label_column if node_def.label_lookup else None
         detail_columns = node_def.detail_columns
+        label_at = 1 + len(detail_columns) if node_def.label_column or node_def.label_lookup else None
         details: dict[str, tuple[str | None, dict[str, Any]]] = {}
         for row in rows:
-            properties = {col: json_value(row[col]) for col in detail_columns if row[col] is not None}
-            name = row[self.sql.DETAIL_LABEL] if self.sql.DETAIL_LABEL in row else None
-            label = str(name).strip() if name is not None and str(name).strip() else None
+            properties = {
+                col: value if type(value) is str else json_value(value)
+                for col, value in zip(detail_columns, row[1:], strict=False)
+                if value is not None
+            }
+            name = row[label_at] if label_at is not None else None
+            label = str(name).strip() or None if name is not None else None
             if derived_key and label:
                 properties[derived_key] = label
-            details[row[self.sql.DETAIL_ID]] = (label, properties)
+            details[row[0]] = (label, properties)
         return details
 
     async def _fetch_details(
@@ -152,7 +149,7 @@ class GraphRepository:
         # One statement: every count is an index-only or sequential count of one table.
         node_counts: dict[str, int] = {}
         edge_counts: dict[str, int] = {}
-        for kind, key, count in (await self.db.execute(text(self.sql.summary_query()))).fetchall():
+        for kind, key, count in await fetch(self.db, self.sql.summary_query()):
             (node_counts if kind == 0 else edge_counts)[key] = int(count or 0)
 
         empty_tables = [key for key, count in node_counts.items() if count == 0]
@@ -181,7 +178,7 @@ class GraphRepository:
             if hop_sql is None:
                 break
             found: dict[str, list[str]] = {}
-            for s_id, s_type, t_id, t_type, _ in await self.db.execute(text(hop_sql), hop_params):
+            for s_id, s_type, t_id, t_type, _ in await fetch(self.db, hop_sql, hop_params):
                 for node_type, node_id in ((s_type, s_id), (t_type, t_id)):
                     ids = reached.setdefault(node_type, {})
                     if node_id is None or node_id in ids:
@@ -196,7 +193,7 @@ class GraphRepository:
         # Every edge between two reached records, including those between records
         # at the last hop or between shared reference records.
         edges_sql, edges_params = self.sql.edges_between_query({t: list(ids) for t, ids in reached.items()})
-        rows = (await self.db.execute(text(edges_sql), edges_params)).fetchall() if edges_sql else []
+        rows = await fetch(self.db, edges_sql, edges_params) if edges_sql else []
 
         nodes_map: NodesMap = {}
         edges: list[Edge] = []
@@ -261,7 +258,7 @@ class GraphRepository:
         ORDER BY source_type, source_id, target_id, type
         """
 
-        result = await self.db.execute(text(query), {"limit": limit})
+        result = await fetch(self.db, query, {"limit": limit})
 
         nodes_map: NodesMap = {}
         edges: list[Edge] = []
@@ -313,7 +310,7 @@ class GraphRepository:
 
         full_query = " UNION ALL ".join(sampled_parts)
         full_query += "\nORDER BY type, source_id, target_id"
-        rows = (await self.db.execute(text(full_query), {"limit": node_limit})).fetchall()
+        rows = await fetch(self.db, full_query, {"limit": node_limit})
 
         nodes_map: NodesMap = {}
         edges: list[Edge] = []
@@ -337,7 +334,7 @@ class GraphRepository:
         if node is None:
             return GraphEntityResponse(type=node_type, entities=[])
 
-        result = await self.db.execute(text(self.sql.entities_query(node)), {"limit": limit})
+        result = await fetch(self.db, self.sql.entities_query(node), {"limit": limit})
         ids = [row[0] for row in result]
         details = await self._fetch_details(node, ids)
 

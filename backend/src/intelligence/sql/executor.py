@@ -14,12 +14,18 @@ executor limits what it can *do* even if the guard had a bug:
   table names;
 * rows are fetched through a cursor, at most ``row_cap + 1`` of them.
 
+Opening the transaction and setting its limits is one round trip (several
+statements in one simple query), and nothing is reset when a connection goes
+back to the pool: every setting is ``SET LOCAL``, so it ends with the
+transaction, and an open transaction is always rolled back on release.
+
 Failures are reduced to a category; the database's own message only goes to the log.
 """
 
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import re
 import time
 from typing import Any
@@ -64,6 +70,13 @@ _CATEGORY_BY_STATE: dict[str, ExecutionCategory] = {
     "22023": "type",
     "22001": "type",
 }
+
+
+class _ReadOnlyConnection(asyncpg.Connection):
+    """Sends no reset query when returned to the pool (see the module docstring)."""
+
+    def get_reset_query(self) -> str:
+        return ""
 
 
 def search_path_for(schema_name: str) -> str:
@@ -147,6 +160,7 @@ class ReadOnlyExecutor:
                 # No prepared-statement cache: a schema swap must never serve a stale plan.
                 statement_cache_size=0,
                 max_inactive_connection_lifetime=300,
+                connection_class=_ReadOnlyConnection,
                 server_settings={
                     "application_name": "graphsense_ask",
                     "default_transaction_read_only": "on",
@@ -195,17 +209,25 @@ class ReadOnlyExecutor:
 
     @staticmethod
     async def _run(conn: asyncpg.Connection, search_path: str, timeout_ms: int, v: ValidatedSql) -> ExecutionResult:
-        async with conn.transaction(readonly=True):
-            await conn.execute(
-                "SELECT set_config('search_path', $1, true), set_config('statement_timeout', $2, true), "
-                "set_config('lock_timeout', '2000', true)",
-                search_path,
-                str(timeout_ms),
-            )
+        # search_path is built from a validated schema name (is_dataset_schema), never from model text.
+        # The trailing SELECT makes the transaction take its snapshot, after which PostgreSQL refuses
+        # SET TRANSACTION READ WRITE.
+        await conn.execute(
+            f"BEGIN READ ONLY; SET LOCAL search_path TO {search_path}; "
+            f"SET LOCAL statement_timeout = {int(timeout_ms)}; SET LOCAL lock_timeout = 2000; SELECT 1"
+        )
+        try:
             stmt = await conn.prepare(v.sql)
             attributes = stmt.get_attributes()
             cursor = await stmt.cursor()
             fetched: list[Any] = await cursor.fetch(v.row_cap + 1)
+        except Exception:
+            # A cancelled (timed out) query is rolled back by the pool when the connection is released.
+            if not conn.is_closed():
+                with contextlib.suppress(Exception):
+                    await conn.execute("ROLLBACK")
+            raise
+        await conn.execute("COMMIT")
         truncated = len(fetched) > v.row_cap
         rows = [tuple(r.values()) for r in fetched[: v.row_cap]]
         return ExecutionResult(

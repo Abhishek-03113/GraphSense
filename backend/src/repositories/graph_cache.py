@@ -16,17 +16,19 @@ from collections import OrderedDict
 from collections.abc import Awaitable, Callable, Hashable
 from typing import TypeVar
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from src.storage.session import fetch
 
 T = TypeVar("T")
 
-_GENERATION = text("SELECT to_regnamespace(:schema)::oid")
+_GENERATION = "SELECT to_regnamespace(:schema)::oid"
 
 
 async def generation(db: AsyncSession, schema_name: str) -> int | None:
     """The OID of the dataset's live schema; ``None`` when it is not loaded."""
-    value = (await db.execute(_GENERATION, {"schema": schema_name})).scalar()
+    rows = await fetch(db, _GENERATION, {"schema": schema_name})
+    value = rows[0][0] if rows else None
     return int(value) if value is not None else None
 
 

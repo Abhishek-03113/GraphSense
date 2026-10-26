@@ -1,5 +1,7 @@
 """``GET /api/datasets/{id}/suggested-questions``: package questions, minus those without data."""
 
+import re
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy.exc import ProgrammingError
@@ -21,6 +23,12 @@ class _Result:
     def scalar(self):
         return self.value
 
+    def fetchall(self):
+        return [(self.value,)]
+
+    def one(self):
+        return self.value
+
 
 class _RowsSession:
     """Answers ``SELECT EXISTS (SELECT 1 FROM <table>)`` from a table -> has-rows map."""
@@ -31,8 +39,16 @@ class _RowsSession:
 
     async def execute(self, statement, *args, **kwargs):
         sql = str(statement)
-        if "set_config" in sql:
+        if "set_config" in sql or "to_regnamespace" in sql:  # search path; generation (None: not loaded, no cache)
             return _Result(None)
+        if "AS has_0" in sql:  # every table in one statement: it fails when any one of them does
+            tables = re.findall(r"FROM (\w+)\)", sql)
+            self.asked.append(tuple(tables))
+            outcomes = [self.tables.get(t, True) for t in tables]
+            failed = next((o for o in outcomes if isinstance(o, Exception)), None)
+            if failed is not None:
+                raise failed
+            return _Result(tuple(outcomes))
         table = sql.rsplit("FROM", 1)[1].strip(" )")
         self.asked.append(table)
         outcome = self.tables.get(table, True)
@@ -88,8 +104,8 @@ def test_every_question_is_offered_when_all_tables_have_rows(ask_questions):
         "Which authors have the most books?",
     ]
     assert body["questions"][0]["category"] == "popularity"
-    # one existence check per required record type, not per question
-    assert len(session.asked) == len(set(session.asked)) == 3
+    # one statement checks every required record type (not one per question, nor per type)
+    assert session.asked == [("authors", "books", "loans")]
 
 
 def test_questions_whose_tables_are_empty_are_dropped(ask_questions):
