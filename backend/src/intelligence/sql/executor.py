@@ -14,8 +14,8 @@ executor limits what it can *do* even if the guard had a bug:
   table names;
 * rows are fetched through a cursor, at most ``row_cap + 1`` of them.
 
-Opening the transaction and setting its limits is one round trip (several
-statements in one simple query), and nothing is reset when a connection goes
+The transaction's limits are set in one round trip (several statements in one
+simple query) after asyncpg opens it, and nothing is reset when a connection goes
 back to the pool: every setting is ``SET LOCAL``, so it ends with the
 transaction, and an open transaction is always rolled back on release.
 
@@ -25,7 +25,6 @@ Failures are reduced to a category; the database's own message only goes to the 
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import re
 import time
 from typing import Any
@@ -209,25 +208,21 @@ class ReadOnlyExecutor:
 
     @staticmethod
     async def _run(conn: asyncpg.Connection, search_path: str, timeout_ms: int, v: ValidatedSql) -> ExecutionResult:
-        # search_path is built from a validated schema name (is_dataset_schema), never from model text.
-        # The trailing SELECT makes the transaction take its snapshot, after which PostgreSQL refuses
-        # SET TRANSACTION READ WRITE.
-        await conn.execute(
-            f"BEGIN READ ONLY; SET LOCAL search_path TO {search_path}; "
-            f"SET LOCAL statement_timeout = {int(timeout_ms)}; SET LOCAL lock_timeout = 2000; SELECT 1"
-        )
-        try:
+        # asyncpg opens the transaction (its own BEGIN READ ONLY): a BEGIN inside a combined
+        # statement leaves connection poolers such as Supavisor reporting no open transaction,
+        # and asyncpg then refuses the cursor.  The limits follow in one round trip.
+        async with conn.transaction(readonly=True):
+            # search_path is built from a validated schema name (is_dataset_schema), never from model text.
+            # The trailing SELECT makes the transaction take its snapshot, after which PostgreSQL refuses
+            # SET TRANSACTION READ WRITE.
+            await conn.execute(
+                f"SET LOCAL search_path TO {search_path}; SET LOCAL statement_timeout = {int(timeout_ms)}; "
+                "SET LOCAL lock_timeout = 2000; SELECT 1"
+            )
             stmt = await conn.prepare(v.sql)
             attributes = stmt.get_attributes()
             cursor = await stmt.cursor()
             fetched: list[Any] = await cursor.fetch(v.row_cap + 1)
-        except Exception:
-            # A cancelled (timed out) query is rolled back by the pool when the connection is released.
-            if not conn.is_closed():
-                with contextlib.suppress(Exception):
-                    await conn.execute("ROLLBACK")
-            raise
-        await conn.execute("COMMIT")
         truncated = len(fetched) > v.row_cap
         rows = [tuple(r.values()) for r in fetched[: v.row_cap]]
         return ExecutionResult(
