@@ -3,14 +3,13 @@ from __future__ import annotations
 from collections.abc import Iterable
 from typing import Any
 
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from src.domain.graph_models import Edge, GraphEntityResponse, GraphSubgraphResponse, GraphSummaryResponse, Node
 from src.domain.graph_registry import get_dataset
 from src.domain.graph_schema import GraphDataset, NodeTypeDef
 from src.repositories.graph_sql import GraphSqlBuilder
-from src.storage.readiness import is_missing_relation
+from src.storage.session import fetch
 from src.utils.logger import get_logger
 from src.utils.serialization import json_value
 
@@ -55,68 +54,86 @@ class GraphRepository:
             s_node_id = f"{s_type}:{s_id}"
             t_node_id = f"{t_type}:{t_id}"
             if (s_type, s_id) not in nodes_map:
-                nodes_map[(s_type, s_id)] = Node(
-                    id=s_node_id, type=s_type, label=f"{s_type} {s_id}"
-                )
+                nodes_map[(s_type, s_id)] = Node(id=s_node_id, type=s_type, label=f"{s_type} {s_id}")
             if (t_type, t_id) not in nodes_map:
-                nodes_map[(t_type, t_id)] = Node(
-                    id=t_node_id, type=t_type, label=f"{t_type} {t_id}"
-                )
-            edges.append(Edge(
-                id=f"{s_node_id}-{t_node_id}-{e_type}",
-                source=s_node_id,
-                target=t_node_id,
-                type=e_type,
-            ))
+                nodes_map[(t_type, t_id)] = Node(id=t_node_id, type=t_type, label=f"{t_type} {t_id}")
+            edges.append(Edge(id=f"{s_node_id}-{t_node_id}-{e_type}", source=s_node_id, target=t_node_id, type=e_type))
 
     # ------------------------------------------------------------------
     # Record details (properties and natural labels)
     # ------------------------------------------------------------------
 
+    async def _query_details(
+        self, node_def: NodeTypeDef, node_ids: list[str]
+    ) -> dict[str, tuple[str | None, dict[str, Any]]]:
+        """``id -> (label, properties)`` for many records of one type, in one query (raises on failure).
+
+        Records that have no row (dangling references) are simply absent.
+        """
+        sql, params = self.sql.details_query(node_def, node_ids)
+        rows = await fetch(self.db, sql, params)
+
+        # Rows are (id, *detail_columns[, label]) in the order details_query selects them.
+        derived_key = node_def.label_lookup.label_column if node_def.label_lookup else None
+        detail_columns = node_def.detail_columns
+        label_at = 1 + len(detail_columns) if node_def.label_column or node_def.label_lookup else None
+        details: dict[str, tuple[str | None, dict[str, Any]]] = {}
+        for row in rows:
+            properties = {
+                col: value if type(value) is str else json_value(value)
+                for col, value in zip(detail_columns, row[1:], strict=False)
+                if value is not None
+            }
+            name = row[label_at] if label_at is not None else None
+            label = str(name).strip() or None if name is not None else None
+            if derived_key and label:
+                properties[derived_key] = label
+            details[row[0]] = (label, properties)
+        return details
+
     async def _fetch_details(
         self, node_def: NodeTypeDef, node_ids: list[str]
     ) -> dict[str, tuple[str | None, dict[str, Any]]]:
-        """``id -> (label, properties)`` for many records of one type, in one query.
+        """Like ``_query_details``, but a failure is logged and treated as "no details".
 
-        Records that have no row (dangling references) are simply absent.  A
-        failure here must not take the whole graph response down, so it is
-        logged and treated as "no details"; the savepoint keeps the request's
-        transaction usable afterwards.
+        A failure here must not take the whole graph response down; the savepoint
+        keeps the request's transaction usable afterwards.
         """
         if not node_ids:
             return {}
-        sql, params = self.sql.details_query(node_def, node_ids)
         try:
             async with self.db.begin_nested():
-                rows = (await self.db.execute(text(sql), params)).mappings().all()
+                return await self._query_details(node_def, node_ids)
         except Exception as exc:
             logger.error("details | node_type=%s ids=%d — query FAILED: %s", node_def.key, len(node_ids), exc)
             return {}
 
-        derived_key = node_def.label_lookup.label_column if node_def.label_lookup else None
-        details: dict[str, tuple[str | None, dict[str, Any]]] = {}
-        for row in rows:
-            properties = {
-                col: json_value(row[col]) for col in node_def.detail_columns if row[col] is not None
-            }
-            name = row[self.sql.DETAIL_LABEL] if self.sql.DETAIL_LABEL in row else None
-            label = str(name).strip() if name is not None and str(name).strip() else None
-            if derived_key and label:
-                properties[derived_key] = label
-            details[row[self.sql.DETAIL_ID]] = (label, properties)
-        return details
-
     async def _attach_details(self, nodes_map: NodesMap) -> None:
-        """Fill ``label`` and ``properties`` on the collected nodes, one query per node type."""
+        """Fill ``label`` and ``properties`` on the collected nodes, one query per node type.
+
+        All types share one savepoint; only when one of them fails is each type
+        fetched again under its own, so the others still get their details.
+        """
         ids_by_type: dict[str, list[str]] = {}
         for node_type, node_id in nodes_map:
             ids_by_type.setdefault(node_type, []).append(node_id)
+        wanted = [
+            (node_type, node_def, ids)
+            for node_type, ids in ids_by_type.items()
+            if (node_def := self.dataset.get_node_type(node_type)) is not None
+        ]
+        if not wanted:
+            return
 
-        for node_type, ids in ids_by_type.items():
-            node_def = self.dataset.get_node_type(node_type)
-            if node_def is None:
-                continue
-            details = await self._fetch_details(node_def, ids)
+        found: dict[str, dict[str, tuple[str | None, dict[str, Any]]]] = {}
+        try:
+            async with self.db.begin_nested():
+                for node_type, node_def, ids in wanted:
+                    found[node_type] = await self._query_details(node_def, ids)
+        except Exception:
+            found = {node_type: await self._fetch_details(node_def, ids) for node_type, node_def, ids in wanted}
+
+        for node_type, details in found.items():
             for node_id, (label, properties) in details.items():
                 node = nodes_map[(node_type, node_id)]
                 if label:
@@ -129,31 +146,15 @@ class GraphRepository:
 
     async def get_summary(self) -> GraphSummaryResponse:
         """Returns node and edge counts for every type in the graph."""
+        # One statement: every count is an index-only or sequential count of one table.
         node_counts: dict[str, int] = {}
-        empty_tables: list[str] = []
-        for node in self.dataset.node_types:
-            try:
-                result = await self.db.execute(text(self.sql.count_query(node)))
-                count = result.scalar()
-            except Exception as exc:
-                if is_missing_relation(exc):
-                    # The data is not loaded. Say so instead of counting zeros: the failed
-                    # statement would also abort every later query of this transaction.
-                    raise
-                logger.error("get_summary | FAILED to count node_type=%s table=%s — %s", node.key, node.table, exc)
-                count = 0
-            node_counts[node.key] = count
-            if count == 0:
-                empty_tables.append(node.key)
+        edge_counts: dict[str, int] = {}
+        for kind, key, count in await fetch(self.db, self.sql.summary_query()):
+            (node_counts if kind == 0 else edge_counts)[key] = int(count or 0)
 
+        empty_tables = [key for key, count in node_counts.items() if count == 0]
         if empty_tables:
             logger.warning("get_summary | empty node types (data may not be loaded): %s", ", ".join(empty_tables))
-
-        edges_union = self.sql.edges_union()
-        result = await self.db.execute(
-            text(f"SELECT type, COUNT(*) FROM ({edges_union}) AS all_edges GROUP BY type ORDER BY type")
-        )
-        edge_counts: dict[str, int] = {row[0]: row[1] for row in result}
         return GraphSummaryResponse(nodes=node_counts, edges=edge_counts)
 
     async def get_subgraph(self, root_type: str, root_id: str, depth: int) -> GraphSubgraphResponse:
@@ -166,52 +167,33 @@ class GraphRepository:
         but not expanded through, so a trace follows the document chain instead
         of fanning out to everything else that party or item touches.
         """
-        edges_union = self.sql.edges_union()
-        subgraph_query = f"""
-        WITH RECURSIVE graph_edges AS (
-            {edges_union}
-        ),
-        -- Traverse in both directions so the user can expand from any node
-        bidirectional_edges AS (
-            SELECT source_id, source_type, target_id, target_type, type FROM graph_edges
-            UNION ALL
-            SELECT target_id, target_type, source_id, source_type, type FROM graph_edges
-        ),
-        traversal(id, type, depth, path) AS (
-            -- Seed with the root node
-            SELECT
-                :root_id,
-                :root_type,
-                0,
-                ARRAY[:root_id || ':' || :root_type]
-            UNION ALL
-            -- Expand one hop at a time; path array prevents cycles
-            SELECT
-                be.target_id,
-                be.target_type,
-                t.depth + 1,
-                t.path || (be.target_id || ':' || be.target_type)
-            FROM bidirectional_edges be
-            JOIN traversal t ON be.source_id = t.id AND be.source_type = t.type
-            WHERE t.depth < :depth
-              AND NOT (be.target_id || ':' || be.target_type = ANY(t.path))
-              {self.sql.traversal_expand_filter()}
-        )
-        -- Return only edges where both endpoints were reached by the traversal
-        SELECT DISTINCT
-            ge.source_id, ge.source_type,
-            ge.target_id, ge.target_type,
-            ge.type
-        FROM graph_edges ge
-        JOIN (SELECT DISTINCT id, type FROM traversal) t1
-            ON ge.source_id = t1.id AND ge.source_type = t1.type
-        JOIN (SELECT DISTINCT id, type FROM traversal) t2
-            ON ge.target_id = t2.id AND ge.target_type = t2.type
-        ORDER BY ge.source_type, ge.source_id, ge.target_type, ge.target_id, ge.type
-        """
+        # Breadth first: each hop fetches only the edges touching the newest records.
+        # A record is expanded once, at its shortest distance from the root, which
+        # reaches exactly the records some path of at most ``depth`` hops reaches.
+        terminal = set(self.dataset.terminal_node_keys)
+        reached: dict[str, dict[str, None]] = {root_type: {root_id: None}}  # type -> ids, in discovery order
+        frontier: dict[str, list[str]] = {root_type: [root_id]}  # the root is expanded even when terminal
+        for _ in range(depth):
+            hop_sql, hop_params = self.sql.neighbours_query(frontier)
+            if hop_sql is None:
+                break
+            found: dict[str, list[str]] = {}
+            for s_id, s_type, t_id, t_type, _ in await fetch(self.db, hop_sql, hop_params):
+                for node_type, node_id in ((s_type, s_id), (t_type, t_id)):
+                    ids = reached.setdefault(node_type, {})
+                    if node_id is None or node_id in ids:
+                        continue
+                    ids[node_id] = None
+                    if node_type not in terminal:
+                        found.setdefault(node_type, []).append(node_id)
+            if not found:
+                break
+            frontier = found
 
-        params = {"root_id": root_id, "root_type": root_type, "depth": depth}
-        rows = (await self.db.execute(text(subgraph_query), params)).fetchall()
+        # Every edge between two reached records, including those between records
+        # at the last hop or between shared reference records.
+        edges_sql, edges_params = self.sql.edges_between_query({t: list(ids) for t, ids in reached.items()})
+        rows = await fetch(self.db, edges_sql, edges_params) if edges_sql else []
 
         nodes_map: NodesMap = {}
         edges: list[Edge] = []
@@ -247,30 +229,36 @@ class GraphRepository:
         if not query_parts:
             return GraphSubgraphResponse(nodes=[], edges=[])
 
-        union_sql = " UNION ALL ".join(query_parts)
-        # Filter to only include edges where both endpoints are in node_types for this flow,
-        # then sample up to `limit` rows per source_type
+        # Keep only edges whose endpoints are both flow types, then sample up to `limit`
+        # rows per source_type.  Each edge definition is cut to its own first `limit`
+        # rows before ranking: a definition has one source type, so the rows that make
+        # a type's first `limit` are among them, and no more than that is ever sorted.
         node_type_list = ", ".join(f"'{t}'" for t in node_types)
+        union_sql = " UNION ALL ".join(
+            f"""
+                (SELECT * FROM ({sql}) AS _f{index}
+                 WHERE source_type IN ({node_type_list}) AND target_type IN ({node_type_list})
+                 ORDER BY source_id, target_id, type
+                 LIMIT :limit)
+            """
+            for index, sql in enumerate(query_parts)
+        )
 
         query = f"""
         WITH flow_edges AS (
             {union_sql}
         ),
-        filtered AS (
-            SELECT * FROM flow_edges
-            WHERE source_type IN ({node_type_list}) AND target_type IN ({node_type_list})
-        ),
         ranked AS (
             SELECT *, ROW_NUMBER() OVER (
                 PARTITION BY source_type ORDER BY source_id, target_id, type
             ) AS rn
-            FROM filtered
+            FROM flow_edges
         )
         SELECT source_id, source_type, target_id, target_type, type FROM ranked WHERE rn <= :limit
         ORDER BY source_type, source_id, target_id, type
         """
 
-        result = await self.db.execute(text(query), {"limit": limit})
+        result = await fetch(self.db, query, {"limit": limit})
 
         nodes_map: NodesMap = {}
         edges: list[Edge] = []
@@ -322,7 +310,7 @@ class GraphRepository:
 
         full_query = " UNION ALL ".join(sampled_parts)
         full_query += "\nORDER BY type, source_id, target_id"
-        rows = (await self.db.execute(text(full_query), {"limit": node_limit})).fetchall()
+        rows = await fetch(self.db, full_query, {"limit": node_limit})
 
         nodes_map: NodesMap = {}
         edges: list[Edge] = []
@@ -346,7 +334,7 @@ class GraphRepository:
         if node is None:
             return GraphEntityResponse(type=node_type, entities=[])
 
-        result = await self.db.execute(text(self.sql.entities_query(node)), {"limit": limit})
+        result = await fetch(self.db, self.sql.entities_query(node), {"limit": limit})
         ids = [row[0] for row in result]
         details = await self._fetch_details(node, ids)
 

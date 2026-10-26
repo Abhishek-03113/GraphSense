@@ -17,6 +17,7 @@ asked, the knowledge state is reported as ``missing``.
 
 from __future__ import annotations
 
+import weakref
 from datetime import datetime
 from typing import Any
 
@@ -76,6 +77,31 @@ async def last_refresh_time(engine: AsyncEngine, dataset_id: str) -> datetime | 
         return await conn.scalar(_LAST_ITEM_CREATED, {"d": dataset_id})
 
 
+_stores: dict[int, KnowledgeStore] = {}
+_desired: dict[int, tuple[weakref.ref, set[tuple[str, str]]]] = {}
+
+
+def _desired_items(snapshot: Any) -> set[tuple[str, str]]:
+    """``(kind, content_hash)`` of the items the catalog calls for, built once per (immutable) snapshot."""
+    found = _desired.get(id(snapshot))
+    if found is not None and found[0]() is snapshot:
+        return found[1]
+    items = {(i.kind, i.content_hash) for i in build_items(snapshot)}
+    for stale in [k for k, (ref, _) in _desired.items() if ref() is None]:
+        del _desired[stale]
+    _desired[id(snapshot)] = (weakref.ref(snapshot), items)
+    return items
+
+
+def _store_for(engine: AsyncEngine) -> KnowledgeStore:
+    """One store per engine, so what it learns about the table (the embedding column) is kept."""
+    store = _stores.get(id(engine))
+    if store is None or store.engine is not engine:
+        _stores.clear()
+        store = _stores[id(engine)] = KnowledgeStore(engine)
+    return store
+
+
 async def ai_status(dataset_id: str, engine: AsyncEngine | None = None) -> dict[str, Any]:
     providers = build_providers()
     out: dict[str, Any] = {
@@ -96,7 +122,7 @@ async def ai_status(dataset_id: str, engine: AsyncEngine | None = None) -> dict[
             from src.db.engine import get_engine
 
             engine = get_engine()
-        store = KnowledgeStore(engine)
+        store = _store_for(engine)
         rows = await store.existing(dataset_id)
         desired = None
         try:
@@ -104,7 +130,7 @@ async def ai_status(dataset_id: str, engine: AsyncEngine | None = None) -> dict[
             snapshot = await build_catalog_source().get_snapshot(
                 DatasetContext(id=package.id, schema_name=package.schema_name, package=package)
             )
-            desired = {(i.kind, i.content_hash) for i in build_items(snapshot)}
+            desired = _desired_items(snapshot)
         except UnknownDatasetError:
             pass
         model = providers.embedder.model if is_configured(providers.embedder) else ""

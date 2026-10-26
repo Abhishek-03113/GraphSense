@@ -118,6 +118,8 @@ class Settings(BaseSettings):
     # --- generated SQL limits -------------------------------------------
     SQL_MAX_ROWS: int = Field(default=200, ge=1)
     SQL_STATEMENT_TIMEOUT_MS: int = Field(default=5000, ge=1)
+    # Connections of the read-only role per process: how many generated queries run at once.
+    SQL_POOL_SIZE: int = Field(default=10, ge=1)
 
     # --- web ------------------------------------------------------------
     # Comma separated origins.  Empty means "*" in dev and none in production.

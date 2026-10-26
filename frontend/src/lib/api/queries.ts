@@ -12,6 +12,10 @@ import {
   SummarySchema,
 } from './schemas';
 
+// Query functions deliberately ignore TanStack's abort `signal`. Using it makes the query cancel its fetch when
+// the last component reading it unmounts (StrictMode's double mount, a quick route change), and the next mount
+// sends the same request again. The server finishes the work either way, so aborting only throws the answer away.
+// Without the signal, a remount picks up the request already in flight.
 export const queryKeys = {
   health: ['health'] as const,
   summary: ['summary'] as const,
@@ -28,7 +32,7 @@ export const queryKeys = {
 export function useHealth() {
   return useQuery({
     queryKey: queryKeys.health,
-    queryFn: ({ signal }) => apiGet('/health', HealthSchema, undefined, signal),
+    queryFn: () => apiGet('/health', HealthSchema),
     refetchInterval: 30_000,
     retry: false,
   });
@@ -37,7 +41,7 @@ export function useHealth() {
 export function useSummary() {
   return useQuery({
     queryKey: queryKeys.summary,
-    queryFn: ({ signal }) => apiGet('/graph/summary', SummarySchema, undefined, signal),
+    queryFn: () => apiGet('/graph/summary', SummarySchema),
   });
 }
 
@@ -45,7 +49,7 @@ export function useSummary() {
 export function useSchemaPayload() {
   return useQuery({
     queryKey: queryKeys.schema,
-    queryFn: ({ signal }) => apiGet('/graph/schema', SchemaPayloadSchema, undefined, signal),
+    queryFn: () => apiGet('/graph/schema', SchemaPayloadSchema),
     retry: false,
     staleTime: 5 * 60_000,
   });
@@ -54,7 +58,7 @@ export function useSchemaPayload() {
 export function useFlowList() {
   return useQuery({
     queryKey: queryKeys.flows,
-    queryFn: ({ signal }) => apiGet('/graph/flows', FlowListSchema, undefined, signal),
+    queryFn: () => apiGet('/graph/flows', FlowListSchema),
     staleTime: 5 * 60_000,
   });
 }
@@ -62,7 +66,7 @@ export function useFlowList() {
 export function useFullGraph(nodeLimit: number) {
   return useQuery({
     queryKey: queryKeys.full(nodeLimit),
-    queryFn: ({ signal }) => apiGet('/graph/samples', GraphDataSchema, { node_limit: nodeLimit }, signal),
+    queryFn: () => apiGet('/graph/samples', GraphDataSchema, { node_limit: nodeLimit }),
     placeholderData: keepPreviousData,
   });
 }
@@ -71,8 +75,8 @@ export function useFullGraph(nodeLimit: number) {
 export function subgraphOptions(type: string | null | undefined, id: string | null | undefined, depth = 1) {
   return queryOptions({
     queryKey: queryKeys.subgraph(type ?? '', id ?? '', depth),
-    queryFn: ({ signal }) =>
-      apiGet('/graph/subgraphs', GraphDataSchema, { root_type: type, root_id: id, depth }, signal),
+    queryFn: () =>
+      apiGet('/graph/subgraphs', GraphDataSchema, { root_type: type, root_id: id, depth }),
     enabled: Boolean(type && id),
     staleTime: 60_000,
   });
@@ -85,8 +89,8 @@ export function useSubgraph(type: string | null | undefined, id: string | null |
 export function useTraceGraph(type: string | null | undefined, id: string | null | undefined, depth = 4) {
   return useQuery({
     queryKey: ['graph', 'trace', type ?? '', id ?? '', depth],
-    queryFn: ({ signal }) =>
-      apiGet('/graph/traces', GraphDataSchema, { doc_type: type, doc_id: id, depth }, signal),
+    queryFn: () =>
+      apiGet('/graph/traces', GraphDataSchema, { doc_type: type, doc_id: id, depth }),
     enabled: Boolean(type && id),
     staleTime: 60_000,
   });
@@ -95,7 +99,7 @@ export function useTraceGraph(type: string | null | undefined, id: string | null
 export function useFlowGraph(flowId: string | undefined, limit: number) {
   return useQuery({
     queryKey: queryKeys.flow(flowId ?? '', limit),
-    queryFn: ({ signal }) => apiGet(`/graph/flows/${encodeURIComponent(flowId ?? '')}/subgraph`, GraphDataSchema, { limit }, signal),
+    queryFn: () => apiGet(`/graph/flows/${encodeURIComponent(flowId ?? '')}/subgraph`, GraphDataSchema, { limit }),
     enabled: Boolean(flowId),
     placeholderData: keepPreviousData,
   });
@@ -104,8 +108,8 @@ export function useFlowGraph(flowId: string | undefined, limit: number) {
 export function useEntities(type: string | undefined, limit = 100) {
   return useQuery({
     queryKey: queryKeys.entities(type ?? '', limit),
-    queryFn: ({ signal }) =>
-      apiGet(`/graph/node-types/${encodeURIComponent(type ?? '')}/entities`, EntityListSchema, { limit }, signal),
+    queryFn: () =>
+      apiGet(`/graph/node-types/${encodeURIComponent(type ?? '')}/entities`, EntityListSchema, { limit }),
     enabled: Boolean(type),
     staleTime: 60_000,
   });
@@ -123,7 +127,7 @@ export const STATUS_POLL_WAITING_MS = 15_000;
 export function useDatasetStatus(datasetId: string | null | undefined) {
   return useQuery({
     queryKey: queryKeys.datasetStatus(datasetId ?? ''),
-    queryFn: ({ signal }) => apiGet(`/datasets/${encodeURIComponent(datasetId ?? '')}/status`, DatasetStatusSchema, undefined, signal),
+    queryFn: () => apiGet(`/datasets/${encodeURIComponent(datasetId ?? '')}/status`, DatasetStatusSchema),
     enabled: Boolean(datasetId),
     retry: false,
     staleTime: 20_000,
@@ -140,8 +144,8 @@ export function useDatasetStatus(datasetId: string | null | undefined) {
 export function useSuggestedQuestions(datasetId: string | null | undefined, enabled = true) {
   return useQuery({
     queryKey: queryKeys.suggestedQuestions(datasetId ?? ''),
-    queryFn: ({ signal }) =>
-      apiGet(`/datasets/${encodeURIComponent(datasetId ?? '')}/suggested-questions`, SuggestedQuestionsSchema, undefined, signal),
+    queryFn: () =>
+      apiGet(`/datasets/${encodeURIComponent(datasetId ?? '')}/suggested-questions`, SuggestedQuestionsSchema),
     enabled: Boolean(datasetId) && enabled,
     retry: false,
     staleTime: 5 * 60_000,

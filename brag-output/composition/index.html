@@ -1,0 +1,133 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js"></script>
+<style>
+/* Brik design system: grey-on-white instrument panel, square corners, one electric-blue action. ink-soft darkens Brik ink-3 so the faded headline line still reads (3.4:1). */
+@font-face{font-family:'Geist';src:url('assets/fonts/Geist-Regular.woff2') format('woff2');font-weight:400}
+@font-face{font-family:'Geist';src:url('assets/fonts/Geist-Medium.woff2') format('woff2');font-weight:500}
+@font-face{font-family:'Geist Mono';src:url('assets/fonts/GeistMono-Medium.woff2') format('woff2');font-weight:500}
+:root{--canvas:#fafafa;--surface:#ffffff;--panel:#ededed;--ink:#262626;--ink-2:#595959;--ink-3:#b2b2b2;--ink-soft:#8a8a8a;--dark:#1f1f1f;--electric:#193ef9;
+ --sans:'Geist',system-ui,sans-serif;--mono:'Geist Mono',ui-monospace,monospace}
+*{margin:0;padding:0;box-sizing:border-box}
+html,body{width:1920px;height:1080px;overflow:hidden;background:var(--canvas)}
+#root{position:relative;width:1920px;height:1080px;overflow:hidden;background:var(--canvas);color:var(--ink);font-family:var(--sans)}
+.chrome{position:absolute;left:96px;right:96px;top:56px;display:flex;justify-content:space-between;font-family:var(--mono);font-weight:500;font-size:28px;letter-spacing:.02em;color:var(--ink-2)}
+.chrome b{color:var(--ink);font-weight:500}
+.rule{position:absolute;left:96px;right:96px;top:112px;height:1px;background:var(--panel)}
+.frame{position:absolute;left:672px;top:200px;width:1152px;height:648px;object-fit:cover;border:1px solid var(--panel);background:var(--surface);opacity:0}
+.copy{position:absolute;left:96px;top:200px;width:548px;height:648px}
+.eyebrow{font-family:var(--mono);font-weight:500;font-size:28px;letter-spacing:.02em;color:var(--ink-2);opacity:0}
+.head{margin-top:28px;font-size:56px;line-height:62px;letter-spacing:-1.4px;font-weight:400}
+.head span{display:block;opacity:0}
+.l1{color:var(--ink)} .l2{color:var(--ink-soft)}
+.progress{position:absolute;left:96px;right:96px;top:952px;height:2px;background:var(--panel)}
+#bar{position:absolute;left:0;top:0;height:2px;width:1728px;background:var(--electric);transform-origin:0 0;transform:scaleX(0)}
+.steps{position:absolute;left:96px;right:96px;top:976px;display:flex;justify-content:space-between;font-family:var(--mono);font-weight:500;font-size:28px;color:var(--ink-2)}
+.center{position:absolute;left:0;width:1920px;text-align:center}
+.brand{font-size:150px;line-height:1;letter-spacing:-4px;font-weight:400;color:var(--ink)}
+.tag{font-size:64px;line-height:68px;letter-spacing:-1.6px;color:var(--ink-soft)}
+.cta{display:inline-block;margin-top:44px;padding:18px 30px;background:var(--electric);color:#fff;font-family:var(--mono);font-weight:500;font-size:28px}
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-duration="35.17" data-width="1920" data-height="1080">
+  <div class="chrome"><span><b>GraphSense</b></span><span>ORDER TO CASH</span></div>
+  <div class="rule"></div>
+  <video id="v_overview" class="frame clip" data-track-index="1" src="assets/footage/overview.mp4" data-start="2.455" data-duration="3.46" data-media-start="0" muted playsinline></video>
+  <video id="v_explore" class="frame clip" data-track-index="2" src="assets/footage/explore.mp4" data-start="5.515" data-duration="3.45" data-media-start="0" muted playsinline></video>
+  <video id="v_details" class="frame clip" data-track-index="3" src="assets/footage/details.mp4" data-start="8.565" data-duration="4.06" data-media-start="0" muted playsinline></video>
+  <video id="v_layouts" class="frame clip" data-track-index="4" src="assets/footage/layouts.mp4" data-start="12.225" data-duration="3.86" data-media-start="0" muted playsinline></video>
+  <video id="v_ask" class="frame clip" data-track-index="5" src="assets/footage/ask.mp4" data-start="15.685" data-duration="4.98" data-media-start="0" muted playsinline></video>
+  <video id="v_trust" class="frame clip" data-track-index="6" src="assets/footage/trust.mp4" data-start="20.265" data-duration="3.46" data-media-start="0" muted playsinline></video>
+  <video id="v_map" class="frame clip" data-track-index="7" src="assets/footage/map.mp4" data-start="23.325" data-duration="3.96" data-media-start="0" muted playsinline></video>
+  <video id="v_flows" class="frame clip" data-track-index="8" src="assets/footage/flows.mp4" data-start="26.885" data-duration="2.94" data-media-start="0" muted playsinline></video>
+  <video id="v_trace" class="frame clip" data-track-index="9" src="assets/footage/trace.mp4" data-start="29.425" data-duration="3.15" data-media-start="0" muted playsinline></video>
+  <audio id="music" src="assets/music/graphsense-groove.mp3" data-start="0" data-duration="35.17" data-track-index="9" data-volume="0.8" data-fade-out="1.5"></audio>
+  <div id="intro" class="clip" data-start="0" data-duration="2.455" data-track-index="18">
+    <div class="center brand" id="i1" style="top:380px">GraphSense</div>
+    <div class="center tag" id="i2" style="top:560px">Your order-to-cash, connected.</div>
+  </div>
+  <div id="c_overview" class="copy clip" data-start="2.455" data-duration="3.06" data-track-index="20">
+    <div class="eyebrow">[ 01 ] OVERVIEW</div>
+    <div class="head"><span class="l1">Your business,</span><span class="l2">at a glance.</span></div>
+  </div>
+  <div id="c_explore" class="copy clip" data-start="5.515" data-duration="3.05" data-track-index="21">
+    <div class="eyebrow">[ 02 ] CONNECTIONS</div>
+    <div class="head"><span class="l1">Every record,</span><span class="l2">connected.</span></div>
+  </div>
+  <div id="c_details" class="copy clip" data-start="8.565" data-duration="3.66" data-track-index="22">
+    <div class="eyebrow">[ 03 ] RECORD DETAILS</div>
+    <div class="head"><span class="l1">Open any record.</span><span class="l2">See all it touches.</span></div>
+  </div>
+  <div id="c_layouts" class="copy clip" data-start="12.225" data-duration="3.46" data-track-index="23">
+    <div class="eyebrow">[ 04 ] VIEWS</div>
+    <div class="head"><span class="l1">Your data,</span><span class="l2">your view.</span></div>
+  </div>
+  <div id="c_ask" class="copy clip" data-start="15.685" data-duration="4.58" data-track-index="24">
+    <div class="eyebrow">[ 05 ] ASK</div>
+    <div class="head"><span class="l1">Just ask,</span><span class="l2">in plain English.</span></div>
+  </div>
+  <div id="c_trust" class="copy clip" data-start="20.265" data-duration="3.06" data-track-index="25">
+    <div class="eyebrow">[ 06 ] TRUST</div>
+    <div class="head"><span class="l1">Stays on your data.</span><span class="l2">Nothing else.</span></div>
+  </div>
+  <div id="c_map" class="copy clip" data-start="23.325" data-duration="3.56" data-track-index="26">
+    <div class="eyebrow">[ 07 ] ACTION</div>
+    <div class="head"><span class="l1">Answer to records,</span><span class="l2">in one click.</span></div>
+  </div>
+  <div id="c_flows" class="copy clip" data-start="26.885" data-duration="2.54" data-track-index="27">
+    <div class="eyebrow">[ 08 ] FLOWS</div>
+    <div class="head"><span class="l1">Follow the process,</span><span class="l2">order to cash.</span></div>
+  </div>
+  <div id="c_trace" class="copy clip" data-start="29.425" data-duration="2.75" data-track-index="28">
+    <div class="eyebrow">[ 09 ] TRACE</div>
+    <div class="head"><span class="l1">Trace any order</span><span class="l2">to payment.</span></div>
+  </div>
+  <div id="outro" class="clip" data-start="32.175" data-duration="3.0" data-track-index="19">
+    <div class="center brand" id="o1" style="top:330px">GraphSense</div>
+    <div class="center tag" id="o2" style="top:510px">Know your business, end to end.</div>
+    <div class="center" id="o3" style="top:600px"><span class="cta">[ SEE IT IN ACTION ]</span></div>
+  </div>
+  <div class="progress" id="prog"><div id="bar"></div></div>
+  <div class="steps" id="steps"><span id="stepno">00 / 09</span><span>OVERVIEW · CONNECTIONS · DETAILS · VIEWS · ASK · TRUST · ACTION · FLOWS · TRACE</span></div>
+</div>
+<script>
+const tl=gsap.timeline({paused:true});
+const X=0.4, N=9, FIRST=2.455, OUT=32.175;
+const EASE="power3.out";
+function scene(v,c,s,d,i){
+  tl.fromTo(v,{opacity:0,y:16},{opacity:1,y:0,duration:X+.1,ease:EASE},s);
+  tl.fromTo(c+" .eyebrow",{opacity:0,y:10},{opacity:1,y:0,duration:.35,ease:EASE},s+.05);
+  tl.fromTo(c+" .l1",{opacity:0,y:18},{opacity:1,y:0,duration:.45,ease:EASE},s+.12);
+  tl.fromTo(c+" .l2",{opacity:0,y:18},{opacity:1,y:0,duration:.45,ease:EASE},s+.24);
+  tl.to(c,{opacity:0,duration:.25,ease:"power1.in"},s+d-.25);
+  tl.set("#stepno",{textContent:String(i).padStart(2,"0")+" / "+String(N).padStart(2,"0")},s);
+}
+// intro: brand on screen from frame 0, tagline settles in
+tl.set("#i1",{opacity:1},0);
+tl.fromTo("#i2",{opacity:0,y:14},{opacity:1,y:0,duration:.4,ease:EASE},0.3);
+tl.to(["#i1","#i2"],{opacity:0,duration:.3,ease:"power1.in"},FIRST-.3);
+// the electric-blue bar fills across the feature tour
+tl.fromTo("#bar",{scaleX:0},{scaleX:1,duration:OUT-FIRST,ease:"none"},FIRST);
+scene("#v_overview","#c_overview",2.455,3.06,1); // beat-locked: 2.455s
+scene("#v_explore","#c_explore",5.515,3.05,2); // beat-locked: 5.515s
+scene("#v_details","#c_details",8.565,3.66,3); // beat-locked: 8.565s
+scene("#v_layouts","#c_layouts",12.225,3.46,4); // beat-locked: 12.225s
+scene("#v_ask","#c_ask",15.685,4.58,5); // beat-locked: 15.685s
+scene("#v_trust","#c_trust",20.265,3.06,6); // beat-locked: 20.265s
+scene("#v_map","#c_map",23.325,3.56,7); // beat-locked: 23.325s
+scene("#v_flows","#c_flows",26.885,2.54,8); // beat-locked: 26.885s
+scene("#v_trace","#c_trace",29.425,2.75,9); // beat-locked: 29.425s
+tl.to(["#prog","#steps"],{opacity:0,duration:.3},OUT);
+tl.fromTo("#o1",{opacity:0,y:14},{opacity:1,y:0,duration:.5,ease:EASE},OUT+.1);
+tl.fromTo("#o2",{opacity:0,y:14},{opacity:1,y:0,duration:.5,ease:EASE},OUT+.25);
+tl.fromTo("#o3",{opacity:0,y:14},{opacity:1,y:0,duration:.5,ease:EASE},OUT+.5);
+window.__timelines=window.__timelines||{};
+window.__timelines["main"]=tl;
+tl.seek(0);
+</script>
+</body>
+</html>

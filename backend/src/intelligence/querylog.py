@@ -4,11 +4,17 @@ Questions can contain personal or business information, so rows are kept for
 ``QUERY_LOG_RETENTION_DAYS`` (default 90) and then deleted: opportunistically while
 the application runs (at most once an hour) and on demand with
 ``graphsense knowledge purge-log``.  Writing the log never fails a request.
+
+The application writes in the background (``background=True``): the entry's id is
+generated here, returned at once, and the row is inserted after the answer has gone
+out, so a question never waits for its log line.  ``drain()`` waits for pending writes.
 """
 
 from __future__ import annotations
 
+import asyncio
 import time
+import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -39,28 +45,46 @@ class LogEntry:
 
 
 class QueryLog:
-    def __init__(self, engine: AsyncEngine | Callable[[], AsyncEngine]) -> None:
+    def __init__(self, engine: AsyncEngine | Callable[[], AsyncEngine], *, background: bool = False) -> None:
         self._engine = engine
         self._last_purge = 0.0
+        self._background = background
+        self._pending: set[asyncio.Task] = set()
 
     @property
     def engine(self) -> AsyncEngine:
         return self._engine() if callable(self._engine) else self._engine
 
     async def record(self, entry: LogEntry) -> str | None:
-        """Store one entry.  Returns its id, or ``None`` when logging is off or failed."""
+        """Store one entry.  Returns its id, or ``None`` when logging is off or (when written in place) failed."""
         settings = get_settings()
         if not settings.QUERY_LOG_ENABLED:
             return None
+        if not self._background:
+            return await self._write(entry, None, settings.QUERY_LOG_RETENTION_DAYS)
+        query_id = str(uuid.uuid4())
+        task = asyncio.create_task(self._write(entry, query_id, settings.QUERY_LOG_RETENTION_DAYS))
+        self._pending.add(task)
+        task.add_done_callback(self._pending.discard)
+        return query_id
+
+    async def drain(self) -> None:
+        """Wait for the entries still being written in the background."""
+        if self._pending:
+            await asyncio.gather(*list(self._pending), return_exceptions=True)
+
+    async def _write(self, entry: LogEntry, query_id: str | None, retention_days: int) -> str | None:
         try:
             async with self.engine.begin() as conn:
                 query_id = await conn.scalar(
                     text(
-                        "INSERT INTO app.query_log (dataset_id, question, sql, validated, error_code, row_count, "
+                        "INSERT INTO app.query_log (id, dataset_id, question, sql, validated, error_code, row_count, "
                         "latency_ms, prompt_version, model, tokens) "
-                        "VALUES (:d, :q, :s, :v, :e, :r, :l, :p, :m, :t) RETURNING id"
+                        "VALUES (COALESCE(CAST(:id AS uuid), gen_random_uuid()), :d, :q, :s, :v, :e, :r, :l, :p, :m, :t) "
+                        "RETURNING id"
                     ),
                     {
+                        "id": query_id,
                         "d": entry.dataset_id,
                         "q": entry.question[:MAX_QUESTION_CHARS],
                         "s": entry.sql,
@@ -76,7 +100,7 @@ class QueryLog:
         except Exception as exc:  # noqa: BLE001 - the answer matters more than its log line
             logger.warning("Could not write the query log (%s)", type(exc).__name__)
             return None
-        await self._maybe_purge(settings.QUERY_LOG_RETENTION_DAYS)
+        await self._maybe_purge(retention_days)
         return str(query_id) if query_id else None
 
     async def purge(self, older_than_days: int | None = None) -> int:

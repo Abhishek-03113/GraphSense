@@ -54,11 +54,13 @@ def match_query(schema: str, pkg: DatasetPackage, rel: RelationshipInfo, cap: in
         f"t.{quote_ident(b)} = f.{quote_ident(a)}" for a, b in zip(rel.from_columns, rel.to_columns, strict=True)
     )
     source = source_query(schema, from_table, rel.from_columns, cap)
+    # The EXISTS stands in a WHERE clause, where the planner can turn it into a (hash)
+    # semi-join; inside a FILTER it would be re-evaluated row by row.
     return (
-        "SELECT count(*) AS from_rows, "
-        f"count(*) FILTER (WHERE {keyed}) AS keyed_rows, "
-        f"count(*) FILTER (WHERE {keyed} AND EXISTS (SELECT 1 FROM {to_ref} t WHERE {on})) AS matched_rows "
-        f"FROM ({source}) AS f"
+        f"WITH f AS ({source}) SELECT "
+        "(SELECT count(*) FROM f) AS from_rows, "
+        f"(SELECT count(*) FROM f WHERE {keyed}) AS keyed_rows, "
+        f"(SELECT count(*) FROM f WHERE {keyed} AND EXISTS (SELECT 1 FROM {to_ref} t WHERE {on})) AS matched_rows"
     )
 
 
@@ -71,10 +73,12 @@ def coverage_query(schema: str, pkg: DatasetPackage, rel: RelationshipInfo, cap:
         f"f.{quote_ident(a)} = t.{quote_ident(b)}" for a, b in zip(rel.from_columns, rel.to_columns, strict=True)
     )
     source = source_query(schema, to_table, rel.to_columns, cap)
+    # As in match_query.  The referencing columns often have no index, so a row-by-row
+    # EXISTS would scan the referencing table once per row.
     return (
-        "SELECT count(*) AS to_rows, "
-        f"count(*) FILTER (WHERE {keyed} AND EXISTS (SELECT 1 FROM {from_ref} f WHERE {on})) AS referenced_rows "
-        f"FROM ({source}) AS t"
+        f"WITH t AS ({source}) SELECT "
+        "(SELECT count(*) FROM t) AS to_rows, "
+        f"(SELECT count(*) FROM t WHERE {keyed} AND EXISTS (SELECT 1 FROM {from_ref} f WHERE {on})) AS referenced_rows"
     )
 
 

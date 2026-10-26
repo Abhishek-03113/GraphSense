@@ -14,6 +14,11 @@ executor limits what it can *do* even if the guard had a bug:
   table names;
 * rows are fetched through a cursor, at most ``row_cap + 1`` of them.
 
+The transaction's limits are set in one round trip (several statements in one
+simple query) after asyncpg opens it, and nothing is reset when a connection goes
+back to the pool: every setting is ``SET LOCAL``, so it ends with the
+transaction, and an open transaction is always rolled back on release.
+
 Failures are reduced to a category; the database's own message only goes to the log.
 """
 
@@ -66,6 +71,13 @@ _CATEGORY_BY_STATE: dict[str, ExecutionCategory] = {
 }
 
 
+class _ReadOnlyConnection(asyncpg.Connection):
+    """Sends no reset query when returned to the pool (see the module docstring)."""
+
+    def get_reset_query(self) -> str:
+        return ""
+
+
 def search_path_for(schema_name: str) -> str:
     """The ``search_path`` for generated SQL: the dataset schema only.
 
@@ -94,7 +106,7 @@ def classify(exc: BaseException) -> ExecutionError:
 class ReadOnlyExecutor:
     """Pooled, read-only executor.  One instance per process; call :meth:`close` on shutdown."""
 
-    def __init__(self, settings: Settings | None = None, *, dsn: str | None = None, pool_size: int = 5) -> None:
+    def __init__(self, settings: Settings | None = None, *, dsn: str | None = None, pool_size: int | None = None) -> None:
         self._settings = settings
         self._explicit_dsn = dsn
         self._pool_size = pool_size
@@ -143,10 +155,11 @@ class ReadOnlyExecutor:
             self._pool = await asyncpg.create_pool(
                 asyncpg_dsn(dsn),
                 min_size=0,
-                max_size=self._pool_size,
+                max_size=self._pool_size or self.settings.SQL_POOL_SIZE,
                 # No prepared-statement cache: a schema swap must never serve a stale plan.
                 statement_cache_size=0,
                 max_inactive_connection_lifetime=300,
+                connection_class=_ReadOnlyConnection,
                 server_settings={
                     "application_name": "graphsense_ask",
                     "default_transaction_read_only": "on",
@@ -195,12 +208,16 @@ class ReadOnlyExecutor:
 
     @staticmethod
     async def _run(conn: asyncpg.Connection, search_path: str, timeout_ms: int, v: ValidatedSql) -> ExecutionResult:
+        # asyncpg opens the transaction (its own BEGIN READ ONLY): a BEGIN inside a combined
+        # statement leaves connection poolers such as Supavisor reporting no open transaction,
+        # and asyncpg then refuses the cursor.  The limits follow in one round trip.
         async with conn.transaction(readonly=True):
+            # search_path is built from a validated schema name (is_dataset_schema), never from model text.
+            # The trailing SELECT makes the transaction take its snapshot, after which PostgreSQL refuses
+            # SET TRANSACTION READ WRITE.
             await conn.execute(
-                "SELECT set_config('search_path', $1, true), set_config('statement_timeout', $2, true), "
-                "set_config('lock_timeout', '2000', true)",
-                search_path,
-                str(timeout_ms),
+                f"SET LOCAL search_path TO {search_path}; SET LOCAL statement_timeout = {int(timeout_ms)}; "
+                "SET LOCAL lock_timeout = 2000; SELECT 1"
             )
             stmt = await conn.prepare(v.sql)
             attributes = stmt.get_attributes()

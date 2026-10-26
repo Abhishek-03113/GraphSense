@@ -286,6 +286,22 @@ async def test_the_query_log_records_and_purges(pg, app_engine):
     await app_engine.dispose()
 
 
+async def test_a_background_log_returns_the_id_at_once_and_writes_that_row(pg, app_engine):
+    log = QueryLog(app_engine, background=True)
+    with override_settings(QUERY_LOG_ENABLED=True):
+        query_id = await log.record(LogEntry(DATASET, "Written later?", sql="SELECT 1", validated=True))
+        assert query_id and log._pending  # returned before the row was written
+        await log.drain()
+    async with app_engine.connect() as conn:
+        question = await conn.scalar(
+            text("SELECT question FROM app.query_log WHERE id = CAST(:i AS uuid)"), {"i": query_id}
+        )
+    assert question == "Written later?"
+    with override_settings(QUERY_LOG_ENABLED=False):
+        assert await log.record(LogEntry(DATASET, "q")) is None
+    await app_engine.dispose()
+
+
 async def test_logging_can_be_switched_off_and_never_raises(pg, app_engine):
     with override_settings(QUERY_LOG_ENABLED=False):
         assert await QueryLog(app_engine).record(LogEntry(DATASET, "q")) is None

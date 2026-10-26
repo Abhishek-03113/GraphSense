@@ -7,6 +7,9 @@ requires-python = ">=3.12"
 dependencies = [
     "fastapi>=0.110.0",
     "uvicorn>=0.28.0",
+    # Picked up by uvicorn automatically: a faster event loop and HTTP parser.
+    "uvloop>=0.19; sys_platform != 'win32'",
+    "httptools>=0.6",
     "pydantic>=2.6.0",
     "pydantic-settings>=2.7.0",
     "sqlalchemy>=2.0.29",

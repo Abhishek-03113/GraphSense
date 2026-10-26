@@ -25,7 +25,7 @@ def get_ask_service() -> AskService:
             catalog=build_catalog_source(),
             executor=ReadOnlyExecutor(),
             retriever=HybridRetriever(KnowledgeStore(get_engine), providers.embedder),
-            query_log=QueryLog(get_engine),
+            query_log=QueryLog(get_engine, background=True),
         )
     return _service
 
@@ -36,9 +36,12 @@ def check_startup() -> None:
 
 
 async def shutdown() -> None:
-    """Release the read-only connection pool."""
+    """Finish the query log writes still in flight, then release the read-only connection pool."""
     global _service
     service, _service = _service, None
+    query_log = getattr(service, "query_log", None)
+    if query_log is not None and hasattr(query_log, "drain"):
+        await query_log.drain()
     executor = getattr(service, "executor", None)
     if executor is not None and hasattr(executor, "close"):
         await executor.close()

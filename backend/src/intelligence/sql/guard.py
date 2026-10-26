@@ -21,12 +21,14 @@ from __future__ import annotations
 
 import logging
 import re
+import weakref
 from dataclasses import dataclass
 
 import sqlglot
 from sqlglot import exp
 from sqlglot.errors import OptimizeError, ParseError, TokenError
 from sqlglot.optimizer.qualify import qualify
+from sqlglot.schema import MappingSchema
 
 from src.catalog import CatalogSnapshot
 from src.config import get_settings
@@ -50,6 +52,23 @@ MAX_NODES = 4_000
 _SCHEMA = re.compile(r"^[a-z][a-z0-9_]*$")
 _ANSI = re.compile(r"\x1b\[[0-9;]*m")
 _SAFE_IDENT = re.compile(r"[^A-Za-z0-9_ .\-]")
+
+
+# The catalog as sqlglot's schema object, built once per snapshot: normalising every
+# column name is most of the cost of qualifying a query.  Snapshots are immutable.
+_schemas: dict[int, tuple[weakref.ref, MappingSchema]] = {}
+
+
+def _schema_for(snapshot: CatalogSnapshot) -> MappingSchema:
+    key = id(snapshot)
+    found = _schemas.get(key)
+    if found is not None and found[0]() is snapshot:
+        return found[1]
+    schema = MappingSchema(snapshot.sql_schema(), dialect=DIALECT)
+    for stale in [k for k, (ref, _) in _schemas.items() if ref() is None]:
+        del _schemas[stale]
+    _schemas[key] = (weakref.ref(snapshot), schema)
+    return schema
 
 
 def _clean(text: str, limit: int = 80) -> str:
@@ -278,7 +297,7 @@ class SqlGuard:
         try:
             return qualify(
                 copy,
-                schema=snapshot.sql_schema(),
+                schema=_schema_for(snapshot),
                 dialect=DIALECT,
                 expand_stars=True,
                 validate_qualify_columns=True,

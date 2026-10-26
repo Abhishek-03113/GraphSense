@@ -1,8 +1,11 @@
+import asyncio
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.middleware.gzip import GZipMiddleware
 
+from src import warmup
 from src.api.admin import mount_admin
 from src.api.catalog import router as catalog_router
 from src.api.chat import router as chat_router
@@ -20,7 +23,10 @@ logger = get_logger(__name__)
 @asynccontextmanager
 async def lifespan(_: FastAPI):
     ask_runtime.check_startup()
+    datasets = warmup.load_packages()
+    warming = asyncio.create_task(warmup.warm_database(datasets))
     yield
+    warming.cancel()
     await ask_runtime.shutdown()
     await dispose_all()
 
@@ -46,6 +52,9 @@ app.add_middleware(
     # Browsers on another origin can only read these response headers.
     expose_headers=["X-Request-ID", "Retry-After"],
 )
+# Graph payloads are large and repetitive JSON (a sampled graph is 100+ KB): compressed
+# they travel in a fraction of the bytes.  WebSocket frames are not affected.
+app.add_middleware(GZipMiddleware, minimum_size=1024, compresslevel=5)
 # Added last so it is the outermost layer: every response, including CORS
 # preflights and errors, carries a request id.
 install_error_handling(app)

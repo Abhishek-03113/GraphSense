@@ -36,9 +36,16 @@ async def test_full_graph_sampling_orders_every_block_and_the_result():
     assert query.endswith("ORDER BY type,source_id,target_id")
 
 
-async def test_subgraph_edges_are_ordered():
-    query = (await _statements(lambda r: r.get_subgraph("Invoice", "1", 2)))[0]
-    assert "ORDER BY ge.source_type,ge.source_id,ge.target_type,ge.target_id,ge.type" in query
+def test_subgraph_edges_are_ordered():
+    query, _ = GraphSqlBuilder(DATASET).edges_between_query({"Invoice": ["1"], "Customer": ["2"]})
+    assert query.endswith("ORDER BY source_type, source_id, target_type, target_id, type")
+
+
+async def test_flow_sorts_at_most_limit_rows_per_edge_definition():
+    (query,) = await _statements(lambda r: r.get_flow("full_o2c", 10))
+    flow = DATASET.get_flow("full_o2c")
+    blocks = sum(len(DATASET.edge_types_for(k)) for k in dict.fromkeys(flow.edge_types))
+    assert query.count("ORDER BY source_id,target_id,type LIMIT :limit") == blocks
 
 
 async def test_flow_runs_a_single_query_at_any_log_level():
